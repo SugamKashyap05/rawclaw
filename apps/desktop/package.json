@@ -1,0 +1,12 @@
+{
+  "name": "@rawclaw/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'DEV DESKTOP'",
+    "build": "echo 'BUILD DESKTOP'",
+    "lint": "echo 'LINT DESKTOP'",
+    "test": "echo 'TEST DESKTOP'",
+    "check-types": "echo 'CHECK TYPES DESKTOP'"
+  }
+}

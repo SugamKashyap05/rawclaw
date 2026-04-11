@@ -1,0 +1,19 @@
+{
+  "name": "@rawclaw/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'DEV API'",
+    "build": "echo 'BUILD API'",
+    "lint": "echo 'LINT API'",
+    "test": "echo 'TEST API'",
+    "check-types": "echo 'CHECK TYPES API'"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/core": "^10.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

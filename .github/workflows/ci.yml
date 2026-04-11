@@ -1,0 +1,48 @@
+name: RawClaw CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          
+      - name: Install JS Dependencies
+        run: npm install
+        
+      - name: Lint and Type Check (Web & API)
+        run: |
+          npm run lint
+          npm run check-types
+          
+      - name: Test (Web & API)
+        run: npm run test
+
+      - name: Install Python Dependencies (Agent)
+        run: |
+          python -m pip install --upgrade pip
+          pip install mypy pytest
+          if [ -f apps/agent/requirements.txt ]; then pip install -r apps/agent/requirements.txt; fi
+          
+      - name: Type Check Python (Agent)
+        working-directory: apps/agent
+        run: mypy .
+        
+      - name: Test Python (Agent)
+        working-directory: apps/agent
+        run: pytest
