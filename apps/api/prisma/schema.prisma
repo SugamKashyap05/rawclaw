@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  title            String?
+  workspaceId      String    @default("default")
+  senderIdentifier String    @default("local")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  messages         Message[]
+
+  @@index([workspaceId])
+  @@map("sessions")
+}
+
+model ToolConfirmation {
+  id          String    @id @default(cuid())
+  sessionId   String
+  toolName    String
+  toolInput   String    // JSON stringified input
+  status      String    @default("pending") // pending | approved | denied
+  requestedAt DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  @@index([sessionId])
+  @@map("tool_confirmations")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  role      String
+  content   String
+  toolCalls String?  // Store as JSON string
+  citations String?  // Store as JSON string
+  createdAt DateTime @default(now())
+  
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}

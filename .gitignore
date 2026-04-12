@@ -1,11 +1,43 @@
-node_modules
-dist
+# Dependencies
+node_modules/
+/apps/agent/.venv/
+/apps/agent/venv/
+
+# Build outputs
+dist/
+/apps/web/dist/
+/apps/api/dist/
+/apps/desktop/src-tauri/target/
+
+# Logs and databases
+*.log
+/apps/api/prisma/dev.db
+/apps/api/prisma/dev.db-journal
+
+# Environment variables
 .env
-__pycache__
-*.pyc
+.env.local
+.env.*.local
+! .env.example
+
+# IDEs
+.vscode/
+.idea/
 .DS_Store
-/tmp
-/cache
-coverage/
+
+# Python
+__pycache__/
+*.pyc
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Tauri v2
+/apps/desktop/src-tauri/gen/
+/apps/desktop/src-tauri/capabilities/gen/
+
+# Misc
+tmp/
+cache/
+coverage/
 .agent/

@@ -3,10 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "echo 'DEV DESKTOP'",
-    "build": "echo 'BUILD DESKTOP'",
-    "lint": "echo 'LINT DESKTOP'",
-    "test": "echo 'TEST DESKTOP'",
-    "check-types": "echo 'CHECK TYPES DESKTOP'"
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "lint": "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "check-types": "cargo check --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@rawclaw/web": "*",
+    "@tauri-apps/cli": "^2.10.1"
   }
 }

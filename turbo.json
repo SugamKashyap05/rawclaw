@@ -1,0 +1,26 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!-next/cache/**"]
+    },
+    "test": {
+      "dependsOn": ["build"]
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "check-types": {
+      "dependsOn": ["^build"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "@rawclaw/desktop#build": {
+      "dependsOn": ["^build", "@rawclaw/web#build"],
+      "outputs": ["src-tauri/target/release/bundle/**", "src-tauri/target/debug/bundle/**"]
+    }
+  }
+}

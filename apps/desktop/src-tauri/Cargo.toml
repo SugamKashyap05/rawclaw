@@ -1,0 +1,24 @@
+[package]
+name = "rawclaw"
+version = "0.1.0"
+description = "RawClaw Agent Platform"
+authors = ["you"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = ["devtools"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[package.metadata.bundle]
+identifier = "com.rawclaw.dev"
+publisher = "RawClaw"
+icon = ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+product-name = "rawclaw"
+version = "0.1.0"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

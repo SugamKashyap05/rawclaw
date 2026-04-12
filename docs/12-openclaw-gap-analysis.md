@@ -1,156 +1,113 @@
-# OpenClaw Gap Analysis
+# Deep Strategic Gap Analysis: RawClaw vs. OpenClaw (2026)
 
-## Purpose
+## Overview
+This document evaluates the RawClaw rebuild (Phase 0-2) against **OpenClaw (v2026.1.29)**. OpenClaw is the current benchmark for local-first AI agents, but its architecture suffers from severe security vulnerabilities and operational "black-box" behavior. RawClaw's goal is to close capability gaps while maintaining its core differentiators: **Task Provenance** and **Security by Default**.
 
-This document captures the major gaps we found by comparing the current RawClaw rebuild foundation to OpenClaw's published architecture, features, and configuration model.
+---
 
-It is not a copy target. It is a reality check so RawClaw's rebuild plan accounts for capability areas that mature local-first agent systems already expose.
+## Dimension Breakdown
 
-## Sources reviewed
+### DIMENSION 1 — RUNTIME MODEL
+- **OpenClaw Approach**: Single persistent process, always-on, event-driven, daemonized.
+- **RawClaw P0-P2 State**: Request/response API model, 4 separate processes, user-initiated.
+- **Gap Rating**: SIGNIFICANT
+- **Gap Description**: RawClaw currently lacks a "Daemon Mode" to handle cron triggers, webhooks, or 24/7 background reasoning without an active UI session.
+- **Recommendation**: **ADAPT**.
+- **Rationale**: Separation of API (NestJS) and Agent (FastAPI) is superior for scaling and security boundaries, but the Agent needs a background runner.
+- **Action items**:
+  1. [PHASE 6] Introduce `DaemonService` in `apps/agent/src/services/daemon.py` for headless background tasks.
 
-- OpenClaw overview and docs hubs
-- OpenClaw gateway architecture
-- OpenClaw feature list
-- OpenClaw configuration model
+### DIMENSION 2 — USER INTERFACE / SURFACES
+- **OpenClaw Approach**: Messaging apps (WhatsApp, Telegram, etc.) ARE the UI.
+- **RawClaw P0-P2 State**: Custom React/Vite UI + Tauri Desktop shell.
+- **Gap Rating**: MINOR
+- **Gap Description**: No "Headless Control" via common messaging platforms.
+- **Recommendation**: **DEFER**.
+- **Rationale**: RawClaw's strength is its custom desktop command center; messaging adapters are commodity features to be added later.
+- **Action items**:
+  1. [PHASE 6] Design `SurfaceAdapter` interface in `packages/shared` for future channel integrations.
 
-## Major gaps
+### DIMENSION 3 — SKILLS / TOOL SYSTEM
+- **OpenClaw Approach**: `SKILL.md` directories, 5k+ community skills, context-scoped precedence.
+- **RawClaw P0-P2 State**: Basic `ToolRegistry`; MCP (Model Context Protocol) planned for Phase 3.
+- **Gap Rating**: SIGNIFICANT
+- **Gap Description**: Lack of a decentralized registry or interoperability with OpenClaw's massive skill library.
+- **Recommendation**: **ADAPT**.
+- **Rationale**: MCP is the technical future, but OpenClaw's `SKILL.md` is the content standard. Use MCP for execution and `SKILL.md` for discovery.
+- **Action items**:
+  1. [PHASE 3] Implement `SkillLoader` that supports both native MCP and OpenClaw `SKILL.md` meta-wrappers.
 
-### 1. Control-plane / gateway model
+### DIMENSION 4 — MEMORY SYSTEM
+- **OpenClaw Approach**: `SOUL.md`, `USER.md` identity files injected into context; vector retrieval.
+- **RawClaw P0-P2 State**: Redis for short-term, Prisma for messages, ChromaDB planned for Phase 5.
+- **Gap Rating**: SIGNIFICANT
+- **Gap Description**: RawClaw lacks human-inspectable "Soul" files; memory is purely database-driven.
+- **Recommendation**: **ADAPT**.
+- **Rationale**: Database is required for scale, but identity should be human-writable in Markdown.
+- **Action items**:
+  1. [PHASE 5] Implement "Identity Sync" between `config/identity/*.md` and ChromaDB.
 
-OpenClaw explicitly treats a single host gateway as the source of truth for:
-- sessions
-- routing
-- channel connections
-- live events
-- automation
+### DIMENSION 5 — MODEL ROUTING
+- **OpenClaw Approach**: Unified BYOK interface, health-aware switching across 22+ providers.
+- **RawClaw P0-P2 State**: `ModelRouter` with complexity-based routing (low/medium/high).
+- **Gap Rating**: MINOR
+- **Gap Description**: Complexity mapping is powerful but currently lacks provider-specific override granularity.
+- **Recommendation**: **ADAPT**.
+- **Rationale**: RawClaw's abstraction (Complexity vs Provider) is a better UX.
+- **Action items**:
+  1. [PHASE 3] Expand `router.py` to support `preferred_provider` flags in `ChatRequest`.
 
-RawClaw currently documents separate web, API, agent, and desktop apps well, but was under-specifying the long-lived control-plane model that ties everything together.
+### DIMENSION 6 — SECURITY MODEL
+- **OpenClaw Approach**: Insecure defaults, root access, major CVEs (RCE in WebSocket).
+- **RawClaw P0-P2 State**: Tool confirmation logic documented; architectural boundaries enforced.
+- **Gap Rating**: **CRITICAL**
+- **Gap Description**: Actual OS-level sandboxing (Docker/Wasm) for tool execution is not yet implemented.
+- **Recommendation**: **ADAPT**.
+- **Rationale**: RawClaw’s core pitch is "Local AI that won't delete your home dir."
+- **Action items**:
+  1. [PHASE 3] MUST implement `sandbox.py` utilizing Docker containers for filesystem-affecting tools.
 
-### 2. Channel and surface breadth
+### DIMENSION 7 — SESSION AND ROUTING
+- **OpenClaw Approach**: Per-sender, per-channel session isolation by design.
+- **RawClaw P0-P2 State**: Basic `sessionId` mapping to SQLite rows.
+- **Gap Rating**: SIGNIFICANT
+- **Gap Description**: No logic for multiple workspaces or "Owner/Sender" validation.
+- **Recommendation**: **ADOPT**.
+- **Rationale**: Multi-surface future requires identifying WHICH user on WHICH device is talking.
+- **Action items**:
+  1. [PHASE 3] Update `prisma/schema.prisma` with `workspaceId` and `senderIdentifier`.
 
-OpenClaw is designed around many communication surfaces:
-- WebChat
-- Telegram
-- Discord
-- Slack
-- Signal
-- WhatsApp
-- more via plugins
+### DIMENSION 8 — OPERATIONS AND DIAGNOSTICS
+- **OpenClaw Approach**: `openclaw doctor` command for quick troubleshooting.
+- **RawClaw P0-P2 State**: Basic `/health` endpoints.
+- **Gap Rating**: SIGNIFICANT
+- **Gap Description**: Nobody noticed the 0-byte DB during Phase 2; system was "half-dead" but looked alive.
+- **Recommendation**: **ADOPT**.
+- **Rationale**: If developer/operators can't fix it in 30 seconds, they will leave.
+- **Action items**:
+  1. [PHASE 2 FINAL] Create `scripts/doctor.ps1` for local environment verification.
 
-RawClaw's foundation was still centered on its own desktop/web surfaces. The rebuild docs needed to explicitly leave room for channel connectors and multi-surface session routing.
+### DIMENSION 9 — DEPLOYMENT AND SETUP
+- **OpenClaw Approach**: Single `docker-compose up -d` for end-to-end.
+- **RawClaw P0-P2 State**: Multi-repo setup, manual environment config, manual prisma push.
+- **Gap Rating**: SIGNIFICANT
+- **Gap Description**: Extremely high barrier to entry for new developers.
+- **Recommendation**: **ADOPT**.
+- **Rationale**: Setup is the first interaction; it must be flawless.
+- **Action items**:
+  1. [PHASE 2 FINAL] Create a root-level `setup.sh` that automates `npm install`, `.env` creation, and DB migration.
 
-### 3. Configuration engine maturity
+### DIMENSION 10 — PROVENANCE AND ARTIFACTS
+- **OpenClaw Approach**: No first-class provenance; task logs are ephemeral.
+- **RawClaw P0-P2 State**: First-class Task/Run/Step model planned for Phase 4.
+- **Gap Rating**: **LEAD (NONE)**
+- **Gap Description**: RawClaw's architecture is fundamentally more advanced in this area.
+- **Recommendation**: **REJECT** (Keep our model).
+- **Rationale**: This is why users will switch from OpenClaw to RawClaw.
+- **Action items**:
+  1. [PHASE 3] Prototype `ProvenanceTrace` during tool execution to seed the Phase 4 work.
 
-OpenClaw has:
-- an onboarding wizard
-- config CLI
-- Control UI forms generated from schema
-- strict config validation
-- hot reload for many runtime settings
+---
 
-RawClaw's rebuild docs mentioned settings and environment setup, but they did not yet define a canonical config system with schema-driven tooling and runtime-safe reload behavior.
-
-### 4. Diagnostics and repair
-
-OpenClaw documents diagnostic commands and repair flows such as doctor, logs, health, and status when config is broken.
-
-RawClaw's docs talked about reliability, but they did not yet elevate guided diagnostics and repair workflows to first-class product features.
-
-### 5. Security, trust, and pairing
-
-OpenClaw documents:
-- device identity
-- pairing approval
-- trust tokens
-- local vs remote trust rules
-- tunnel and tailnet access
-
-RawClaw's current foundation did not yet explicitly define trust/pairing flows for future desktop, web, remote, or node clients.
-
-### 6. Typed runtime protocol
-
-OpenClaw publishes a typed WebSocket contract with request/response/event semantics and generated schema/code models.
-
-RawClaw's rebuild docs need a stronger commitment to typed live runtime contracts so desktop, web, API, agent, and future remote clients stay coherent.
-
-### 7. Mobile and node capabilities
-
-OpenClaw includes node/device concepts with capabilities like:
-- camera
-- screen recording
-- location
-- voice
-- canvas
-
-RawClaw does not need to build all of that immediately, but the foundation should acknowledge future node-capability surfaces so the architecture does not close that door.
-
-### 8. Media and voice breadth
-
-OpenClaw publicly lists:
-- images
-- audio
-- video
-- documents
-- transcription
-- text-to-speech
-
-RawClaw's docs already mention artifacts and browser evidence, but they needed broader multimodal planning.
-
-### 9. Session sophistication
-
-OpenClaw explicitly separates session scope by sender, thread, workspace, and surface.
-
-RawClaw's rebuild docs needed to state session-scope design more clearly, especially once chat expands beyond one local UI.
-
-### 10. Operations ergonomics
-
-OpenClaw highlights:
-- onboarding
-- control UI
-- hot reload
-- troubleshooting
-- remote access
-
-RawClaw's rebuild foundation needed more operator-focused guidance, not just developer architecture.
-
-## What RawClaw should adopt
-
-RawClaw should explicitly adopt these directions:
-
-1. A local control-plane or gateway model
-2. A canonical config file plus schema tooling
-3. Guided onboarding and diagnostics
-4. Typed live protocol contracts
-5. Session routing by sender, thread, workspace, and agent
-6. A broader surface strategy beyond only desktop/web
-7. Trust and pairing flows for future remote access
-8. Multimodal planning for media and voice
-
-## What RawClaw should not copy blindly
-
-RawClaw should stay focused on its own strengths:
-- stronger task provenance
-- explicit artifact model
-- task-first operator UX
-- MCP-first tool orchestration
-- local desktop command-center experience
-
-The goal is not to become OpenClaw. The goal is to ensure the RawClaw rebuild does not miss important architectural categories that OpenClaw already proves matter in practice.
-
-## Recommended incorporation order
-
-### Near-term
-- control-plane model
-- schema-driven config plan
-- diagnostics/doctor plan
-- session-scope model
-
-### Mid-term
-- broader surfaces/channels
-- remote trust and pairing
-- typed live event protocol
-
-### Long-term
-- node/device capabilities
-- multimodal and voice expansion
-
+## Final Review: The Moat
+RawClaw wins by being the **Secure, Inspectable, Desktop-First** alternative. While OpenClaw owns the "Messaging/Automation" space, its security failures make it unusable for enterprise or sensitive local work. RawClaw must double-down on **Dimension 6 (Security)** and **Dimension 10 (Provenance)**.
