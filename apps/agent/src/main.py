@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from src.contracts import ChatRequest, ChatResponse, HealthStatus, ToolCall
+from src.contracts import ChatRequest, ChatResponse, HealthStatus, ToolCall, TaskExecutionRequest
 from src.models.router import ModelRouter
 from src.config import settings
 from src.sandbox.sandbox_config import get_sandbox_config
@@ -200,6 +200,15 @@ async def execute_chat(request: ChatRequest):
         event_generator(),
         media_type="application/x-ndjson",
     )
+
+
+@app.post("/execute/task")
+async def execute_task(request: TaskExecutionRequest):
+    """
+    Executes a discrete background task.
+    """
+    result = await EXECUTOR.run_task(request)
+    return result.model_dump()
 
 
 @app.get("/api/mcp/servers")

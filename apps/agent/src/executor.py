@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, AsyncGenerator
 
 from src.contracts.tool import ToolCall, ToolResult
 from src.contracts.chat import ChatRequest, ChatMessage
+from src.contracts.task import TaskExecutionRequest, TaskResult as TaskExecutionResult
 from src.models.router import ModelRouter
 from src.tools.registry import TOOL_REGISTRY, ToolNotFoundError
 from src.tools.confirmation_gate import ConfirmationGate
@@ -145,6 +146,96 @@ class Executor:
                 "message": str(e),
                 "provenance_trace": trace.to_dict(),
             }) + "\n"
+
+    async def run_task(
+        self,
+        request: TaskExecutionRequest,
+    ) -> TaskExecutionResult:
+        """
+        Execute a discrete task run (non-streaming for the caller).
+        """
+        trace = ProvenanceTrace()
+        start_time = time.time()
+        
+        system_prompt = (
+            f"You are RawClaw, executing an autonomous task.\n"
+            f"Task Name: {request.definition.name}\n"
+            f"Task Description: {request.definition.description}\n"
+            f"Context: {json.dumps(request.context or {})}\n"
+            f"Please use available tools to accomplish the task. "
+            f"When finished, provide a final summary of your actions."
+        )
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "Start execution now."}
+        ]
+        
+        tools_schema = TOOL_REGISTRY.get_schemas()
+        accumulated_content = ""
+        max_turns = 10
+        
+        try:
+            trace.add_plan_step(f"Starting task execution: {request.definition.name}")
+            
+            for turn in range(max_turns):
+                logger.info(f"Task {request.run_id} turn {turn}")
+                turn_has_tool_call = False
+                
+                async for delta in self.model_router.complete(
+                    messages,
+                    tools=tools_schema if tools_schema else None,
+                ):
+                    if isinstance(delta, dict) and delta.get("type") == "tool_call":
+                        turn_has_tool_call = True
+                        tool_call_data = delta.get("tool_call", {})
+                        tool_call = ToolCall(
+                            tool_name=tool_call_data.get("name", ""),
+                            input=tool_call_data.get("arguments", {}),
+                        )
+                        
+                        trace.add_tool_call(tool_call.tool_name, tool_call.input)
+                        
+                        tool_result = await self._execute_tool_with_confirmation(
+                            f"task_{request.run_id}",
+                            tool_call,
+                            trace,
+                        )
+                        
+                        trace.add_tool_result(tool_result, int(tool_result.duration_ms))
+                        
+                        messages.append({
+                            "role": "tool",
+                            "content": json.dumps(tool_result.model_dump()),
+                            "name": tool_call.tool_name,
+                        })
+                        
+                    elif isinstance(delta, str):
+                        accumulated_content += delta
+                    elif isinstance(delta, dict) and delta.get("type") == "content":
+                        accumulated_content += delta.get("content", "")
+
+                if not turn_has_tool_call:
+                    break
+            
+            duration_ms = (time.time() - start_time) * 1000
+            trace.add_synthesis_step("Task complete", int(duration_ms))
+            
+            return TaskExecutionResult(
+                run_id=request.run_id,
+                status="done",
+                provenance=trace.to_dict(),
+            )
+
+        except Exception as e:
+            logger.error(f"Task execution error: {e}")
+            trace.add_error_step(str(e))
+            return TaskExecutionResult(
+                run_id=request.run_id,
+                status="failed",
+                error_message=str(e),
+                provenance=trace.to_dict(),
+            )
 
     async def _execute_tool_with_confirmation(
         self,

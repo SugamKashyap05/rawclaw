@@ -1,15 +1,21 @@
-from pydantic import BaseModel
-from typing import List, Literal
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
 
-class TaskRequest(BaseModel):
-    """Represents a task request context."""
-    task_id: str
-    definition: str
+class AgentTaskDefinition(BaseModel):
+    id: str
+    name: str
+    description: str
+    toolIds: List[str]
+    agentId: Optional[str] = None
+
+class TaskExecutionRequest(BaseModel):
+    run_id: str
+    definition: AgentTaskDefinition
+    context: Optional[Dict[str, Any]] = None
 
 class TaskResult(BaseModel):
-    """Represents a discrete task execution output."""
-    task_id: str
     run_id: str
-    status: Literal['pending', 'success', 'failed']
-    output: str
-    provenance: List[str]
+    status: str
+    output_path: Optional[str] = None
+    error_message: Optional[str] = None
+    provenance: Optional[Dict[str, Any]] = None

@@ -9,6 +9,7 @@ import { ToolConfirmationController } from './tool-confirmation.controller';
 import { ToolConfirmationService } from './tool-confirmation.service';
 import { ToolsModule } from './tools/tools.module';
 import { MCPModule } from './mcp/mcp.module';
+import { TasksModule } from './tasks/tasks.module';
 
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
@@ -23,6 +24,7 @@ import configuration from './config/configuration';
     HttpModule,
     ToolsModule,
     MCPModule,
+    TasksModule,
   ],
   controllers: [HealthController, ChatController, ToolConfirmationController],
   providers: [RedisService, ChatService, PrismaService, ToolConfirmationService],

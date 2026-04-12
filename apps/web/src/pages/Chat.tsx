@@ -7,12 +7,31 @@ interface Props {
   selectedModel: string;
 }
 
+interface ProvenanceTraceData {
+  run_id: string;
+  steps: ProvenanceStepData[];
+  step_count: number;
+  created_at: string;
+}
+
+interface ProvenanceStepData {
+  step_index: number;
+  step_type: 'plan' | 'tool_call' | 'tool_result' | 'synthesis' | 'error';
+  tool_name?: string | null;
+  input_summary?: string | null;
+  output_summary?: string | null;
+  source_url?: string | null;
+  duration_ms: number;
+  sandboxed: boolean;
+  timestamp: string;
+}
+
 interface MessageWithTools {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   name?: string;
   toolResults?: ToolResult[];
-  provenanceTrace?: any;
+  provenanceTrace?: ProvenanceTraceData | null;
 }
 
 export default function Chat({ selectedModel }: Props) {
@@ -71,7 +90,7 @@ export default function Chat({ selectedModel }: Props) {
       const decoder = new TextDecoder();
       let accumulatedContent = '';
       const toolResults: ToolResult[] = [];
-      let provenanceTrace: any = null;
+      let provenanceTrace: ProvenanceTraceData | null = null;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -110,8 +129,8 @@ export default function Chat({ selectedModel }: Props) {
                 }
                 return newMessages;
               });
-            } else if (data.type === 'provenance') {
-              provenanceTrace = (data as any).provenance_trace;
+            } else if (data.type === 'provenance' && 'provenance_trace' in data) {
+              provenanceTrace = (data as ChatStreamChunk & { provenance_trace: ProvenanceTraceData }).provenance_trace;
               setMessages(prev => {
                 const newMessages = [...prev];
                 const last = newMessages[newMessages.length - 1];
@@ -140,9 +159,10 @@ export default function Chat({ selectedModel }: Props) {
       }
     } catch (err) {
       console.error('Chat error', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to connect to agent.';
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Error: Failed to connect to agent.',
+        content: `Error: ${errorMessage}`,
       }]);
       setIsStreaming(false);
     }
@@ -510,14 +530,14 @@ function ToolResultCard({ result }: { result: ToolResult }) {
   );
 }
 
-function ProvenanceTimeline({ trace }: { trace: any }) {
+function ProvenanceTimeline({ trace }: { trace: ProvenanceTraceData }) {
   return (
     <div className="provenance-timeline">
       <div className="trace-header">
         Run ID: <code>{trace.run_id}</code>
       </div>
       <div className="trace-steps">
-        {trace.steps.map((step: any, idx: number) => (
+        {trace.steps.map((step: ProvenanceStepData, idx: number) => (
           <div key={idx} className={`trace-step step-${step.step_type}`}>
             <div className="step-marker" />
             <div className="step-content">

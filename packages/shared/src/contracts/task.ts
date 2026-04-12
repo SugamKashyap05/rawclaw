@@ -1,25 +1,43 @@
-/**
- * Represents a task request context.
- */
-export interface TaskRequest {
-  /** The unique workflow id representing this task assignment */
-  task_id: string;
-  /** The natural language definition of what the task requires */
-  definition: string;
+import { ProvenanceTrace } from './provenance';
+
+export interface Task {
+  id: string;
+  name: string;
+  description: string;
+  agentId?: string;
+  toolIds: string[];
+  schedule?: string;
+  workspaceId?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastRunStatus?: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 }
 
-/**
- * Represents a discrete task execution output.
- */
-export interface TaskResult {
-  /** The ID of the task that was actioned */
-  task_id: string;
-  /** The execution workflow trace ID */
-  run_id: string;
-  /** The terminal status of the task */
-  status: 'pending' | 'success' | 'failed';
-  /** The actual text output or summary of the task result */
-  output: string;
-  /** Any system provenance trails backing this task run */
-  provenance: string[];
+export interface TaskRun {
+  id: string;
+  taskId: string;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  startedAt?: string;
+  finishedAt?: string;
+  selectedAgent?: string;
+  outputPath?: string;
+  provenance?: ProvenanceTrace;
+  errorMessage?: string;
+  createdAt: string;
+  steps: RunStep[];
+  task?: Task;
+}
+
+export interface RunStep {
+  id: string;
+  runId: string;
+  stepIndex: number;
+  stepType: 'plan' | 'tool_call' | 'tool_result' | 'synthesis' | 'error';
+  toolName?: string;
+  inputSummary?: string;
+  outputSummary?: string;
+  sourceUrl?: string;
+  durationMs?: number;
+  sandboxed: boolean;
+  timestamp: string;
 }

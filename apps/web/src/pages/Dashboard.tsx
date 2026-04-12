@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { ApiHealth, AgentHealth, ToolHealthStatus } from '@rawclaw/shared';
-import { FiBox, FiLink, FiTool, FiAlertTriangle, FiCheck, FiX } from 'react-icons/fi';
+import { FiBox, FiLink, FiTool, FiAlertTriangle, FiCheck, FiX, FiClock } from 'react-icons/fi';
+import { formatDistanceToNow } from 'date-fns';
 
 interface SystemStatus {
   api: 'ok' | 'degraded' | 'down' | 'loading';
@@ -29,22 +30,24 @@ export default function Dashboard() {
   });
   const [toolsHealth, setToolsHealth] = useState<Record<string, ToolHealthStatus>>({});
   const [mcpStatus, setMcpStatus] = useState<MCPStatus>({ connected: false, servers: [], connected_count: 0 });
+  const [recentRuns, setRecentRuns] = useState<any[]>([]);
 
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const [apiRes, agentRes, toolsRes, mcpRes] = await Promise.all([
+        const [apiRes, agentRes, toolsRes, mcpRes, runsRes] = await Promise.all([
           axios.get<ApiHealth>('/api/health').catch(() => null),
           axios.get<AgentHealth>('/agent/health').catch(() => null),
           axios.get<ToolsHealthResponse>('/api/tools/health').catch(() => null),
           axios.get<MCPStatus>('/api/mcp/health').catch(() => null),
+          axios.get<any[]>('/api/tasks/runs/recent').catch(() => []),
         ]);
 
         setStatus({
           api: apiRes?.data?.status || 'down',
           agent: agentRes?.data?.status || 'down',
           redis: apiRes?.data?.services?.redis || 'down',
-          agent_providers: (agentRes?.data as any)?.providers
+          agent_providers: agentRes?.data ? (agentRes.data as AgentHealth & { providers?: Record<string, { status: string }> }).providers : undefined
         });
 
         if (toolsRes?.data?.health) {
@@ -53,6 +56,10 @@ export default function Dashboard() {
 
         if (mcpRes?.data) {
           setMcpStatus(mcpRes.data);
+        }
+
+        if (runsRes && 'data' in runsRes) {
+          setRecentRuns(runsRes.data);
         }
       } catch (err) {
         console.error('Health check failed', err);
@@ -64,7 +71,7 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const getHealthColor = (s: string) => {
+  const getHealthColor = (s: string): string => {
     switch (s) {
       case 'ok': return 'var(--success-green)';
       case 'degraded': return 'var(--warning-amber)';
@@ -174,7 +181,33 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Model Providers */}
+      {/* Recent Tasks */}
+      <div className="section-card">
+        <div className="section-header">
+          <h2><FiClock /> Recent Tasks</h2>
+          <Link to="/tasks" className="section-link">View Tasks</Link>
+        </div>
+        <div className="recent-runs">
+          {recentRuns.length === 0 ? (
+            <div className="loading-text">No recent tasks</div>
+          ) : (
+            recentRuns.map((run: any) => (
+              <div key={run.id} className={`run-summary-item ${run.status}`}>
+                <div className="run-dot"></div>
+                <div className="run-main">
+                  <span className="run-task-name">{run.task?.name || 'Task'}</span>
+                  <span className="run-status-text">{run.status}</span>
+                </div>
+                <span className="run-time-small">
+                  {run.startedAt ? formatDistanceToNow(new Date(run.startedAt), { addSuffix: true }) : 'Pending'}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Active Model Providers */}
       <div className="system-logs">
         <h2>Active Model Providers</h2>
         <div className="provider-list">
@@ -332,6 +365,59 @@ export default function Dashboard() {
           padding: 1rem;
           border-radius: 8px;
           border-left: 4px solid var(--accent-cyan);
+        }
+
+        .recent-runs {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .run-summary-item {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.75rem;
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 8px;
+          border-left: 2px solid transparent;
+        }
+        .run-summary-item.done { border-left-color: var(--success-green); }
+        .run-summary-item.failed { border-left-color: var(--error-red); }
+        .run-summary-item.running { border-left-color: var(--accent-cyan); }
+        
+        .run-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: var(--text-muted);
+        }
+        .run-summary-item.done .run-dot { background: var(--success-green); }
+        .run-summary-item.failed .run-dot { background: var(--error-red); }
+        .run-summary-item.running .run-dot { background: var(--accent-cyan); animation: pulse 2s infinite; }
+
+        .run-main {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+        }
+        .run-task-name {
+          font-size: 0.9rem;
+          font-weight: 500;
+        }
+        .run-status-text {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          text-transform: capitalize;
+        }
+        .run-time-small {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+        }
+
+        @keyframes pulse {
+          0% { opacity: 1; }
+          50% { opacity: 0.5; }
+          100% { opacity: 1; }
         }
       `}</style>
     </div>

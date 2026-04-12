@@ -49,3 +49,52 @@ model Message {
 
   @@map("messages")
 }
+
+model TaskDefinition {
+  id          String    @id @default(cuid())
+  name        String
+  description String
+  agentId     String?
+  toolIds     String    // JSON array of tool names
+  schedule    String?   // cron expression or null
+  workspaceId String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  runs        TaskRun[]
+
+  @@map("task_definitions")
+}
+
+model TaskRun {
+  id              String          @id @default(cuid())
+  definitionId    String
+  definition      TaskDefinition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  status          String          @default("queued")
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  selectedAgent   String?
+  outputPath      String?
+  provenance      String?         // JSON stringified ProvenanceTrace
+  errorMessage    String?
+  createdAt       DateTime        @default(now())
+  steps           RunStep[]
+
+  @@map("task_runs")
+}
+
+model RunStep {
+  id          String   @id @default(cuid())
+  runId       String
+  run         TaskRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stepIndex   Int
+  stepType    String   // plan | tool_call | tool_result | synthesis | error
+  toolName    String?
+  inputSummary  String?
+  outputSummary String?
+  sourceUrl   String?
+  durationMs  Int?
+  sandboxed   Boolean  @default(false)
+  timestamp   DateTime @default(now())
+
+  @@map("run_steps")
+}

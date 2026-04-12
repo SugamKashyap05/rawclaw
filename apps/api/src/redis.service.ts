@@ -1,6 +1,10 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Redis } from 'ioredis';
 
+interface SessionState {
+  [key: string]: unknown;
+}
+
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client!: Redis;
@@ -27,11 +31,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async saveSessionState(sessionId: string, state: any): Promise<void> {
+  async saveSessionState(sessionId: string, state: SessionState): Promise<void> {
     await this.client.set(`session:${sessionId}`, JSON.stringify(state));
   }
 
-  async getSessionState(sessionId: string): Promise<any> {
+  async getSessionState(sessionId: string): Promise<SessionState | null> {
     const data = await this.client.get(`session:${sessionId}`);
     return data ? JSON.parse(data) : null;
   }

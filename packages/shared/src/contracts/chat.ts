@@ -1,4 +1,5 @@
 import { ToolCall, ToolResult } from './tool';
+import { ProvenanceStep } from './provenance';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -74,16 +75,4 @@ export interface ChatStreamChunk {
     created_at: string;
   } | null;
   error?: string;
-}
-
-export interface ProvenanceStep {
-  step_index: number;
-  step_type: 'plan' | 'tool_call' | 'tool_result' | 'synthesis' | 'error';
-  tool_name?: string | null;
-  input_summary?: string | null;
-  output_summary?: string | null;
-  source_url?: string | null;
-  duration_ms: number;
-  sandboxed: boolean;
-  timestamp: string;
 }

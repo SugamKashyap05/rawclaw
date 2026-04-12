@@ -3,12 +3,17 @@ import axios from 'axios';
 import { ToolInfo } from '@rawclaw/shared';
 import { FiTool, FiCheck, FiAlertTriangle, FiX, FiBox, FiLink } from 'react-icons/fi';
 
+interface MCPServer {
+  name: string;
+  tool_count: number;
+}
+
 export default function Tools() {
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mcpConnected, setMcpConnected] = useState(false);
-  const [mcpServers, setMcpServers] = useState<{name: string; tool_count: number}[]>([]);
+  const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const [showConnectPanel, setShowConnectPanel] = useState(false);
   const [gatewayUrl] = useState('http://localhost:8811');
   const [connecting, setConnecting] = useState(false);
@@ -16,11 +21,12 @@ export default function Tools() {
 
   const fetchTools = async () => {
     try {
-      const res = await axios.get('/api/tools/info');
+      const res = await axios.get<{ tools: ToolInfo[] }>('/api/tools/info');
       setTools(res.data.tools || []);
       setError(null);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch tools');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch tools';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -28,7 +34,7 @@ export default function Tools() {
 
   const fetchMCPStatus = async () => {
     try {
-      const res = await axios.get('/api/mcp/servers');
+      const res = await axios.get<{ connected: boolean; servers: MCPServer[] }>('/api/mcp/servers');
       setMcpConnected(res.data.connected || false);
       setMcpServers(res.data.servers || []);
     } catch {
@@ -51,8 +57,9 @@ export default function Tools() {
       await new Promise(resolve => setTimeout(resolve, 1000));
       await fetchMCPStatus();
       setShowConnectPanel(false);
-    } catch (err: any) {
-      setConnectError(err.message || 'Connection failed');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Connection failed';
+      setConnectError(message);
     } finally {
       setConnecting(false);
     }
@@ -61,7 +68,7 @@ export default function Tools() {
   const builtinTools = tools.filter(t => !t.capability_tags.includes('mcp'));
   const mcpTools = tools.filter(t => t.capability_tags.includes('mcp'));
 
-  const getHealthColor = (status: string) => {
+  const getHealthColor = (status: string): string => {
     switch (status) {
       case 'ok': return 'var(--success-green)';
       case 'degraded': return 'var(--warning-amber)';

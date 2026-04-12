@@ -7,6 +7,6 @@
     "lint": "ruff check src",
     "build": "echo 'Build handled by Python environment/venv'",
     "test": "pytest",
-    "check-types": "mypy src"
+    "check-types": "python -m mypy src"
   }
 }

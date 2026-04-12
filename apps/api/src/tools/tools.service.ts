@@ -2,7 +2,28 @@ import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
-import { ToolInfo, ToolHealthStatus, MCPConnectionResult, MCPToolInfo } from '@rawclaw/shared';
+import { ToolInfo, ToolHealthStatus, ToolSchema } from '@rawclaw/shared';
+
+export interface ToolsListResponse {
+  tools: ToolSchema[];
+  count: number;
+}
+
+export interface MCPServersResponse {
+  servers: { name: string; connected: boolean; tool_count: number; tools: unknown[] }[];
+  connected: boolean;
+}
+
+export interface MCPHealthResponse {
+  connected: boolean;
+  servers: string[];
+  connected_count: number;
+  message?: string;
+}
+
+export interface ToolDetailResponse {
+  tool: ToolSchema;
+}
 
 @Injectable()
 export class ToolsService {
@@ -18,9 +39,9 @@ export class ToolsService {
   /**
    * List all tools with their schemas.
    */
-  async listTools(): Promise<{ tools: any[]; count: number }> {
+  async listTools(): Promise<ToolsListResponse> {
     const res = await firstValueFrom(
-      this.httpService.get(`${this.agentUrl}/api/tools`)
+      this.httpService.get<ToolsListResponse>(`${this.agentUrl}/api/tools`)
     );
     return res.data;
   }
@@ -30,7 +51,7 @@ export class ToolsService {
    */
   async listToolsInfo(): Promise<{ tools: ToolInfo[]; count: number }> {
     const res = await firstValueFrom(
-      this.httpService.get(`${this.agentUrl}/api/tools/info`)
+      this.httpService.get<{ tools: ToolInfo[]; count: number }>(`${this.agentUrl}/api/tools/info`)
     );
     return res.data;
   }
@@ -40,7 +61,7 @@ export class ToolsService {
    */
   async getToolsHealth(): Promise<Record<string, ToolHealthStatus>> {
     const res = await firstValueFrom(
-      this.httpService.get(`${this.agentUrl}/api/tools/health`)
+      this.httpService.get<{ health: Record<string, ToolHealthStatus> }>(`${this.agentUrl}/api/tools/health`)
     );
     return res.data.health;
   }
@@ -48,9 +69,9 @@ export class ToolsService {
   /**
    * Get details for a specific tool.
    */
-  async getTool(toolName: string): Promise<any> {
+  async getTool(toolName: string): Promise<ToolDetailResponse> {
     const res = await firstValueFrom(
-      this.httpService.get(`${this.agentUrl}/api/tools/${toolName}`)
+      this.httpService.get<ToolDetailResponse>(`${this.agentUrl}/api/tools/${toolName}`)
     );
     return res.data;
   }
@@ -58,9 +79,9 @@ export class ToolsService {
   /**
    * List connected MCP servers.
    */
-  async listMCPServers(): Promise<any> {
+  async listMCPServers(): Promise<MCPServersResponse> {
     const res = await firstValueFrom(
-      this.httpService.get(`${this.agentUrl}/api/mcp/servers`)
+      this.httpService.get<MCPServersResponse>(`${this.agentUrl}/api/mcp/servers`)
     );
     return res.data;
   }
@@ -68,9 +89,9 @@ export class ToolsService {
   /**
    * Get MCP health status.
    */
-  async getMCPHealth(): Promise<any> {
+  async getMCPHealth(): Promise<MCPHealthResponse> {
     const res = await firstValueFrom(
-      this.httpService.get(`${this.agentUrl}/api/mcp/health`)
+      this.httpService.get<MCPHealthResponse>(`${this.agentUrl}/api/mcp/health`)
     );
     return res.data;
   }

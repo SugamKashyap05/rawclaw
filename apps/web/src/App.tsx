@@ -3,6 +3,7 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Chat from './pages/Chat'
 import Tools from './pages/Tools'
+import Tasks from './pages/Tasks'
 import ModelSelector from './components/ModelSelector'
 import axios from 'axios'
 
@@ -53,6 +54,12 @@ function App() {
           >
             Chat
           </Link>
+          <Link
+            to="/tasks"
+            className={location.pathname === '/tasks' ? 'active' : ''}
+          >
+            Tasks
+          </Link>
         </div>
         <ModelSelector
           selectedModel={selectedModel}
@@ -63,6 +70,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/tools" element={<Tools />} />
+          <Route path="/tasks" element={<Tasks />} />
           <Route
             path="/chat"
             element={<Chat selectedModel={selectedModel} />}

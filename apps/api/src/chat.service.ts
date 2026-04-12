@@ -3,6 +3,36 @@ import { PrismaService } from './prisma.service';
 import { RedisService } from './redis.service';
 import { ChatMessage, ChatResponse } from '@rawclaw/shared';
 
+interface ToolCall {
+  tool_name: string;
+  input: Record<string, unknown>;
+}
+
+interface Citation {
+  url: string;
+  title?: string;
+}
+
+interface MessageWithRelations {
+  id: string;
+  role: string;
+  content: string;
+  toolCalls: string | null;
+  citations: string | null;
+  createdAt: Date;
+  sessionId: string;
+}
+
+export interface SessionWithMessages {
+  id: string;
+  title: string | null;
+  workspaceId: string;
+  senderIdentifier: string;
+  createdAt: Date;
+  updatedAt: Date;
+  messages: MessageWithRelations[];
+}
+
 @Injectable()
 export class ChatService {
   constructor(
@@ -10,12 +40,18 @@ export class ChatService {
     private readonly redis: RedisService
   ) {}
 
-  async createMessage(sessionId: string, role: string, content: string, toolCalls?: any, citations?: any) {
+  async createMessage(
+    sessionId: string,
+    role: string,
+    content: string,
+    toolCalls?: ToolCall[],
+    citations?: Citation[]
+  ): Promise<MessageWithRelations> {
     // Ensure session exists
     await this.prisma.session.upsert({
       where: { id: sessionId },
       update: { updatedAt: new Date() },
-      create: { 
+      create: {
         id: sessionId,
         title: content.substring(0, 50) + (content.length > 50 ? '...' : '')
       },
@@ -32,28 +68,27 @@ export class ChatService {
     });
   }
 
-  async getMessages(sessionId: string) {
+  async getMessages(sessionId: string): Promise<ChatMessage[]> {
     const messages = await this.prisma.message.findMany({
       where: { sessionId },
       orderBy: { createdAt: 'asc' },
     });
 
-    return messages.map(m => ({
-      role: m.role as any,
+    return messages.map((m: MessageWithRelations) => ({
+      role: m.role as 'user' | 'assistant' | 'system' | 'tool',
       content: m.content,
-      tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
-      // Add more fields if needed
+      tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) as ToolCall[] : undefined,
     }));
   }
 
-  async listSessions() {
+  async listSessions(): Promise<SessionWithMessages[]> {
     return this.prisma.session.findMany({
       orderBy: { updatedAt: 'desc' },
       take: 20
-    });
+    }) as Promise<SessionWithMessages[]>;
   }
 
-  async getSession(id: string) {
+  async getSession(id: string): Promise<SessionWithMessages | null> {
     return this.prisma.session.findUnique({
       where: { id },
       include: {
@@ -61,6 +96,6 @@ export class ChatService {
           orderBy: { createdAt: 'asc' }
         }
       }
-    });
+    }) as Promise<SessionWithMessages | null>;
   }
 }

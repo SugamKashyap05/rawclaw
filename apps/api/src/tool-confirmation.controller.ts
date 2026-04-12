@@ -21,11 +21,11 @@ export class ToolConfirmationController {
   constructor(private readonly confirmationService: ToolConfirmationService) {}
 
   /**
-   * POST /api/tools/confirm
+   * POST /api/tools/confirm/request
    * Create a new tool confirmation request.
    * Called by the agent when a tool requires user consent.
    */
-  @Post()
+  @Post('request')
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() body: CreateConfirmationBody): Promise<ToolConfirmation> {
     return this.confirmationService.create({

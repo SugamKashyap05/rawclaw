@@ -1,5 +1,6 @@
 export * from './contracts/chat';
 export * from './contracts/task';
+export * from './contracts/provenance';
 export * from './contracts/health';
 export * from './contracts/tool';
 export * from './contracts/event';
