@@ -15,6 +15,7 @@ model Session {
   title            String?
   workspaceId      String    @default("default")
   senderIdentifier String    @default("local")
+  surfaceType      String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   messages         Message[]
@@ -41,6 +42,8 @@ model Message {
   role      String
   content   String
   toolCalls String?  // Store as JSON string
+  toolResults String? // Store as JSON string
+  provenance String?  // Store as JSON string
   citations String?  // Store as JSON string
   createdAt DateTime @default(now())
   
@@ -97,4 +100,65 @@ model RunStep {
   timestamp   DateTime @default(now())
 
   @@map("run_steps")
+}
+
+model ModelPreference {
+  id          String   @id @default(cuid())
+  modelId     String   @unique
+  customName  String?
+  isFavorite  Boolean  @default(false)
+  provider    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("model_preferences")
+}
+
+model AgentProfile {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  systemPrompt String
+  status       String   @default("idle")
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("agent_profiles")
+}
+
+model McpServerConfig {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  type       String
+  command    String
+  args       String?  // JSON string array
+  env        String?  // JSON object
+  status     String   @default("stopped")
+  lastError  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("mcp_server_configs")
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
+model MemoryEntry {
+  id         String   @id @default(cuid())
+  content    String
+  tags       String?  // JSON string array
+  source     String?
+  collection String   @default("default")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([collection])
+  @@map("memory_entries")
 }

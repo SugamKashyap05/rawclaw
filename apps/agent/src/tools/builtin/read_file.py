@@ -103,6 +103,17 @@ class ReadFileTool(BaseTool):
     async def execute(self, input: Dict[str, Any]) -> ToolResult:
         """Execute file read inside Docker sandbox."""
         start = time.time()
+
+        # --- SECURITY GATE: Sandbox must be available ---
+        if not await self._sandbox._ensure_docker():
+            return ToolResult(
+                tool_name=self.name,
+                input=input,
+                error="Docker-based sandbox is required but unavailable. Start Docker Desktop and retry.",
+                duration_ms=round((time.time() - start) * 1000, 2),
+                sandboxed=False,
+            )
+
         path = input.get("path", "")
 
         # Check if any paths are configured as allowed

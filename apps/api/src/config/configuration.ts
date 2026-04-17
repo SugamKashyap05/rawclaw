@@ -19,5 +19,11 @@ export default () => {
     agentUrl: agentUrl as string,
     databaseUrl: databaseUrl as string,
     redisUrl: redisUrl as string,
+    chromaHost: process.env.CHROMA_HOST || process.env.CHROMA_SERVER_HOST || 'localhost',
+    chromaPort: parseInt(process.env.CHROMA_PORT || process.env.CHROMA_SERVER_HTTP_PORT || '8010', 10),
+    jwtSecret: process.env.JWT_SECRET || 'PLEASE_CHANGE_ME_TO_A_LONG_RANDOM_STRING',
+    authSecret: process.env.AUTH_SECRET || 'A_STRONG_SECRET_FOR_BOOTSTRAP',
+    allowLocalAuth: process.env.ALLOW_LOCAL_AUTH || 'true',
+    jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   };
 };

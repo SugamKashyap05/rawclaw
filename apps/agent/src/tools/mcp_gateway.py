@@ -47,6 +47,7 @@ class MCPServer:
         self._process: Optional[asyncio.subprocess.Process] = None
         self._tools: List[Dict[str, Any]] = []
         self._connected = False
+        self._endpoint: Optional[str] = None
 
     async def connect(self) -> None:
         """Connect to the MCP server and discover available tools."""
@@ -64,15 +65,32 @@ class MCPServer:
 
         try:
             env = {**os.environ, **self.env}
-            self._process = await asyncio.create_subprocess_exec(
-                self.command,
-                *self.args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-            )
-            # Send initialize request
+            
+            # Windows command resolution fix (for npx, npm, etc)
+            import platform
+            cmd = self.command
+            if platform.system() == "Windows" and not cmd.endswith((".exe", ".cmd", ".bat")):
+                # Check if it's a known non-executable and wrap it
+                shell = True
+                full_command = f"{cmd} {' '.join(self.args)}"
+                self._process = await asyncio.create_subprocess_shell(
+                    full_command,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env,
+                )
+            else:
+                self._process = await asyncio.create_subprocess_exec(
+                    cmd,
+                    *self.args,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env,
+                )
+
+            # Send initialize request with timeout
             init_request = {
                 "jsonrpc": "2.0",
                 "id": str(uuid.uuid4()),
@@ -86,14 +104,28 @@ class MCPServer:
                     },
                 },
             }
-            response = await self._send_stdio(init_request)
-            if response and "result" in response:
-                self._connected = True
-                logger.info(f"MCP stdio server {self.name} initialized")
-                # Discover tools
-                await self._discover_tools_stdio()
-            else:
-                raise MCPError(f"MCP server {self.name} failed to initialize: {response}")
+            try:
+                # We use wait_for because if the server crashes or hangs, 
+                # we don't want the agent startup to hang indefinitely.
+                response = await asyncio.wait_for(self._send_stdio(init_request), timeout=10.0)
+                
+                if response and "result" in response:
+                    self._connected = True
+                    logger.info(f"MCP stdio server {self.name} initialized")
+                    await self._discover_tools_stdio()
+                else:
+                    # Capture what we can
+                    stdout_data, stderr_data = await self._process.communicate()
+                    err_msg = stderr_data.decode().strip() or stdout_data.decode().strip()
+                    exit_code = self._process.returncode
+                    raise MCPError(f"MCP server {self.name} handshake failed (exit {exit_code}). Stderr: {err_msg}")
+                    
+            except asyncio.TimeoutError:
+                # If it timed out, term the process
+                self._process.terminate()
+                stdout_data, stderr_data = await self._process.communicate()
+                err_msg = stderr_data.decode().strip()
+                raise MCPError(f"MCP server {self.name} handshake timed out. Stderr: {err_msg}")
 
         except FileNotFoundError:
             raise MCPError(f"MCP server {self.name}: command '{self.command}' not found")
@@ -101,13 +133,43 @@ class MCPServer:
             raise MCPError(f"MCP server {self.name} connection failed: {e}")
 
     async def _connect_sse(self) -> None:
-        """Connect to an SSE MCP server via HTTP."""
+        """Connect to an SSE MCP server via HTTP following the standard handshake."""
         if not self.url:
             raise MCPError(f"MCP server {self.name}: sse requires a 'url'")
 
+        logger.info(f"MCP {self.name}: Starting SSE handshake at {self.url}")
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                # POST initialize
+            async with httpx.AsyncClient(timeout=15) as client:
+                # 1. Establish SSE session (GET)
+                self._endpoint = None
+                
+                logger.debug(f"MCP {self.name}: Opening SSE stream...")
+                async with client.stream("GET", self.url) as response:
+                    if response.status_code != 200:
+                        logger.error(f"MCP {self.name}: SSE stream failed with status {response.status_code}")
+                        raise MCPError(f"Failed to connect to SSE stream: {response.status_code}")
+                    
+                    logger.debug(f"MCP {self.name}: SSE stream opened, waiting for 'endpoint' event")
+                    last_event = None
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if line.startswith("event:"):
+                            last_event = line[6:].strip()
+                            logger.debug(f"MCP {self.name}: Received event: {last_event}")
+                        elif line.startswith("data:") and last_event == "endpoint":
+                            endpoint_path = line[5:].strip()
+                            from urllib.parse import urljoin
+                            self._endpoint = urljoin(self.url, endpoint_path)
+                            logger.info(f"MCP {self.name}: Discovered message endpoint: {self._endpoint}")
+                            break
+                        elif not line:
+                            continue
+                
+                if not self._endpoint:
+                    logger.warning(f"MCP {self.name}: No 'endpoint' event found in first few lines, falling back to {self.url}")
+                    self._endpoint = self.url
+
+                # 2. POST initialize
                 init_request = {
                     "jsonrpc": "2.0",
                     "id": str(uuid.uuid4()),
@@ -121,22 +183,34 @@ class MCPServer:
                         },
                     },
                 }
+                logger.debug(f"MCP {self.name}: Sending 'initialize' request to {self._endpoint}")
                 resp = await client.post(
-                    self.url,
+                    self._endpoint,
                     json=init_request,
                     headers={"Content-Type": "application/json"},
                 )
-                resp.raise_for_status()
+                
+                if resp.status_code != 200:
+                    logger.error(f"MCP {self.name}: 'initialize' failed with status {resp.status_code}: {resp.text}")
+                    resp.raise_for_status()
+                
                 data = resp.json()
-
                 if "result" in data:
                     self._connected = True
-                    logger.info(f"MCP SSE server {self.name} initialized")
+                    logger.info(f"MCP {self.name}: Initialized successfully at {self._endpoint}")
                     await self._discover_tools_sse()
                 else:
+                    logger.error(f"MCP {self.name}: Server returned error result: {data}")
                     raise MCPError(f"MCP server {self.name} failed to initialize: {data}")
 
+        except httpx.ConnectError:
+            logger.error(f"MCP {self.name}: Connection refused at {self.url}")
+            raise MCPError(f"Connection refused at {self.url}. Is the MCP server running?")
+        except httpx.TimeoutException:
+            logger.error(f"MCP {self.name}: Handshake timed out at {self.url}")
+            raise MCPError(f"Handshake timed out at {self.url}")
         except Exception as e:
+            logger.error(f"MCP {self.name}: SSE connection failed unexpectedly: {str(e)}")
             raise MCPError(f"MCP server {self.name} SSE connection failed: {e}")
 
     async def _send_stdio(self, request: Dict) -> Optional[Dict]:
@@ -181,7 +255,7 @@ class MCPServer:
                     "method": "tools/list",
                     "params": {},
                 }
-                resp = await client.post(self.url, json=request)
+                resp = await client.post(self._endpoint or self.url, json=request)
                 resp.raise_for_status()
                 data = resp.json()
                 if "result" in data:
@@ -206,7 +280,7 @@ class MCPServer:
             response = await self._send_stdio(request)
         elif self.transport == "sse":
             async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(self.url, json=request)
+                resp = await client.post(self._endpoint or self.url, json=request)
                 resp.raise_for_status()
                 response = resp.json()
         else:
@@ -250,10 +324,15 @@ class MCPGateway:
         self.config_path = config_path
         self._servers: Dict[str, MCPServer] = {}
 
+    def add_server(self, server: MCPServer) -> None:
+        """Register an MCP server programmatically."""
+        self._servers[server.name] = server
+        logger.info(f"MCP server registered: {server.name} ({server.transport})")
+
     def load_config(self) -> None:
         """Load MCP server configurations from the JSON config file."""
         if not os.path.exists(self.config_path):
-            logger.info(f"MCP config not found at {self.config_path}, no MCP servers configured")
+            logger.info(f"MCP config not found at {self.config_path}, skipping file-based config")
             return
 
         try:
@@ -269,8 +348,7 @@ class MCPGateway:
                     url=server_config.get("url"),
                     env=server_config.get("env", {}),
                 )
-                self._servers[name] = server
-                logger.info(f"MCP server configured: {name} ({server.transport})")
+                self.add_server(server)
 
         except Exception as e:
             logger.error(f"Failed to load MCP config: {e}")

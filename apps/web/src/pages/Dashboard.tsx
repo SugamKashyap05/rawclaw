@@ -1,425 +1,188 @@
-import { useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
-import { ApiHealth, AgentHealth, ToolHealthStatus } from '@rawclaw/shared';
-import { FiBox, FiLink, FiTool, FiAlertTriangle, FiCheck, FiX, FiClock } from 'react-icons/fi';
-import { formatDistanceToNow } from 'date-fns';
+import { DocsIndexResponse, SkillDefinition, SystemStatusSnapshot } from '@rawclaw/shared';
+import { api } from '../lib/api';
 
-interface SystemStatus {
-  api: 'ok' | 'degraded' | 'down' | 'loading';
-  agent: 'ok' | 'down' | 'loading';
-  redis: 'ok' | 'down' | 'loading';
-  agent_providers?: Record<string, { status: string }>;
+interface TaskRunSummary {
+  id: string;
+  status: string;
+  startedAt?: string;
+  definition?: { name?: string };
 }
 
-interface ToolsHealthResponse {
-  health: Record<string, ToolHealthStatus>;
-}
-
-interface MCPStatus {
-  connected: boolean;
-  servers: string[];
-  connected_count: number;
+interface DashboardState {
+  system: SystemStatusSnapshot | null;
+  docs: DocsIndexResponse | null;
+  agents: Array<{ id: string; name: string; status: string }>;
+  skills: SkillDefinition[];
+  runs: TaskRunSummary[];
 }
 
 export default function Dashboard() {
-  const [status, setStatus] = useState<SystemStatus>({
-    api: 'loading',
-    agent: 'loading',
-    redis: 'loading'
+  const [state, setState] = useState<DashboardState>({
+    system: null,
+    docs: null,
+    agents: [],
+    skills: [],
+    runs: [],
   });
-  const [toolsHealth, setToolsHealth] = useState<Record<string, ToolHealthStatus>>({});
-  const [mcpStatus, setMcpStatus] = useState<MCPStatus>({ connected: false, servers: [], connected_count: 0 });
-  const [recentRuns, setRecentRuns] = useState<any[]>([]);
 
   useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const [apiRes, agentRes, toolsRes, mcpRes, runsRes] = await Promise.all([
-          axios.get<ApiHealth>('/api/health').catch(() => null),
-          axios.get<AgentHealth>('/agent/health').catch(() => null),
-          axios.get<ToolsHealthResponse>('/api/tools/health').catch(() => null),
-          axios.get<MCPStatus>('/api/mcp/health').catch(() => null),
-          axios.get<any[]>('/api/tasks/runs/recent').catch(() => []),
-        ]);
-
-        setStatus({
-          api: apiRes?.data?.status || 'down',
-          agent: agentRes?.data?.status || 'down',
-          redis: apiRes?.data?.services?.redis || 'down',
-          agent_providers: agentRes?.data ? (agentRes.data as AgentHealth & { providers?: Record<string, { status: string }> }).providers : undefined
-        });
-
-        if (toolsRes?.data?.health) {
-          setToolsHealth(toolsRes.data.health);
-        }
-
-        if (mcpRes?.data) {
-          setMcpStatus(mcpRes.data);
-        }
-
-        if (runsRes && 'data' in runsRes) {
-          setRecentRuns(runsRes.data);
-        }
-      } catch (err) {
-        console.error('Health check failed', err);
-      }
-    };
-
-    checkStatus();
-    const interval = setInterval(checkStatus, 10000);
-    return () => clearInterval(interval);
+    void load();
   }, []);
 
-  const getHealthColor = (s: string): string => {
-    switch (s) {
-      case 'ok': return 'var(--success-green)';
-      case 'degraded': return 'var(--warning-amber)';
-      default: return 'var(--error-red)';
-    }
+  const load = async () => {
+    const [system, docs, agents, skills, runs] = await Promise.all([
+      api.get<SystemStatusSnapshot>('/system/status').catch(() => null),
+      api.get<DocsIndexResponse>('/docs').catch(() => null),
+      api.get<Array<{ id: string; name: string; status: string }>>('/agents').catch(() => null),
+      api.get<SkillDefinition[]>('/skills').catch(() => null),
+      api.get<TaskRunSummary[]>('/tasks/runs/recent').catch(() => null),
+    ]);
+
+    setState({
+      system: system?.data || null,
+      docs: docs?.data || null,
+      agents: agents?.data || [],
+      skills: skills?.data || [],
+      runs: runs?.data || [],
+    });
   };
 
-  const toolHealthList = Object.entries(toolsHealth);
-  const okTools = toolHealthList.filter(([, h]) => h.status === 'ok').length;
-  const degradedTools = toolHealthList.filter(([, h]) => h.status === 'degraded').length;
-  const unavailableTools = toolHealthList.filter(([, h]) => h.status === 'unavailable').length;
-
   return (
-    <div className="dashboard">
-      <h1>System Overview</h1>
-      <div className="dashboard-grid">
-        <div className="status-card">
-          <div className="service-info">
-            <h3>API Gateway</h3>
-            <p>Node.js / NestJS</p>
+    <div className="animate-in" style={{ display: 'grid', gap: '1.5rem' }}>
+      <section
+        className="glass-card"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1.2fr 0.8fr',
+          gap: '1.5rem',
+          background: 'linear-gradient(135deg, rgba(12,12,18,0.88), rgba(32,18,52,0.78))',
+        }}
+      >
+        <div>
+          <div className="mono" style={{ color: 'var(--neon-cyan)', fontSize: '0.8rem', marginBottom: '0.65rem' }}>
+            RAWCLAW COMMAND CENTER
           </div>
-          <div className={`status-dot ${status.api}`}></div>
-        </div>
-
-        <div className="status-card">
-          <div className="service-info">
-            <h3>AI Agent</h3>
-            <p>Python / FastAPI</p>
+          <h1 style={{ fontSize: '2.3rem', marginBottom: '0.75rem', lineHeight: 1.05 }}>
+            Operate agents, memory, models, MCP servers, and tasks from one live surface.
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, maxWidth: '760px' }}>
+            This dashboard is now wired to the actual backend contracts we rebuilt. The goal is simple: every major capability has a route, a backing API, and a visible operational state.
+          </p>
+          <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
+            <Link to="/chat" className="btn-primary">New Chat</Link>
+            <Link to="/agents" className="btn-ghost">Create Agent</Link>
+            <Link to="/mcp" className="btn-ghost">Add MCP Server</Link>
+            <Link to="/skills" className="btn-ghost">Install Skill</Link>
           </div>
-          <div className={`status-dot ${status.agent}`}></div>
         </div>
 
-        <div className="status-card">
-          <div className="service-info">
-            <h3>Session Cache</h3>
-            <p>Redis Stack</p>
+        <div style={{ display: 'grid', gap: '0.9rem' }}>
+          <MetricCard label="Running agents" value={state.system?.counts.agents ?? 0} />
+          <MetricCard label="Connected MCP servers" value={state.system?.counts.mcpServers ?? 0} />
+          <MetricCard label="Pending tasks" value={state.system?.counts.pendingTasks ?? 0} />
+        </div>
+      </section>
+
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1rem' }}>
+        <Panel title="System Status">
+          <StatusRow label="API" value={state.system?.services.api || 'unknown'} />
+          <StatusRow label="Agent" value={state.system?.services.agent || 'unknown'} />
+          <StatusRow label="Redis" value={state.system?.services.redis || 'unknown'} />
+          <StatusRow label="ChromaDB" value={state.system?.services.chroma || 'unknown'} />
+          <StatusRow label="Prisma / SQLite" value={state.system?.services.database || 'unknown'} />
+        </Panel>
+
+        <Panel title="Foundation Intel">
+          <StatusRow label="Docs indexed" value={String(state.docs?.total || 0)} />
+          <StatusRow label="Decision records" value={String(state.docs?.entries.filter((entry) => entry.category === 'decision').length || 0)} />
+          <StatusRow label="Skills exposed" value={String(state.skills.length)} />
+          <StatusRow label="Git branch" value={state.system?.git.branch || 'unknown'} />
+        </Panel>
+
+        <Panel title="Quick Links">
+          <div style={{ display: 'grid', gap: '0.6rem' }}>
+            <QuickLink to="/memory" label="Open Memory Matrix" />
+            <QuickLink to="/models" label="Tune routing policy" />
+            <QuickLink to="/settings" label="Edit providers and workspace files" />
+            <QuickLink to="/sandbox" label="Inspect task sandbox paths" />
           </div>
-          <div className={`status-dot ${status.redis}`}></div>
-        </div>
+        </Panel>
+      </section>
 
-        {status.agent_providers && (
-          <div className="status-card">
-            <div className="service-info">
-              <h3>Model Routing</h3>
-              <p>{Object.keys(status.agent_providers).length} Providers Online</p>
-            </div>
-            <div className="status-dot ok"></div>
-          </div>
-        )}
-      </div>
-
-      {/* Tools Health Summary */}
-      <div className="section-card">
-        <div className="section-header">
-          <h2><FiTool /> Tools Health</h2>
-          <Link to="/tools" className="section-link">View All</Link>
-        </div>
-        <div className="tools-health-row">
-          {toolHealthList.length === 0 ? (
-            <div className="loading-text">Loading tools...</div>
-          ) : (
-            toolHealthList.slice(0, 12).map(([name, health]) => (
-              <div key={name} className="tool-health-item" title={`${name}: ${health.status}`}>
-                <div
-                  className="tool-health-dot"
-                  style={{ backgroundColor: getHealthColor(health.status) }}
-                />
-                <span className="tool-health-name">{name}</span>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="tools-health-summary">
-          <span className="summary-ok"><FiCheck /> {okTools} OK</span>
-          {degradedTools > 0 && (
-            <span className="summary-degraded"><FiAlertTriangle /> {degradedTools} Degraded</span>
-          )}
-          {unavailableTools > 0 && (
-            <span className="summary-unavailable"><FiX /> {unavailableTools} Unavailable</span>
-          )}
-        </div>
-      </div>
-
-      {/* MCP Connection Status */}
-      <div className="section-card">
-        <div className="section-header">
-          <h2><FiLink /> MCP Gateway</h2>
-        </div>
-        <div className="mcp-status">
-          {mcpStatus.connected ? (
-            <div className="mcp-connected">
-              <FiCheck className="status-icon ok" />
-              <span>Connected ({mcpStatus.connected_count} servers)</span>
-              <div className="mcp-servers">
-                {mcpStatus.servers.map(s => (
-                  <span key={s} className="server-tag">{s}</span>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="mcp-disconnected">
-              <FiBox className="status-icon muted" />
-              <span>Not connected</span>
-              <Link to="/tools" className="connect-link">Connect Gateway</Link>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Recent Tasks */}
-      <div className="section-card">
-        <div className="section-header">
-          <h2><FiClock /> Recent Tasks</h2>
-          <Link to="/tasks" className="section-link">View Tasks</Link>
-        </div>
-        <div className="recent-runs">
-          {recentRuns.length === 0 ? (
-            <div className="loading-text">No recent tasks</div>
-          ) : (
-            recentRuns.map((run: any) => (
-              <div key={run.id} className={`run-summary-item ${run.status}`}>
-                <div className="run-dot"></div>
-                <div className="run-main">
-                  <span className="run-task-name">{run.task?.name || 'Task'}</span>
-                  <span className="run-status-text">{run.status}</span>
+      <section style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '1rem' }}>
+        <Panel title="Active Agents">
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            {state.agents.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)' }}>No agents configured yet.</div>
+            ) : (
+              state.agents.map((agent) => (
+                <div key={agent.id} style={{ border: '1px solid var(--border-glass)', borderRadius: '14px', padding: '0.85rem', background: 'rgba(255,255,255,0.03)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+                    <strong>{agent.name}</strong>
+                    <span className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                      {agent.status}
+                    </span>
+                  </div>
                 </div>
-                <span className="run-time-small">
-                  {run.startedAt ? formatDistanceToNow(new Date(run.startedAt), { addSuffix: true }) : 'Pending'}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+              ))
+            )}
+          </div>
+        </Panel>
 
-      {/* Active Model Providers */}
-      <div className="system-logs">
-        <h2>Active Model Providers</h2>
-        <div className="provider-list">
-          {status.agent_providers ? Object.entries(status.agent_providers).map(([name, info]) => (
-            <div key={name} className="provider-item">
-              <strong>{name.toUpperCase()}</strong>: {info.status}
-            </div>
-          )) : <p>Loading provider status...</p>}
-        </div>
-      </div>
-
-      <style>{`
-        .dashboard {
-          padding: 2rem;
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-        .dashboard-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 1rem;
-          margin-bottom: 2rem;
-        }
-        .status-card {
-          background: var(--panel-bg);
-          border: 1px solid var(--glass-border);
-          border-radius: 16px;
-          padding: 1.25rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .service-info h3 {
-          margin: 0;
-          font-size: 1rem;
-        }
-        .service-info p {
-          margin: 0.25rem 0 0 0;
-          color: var(--text-muted);
-          font-size: 0.875rem;
-        }
-        .status-dot {
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-        }
-        .status-dot.ok { background: var(--success-green); }
-        .status-dot.degraded { background: var(--warning-amber); }
-        .status-dot.down, .status-dot.loading { background: var(--error-red); }
-
-        .section-card {
-          background: var(--panel-bg);
-          border: 1px solid var(--glass-border);
-          border-radius: 16px;
-          padding: 1.5rem;
-          margin-bottom: 1.5rem;
-        }
-        .section-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1rem;
-        }
-        .section-header h2 {
-          margin: 0;
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 1rem;
-        }
-        .section-link {
-          color: var(--accent-cyan);
-          text-decoration: none;
-          font-size: 0.875rem;
-        }
-        .tools-health-row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.75rem;
-          margin-bottom: 1rem;
-        }
-        .tool-health-item {
-          display: flex;
-          align-items: center;
-          gap: 0.25rem;
-          padding: 0.25rem 0.5rem;
-          background: rgba(0, 0, 0, 0.2);
-          border-radius: 4px;
-        }
-        .tool-health-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-        }
-        .tool-health-name {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-        }
-        .tools-health-summary {
-          display: flex;
-          gap: 1rem;
-          font-size: 0.875rem;
-        }
-        .summary-ok { color: var(--success-green); }
-        .summary-degraded { color: var(--warning-amber); }
-        .summary-unavailable { color: var(--error-red); }
-
-        .mcp-status {
-          padding: 1rem;
-          background: rgba(0, 0, 0, 0.2);
-          border-radius: 8px;
-        }
-        .mcp-connected, .mcp-disconnected {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-        .status-icon.ok { color: var(--success-green); }
-        .status-icon.muted { color: var(--text-muted); }
-        .mcp-servers {
-          display: flex;
-          gap: 0.5rem;
-          margin-left: auto;
-        }
-        .server-tag {
-          background: rgba(0, 200, 200, 0.1);
-          color: var(--accent-cyan);
-          padding: 0.25rem 0.5rem;
-          border-radius: 4px;
-          font-size: 0.75rem;
-        }
-        .connect-link {
-          color: var(--accent-cyan);
-          text-decoration: none;
-          margin-left: auto;
-        }
-        .loading-text {
-          color: var(--text-muted);
-        }
-
-        .system-logs {
-          background: var(--panel-bg);
-          padding: 2rem;
-          border-radius: 16px;
-          border: 1px solid var(--glass-border);
-        }
-        .provider-list {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 1rem;
-          margin-top: 1rem;
-        }
-        .provider-item {
-          background: rgba(0,0,0,0.2);
-          padding: 1rem;
-          border-radius: 8px;
-          border-left: 4px solid var(--accent-cyan);
-        }
-
-        .recent-runs {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-        .run-summary-item {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.75rem;
-          background: rgba(0, 0, 0, 0.2);
-          border-radius: 8px;
-          border-left: 2px solid transparent;
-        }
-        .run-summary-item.done { border-left-color: var(--success-green); }
-        .run-summary-item.failed { border-left-color: var(--error-red); }
-        .run-summary-item.running { border-left-color: var(--accent-cyan); }
-        
-        .run-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: var(--text-muted);
-        }
-        .run-summary-item.done .run-dot { background: var(--success-green); }
-        .run-summary-item.failed .run-dot { background: var(--error-red); }
-        .run-summary-item.running .run-dot { background: var(--accent-cyan); animation: pulse 2s infinite; }
-
-        .run-main {
-          display: flex;
-          flex-direction: column;
-          flex: 1;
-        }
-        .run-task-name {
-          font-size: 0.9rem;
-          font-weight: 500;
-        }
-        .run-status-text {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-          text-transform: capitalize;
-        }
-        .run-time-small {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-        }
-
-        @keyframes pulse {
-          0% { opacity: 1; }
-          50% { opacity: 0.5; }
-          100% { opacity: 1; }
-        }
-      `}</style>
+        <Panel title="Recent Activity">
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            {state.runs.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)' }}>No recent task activity yet.</div>
+            ) : (
+              state.runs.map((run) => (
+                <div key={run.id} style={{ border: '1px solid var(--border-glass)', borderRadius: '14px', padding: '0.85rem', background: 'rgba(255,255,255,0.03)' }}>
+                  <div style={{ fontWeight: 700 }}>{run.definition?.name || 'Task run'}</div>
+                  <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                    {run.status} • {run.id}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Panel>
+      </section>
     </div>
+  );
+}
+
+function Panel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="glass-card">
+      <h2 style={{ fontSize: '1.05rem', marginBottom: '1rem' }}>{title}</h2>
+      {children}
+    </div>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div style={{ border: '1px solid var(--border-glass)', borderRadius: '16px', padding: '1rem', background: 'rgba(255,255,255,0.03)' }}>
+      <div style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.25rem' }}>{value}</div>
+      <div style={{ color: 'var(--text-secondary)' }}>{label}</div>
+    </div>
+  );
+}
+
+function StatusRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.35rem 0' }}>
+      <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+      <span className="mono">{value}</span>
+    </div>
+  );
+}
+
+function QuickLink({ to, label }: { to: string; label: string }) {
+  return (
+    <Link to={to} className="btn-ghost" style={{ textDecoration: 'none', textAlign: 'left' }}>
+      {label}
+    </Link>
   );
 }

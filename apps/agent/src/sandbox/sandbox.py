@@ -9,6 +9,7 @@ Security contract:
 import asyncio
 import json
 import logging
+import os
 import shutil
 import time
 from typing import Any, Dict, List, Optional
@@ -16,6 +17,13 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
 logger = logging.getLogger("rawclaw.sandbox")
+
+# Strictly require Docker for all sandboxed tools if True
+SANDBOX_STRICT_MODE = os.getenv('SANDBOX_STRICT_MODE', 'false').lower() == 'true'
+
+class SandboxError(Exception):
+    """Raised when sandbox execution is not possible."""
+    pass
 
 
 class SandboxResult(BaseModel):
@@ -84,6 +92,10 @@ class SandboxRunner:
                 logger.warning(
                     "Docker daemon is NOT available. Sandboxed tools will refuse execution."
                 )
+
+        if not self._docker_ok and SANDBOX_STRICT_MODE:
+            raise SandboxError("Docker required for sandboxed execution (strict mode enabled)")
+
         return self._docker_ok
 
     async def run(
@@ -126,12 +138,14 @@ class SandboxRunner:
             "--user", "nobody",             # Non-root user
         ]
 
-        # Add volume mounts for input files if provided
-        if input_files:
-            for filename, content in input_files.items():
-                # Note: In production, we'd write to a temp dir and mount it
-                # For now, we pass data via stdin
-                pass
+        # Add volume mounts for allowed paths
+        from src.sandbox.sandbox_config import get_sandbox_config
+        config = get_sandbox_config()
+        for mount_path in config.allowed_paths:
+            if os.path.exists(mount_path):
+                # Map host path to same path in container
+                abs_mount = os.path.abspath(mount_path)
+                cmd.extend(["-v", f"{abs_mount}:{abs_mount}:ro"])
 
         cmd.extend([
             "-i",                           # Accept stdin
@@ -207,10 +221,21 @@ class SandboxRunner:
             "--read-only",
             "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
             "--user", "nobody",
+        ]
+
+        # Add volume mounts for allowed paths
+        from src.sandbox.sandbox_config import get_sandbox_config
+        config = get_sandbox_config()
+        for mount_path in config.allowed_paths:
+            if os.path.exists(mount_path):
+                abs_mount = os.path.abspath(mount_path)
+                cmd.extend(["-v", f"{abs_mount}:{abs_mount}:ro"])
+
+        cmd.extend([
             "-i",
             self.image,
             "python3", "-c", code,
-        ]
+        ])
 
         try:
             proc = await asyncio.create_subprocess_exec(

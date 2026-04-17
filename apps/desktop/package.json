@@ -9,6 +9,9 @@
     "test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "check-types": "cargo check --manifest-path src-tauri/Cargo.toml"
   },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  },
   "devDependencies": {
     "@rawclaw/web": "*",
     "@tauri-apps/cli": "^2.10.1"

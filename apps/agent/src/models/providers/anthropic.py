@@ -1,5 +1,6 @@
 import anthropic
-from typing import AsyncIterator, List, Dict, Any
+import json
+from typing import AsyncIterator, List, Dict, Any, Union
 from src.models.base import ModelProvider, ModelInfo, ProviderHealth
 from src.config import settings
 
@@ -10,15 +11,15 @@ class AnthropicProvider(ModelProvider):
         if self.api_key:
             self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
 
-    async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[str]:
+    async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[Any]:
         if not self.client:
             yield "Error: Anthropic API key not configured."
             return
 
         model = options.get("model", "claude-3-haiku-20240307") if options else "claude-3-haiku-20240307"
+        tools = options.get("tools") if options else None
         
-        # Anthropic uses 'system' as a top-level parameter, not in messages list for some versions
-        # Extract system message if present
+        # Extract system message and format others
         system_msg = ""
         filtered_messages = []
         for msg in messages:
@@ -31,14 +32,67 @@ class AnthropicProvider(ModelProvider):
                 })
 
         try:
+            # State for accumulating streaming tool_use blocks
+            _current_tool_name: str | None = None
+            _current_tool_id: str | None = None
+            _current_tool_input_json: str = ""
+            _streamed_tool_ids: set[str] = set()
+
+            # Use the more general message stream to capture both text and tool blocks
             async with self.client.messages.stream(
                 model=model,
                 max_tokens=4096,
                 system=system_msg,
-                messages=filtered_messages
+                messages=filtered_messages,
+                tools=tools if tools else anthropic.NOT_GIVEN
             ) as stream:
-                async for text in stream.text_stream:
-                    yield text
+                async for event in stream:
+                    if event.type == "content_block_delta" and event.delta.type == "text_delta":
+                        yield event.delta.text
+
+                    elif event.type == "content_block_start" and event.content_block.type == "tool_use":
+                        # Begin accumulating a new tool call
+                        _current_tool_name = event.content_block.name
+                        _current_tool_id = event.content_block.id
+                        _current_tool_input_json = ""
+
+                    elif event.type == "content_block_delta" and event.delta.type == "input_json_delta":
+                        # Accumulate the JSON input fragments for the tool call
+                        _current_tool_input_json += event.delta.partial_json
+
+                    elif event.type == "content_block_stop" and _current_tool_id is not None:
+                        # Tool use block complete — parse accumulated input and yield
+                        try:
+                            tool_input = json.loads(_current_tool_input_json) if _current_tool_input_json else {}
+                        except json.JSONDecodeError:
+                            tool_input = {}
+
+                        yield {
+                            "type": "tool_call",
+                            "tool_call": {
+                                "name": _current_tool_name,
+                                "arguments": tool_input,
+                            }
+                        }
+
+                        _streamed_tool_ids.add(_current_tool_id)
+                        # Reset for the next potential tool_use block
+                        _current_tool_name = None
+                        _current_tool_id = None
+                        _current_tool_input_json = ""
+                    
+                # After the stream, yield any tool_use blocks not already
+                # emitted during streaming (dedup guard prevents double-firing)
+                final_msg = await stream.get_final_message()
+                for content in final_msg.content:
+                    if content.type == "tool_use" and content.id not in _streamed_tool_ids:
+                        yield {
+                            "type": "tool_call",
+                            "function": {
+                                "name": content.name,
+                                "arguments": json.dumps(content.input)
+                            }
+                        }
         except Exception as e:
             yield f"Error calling Anthropic: {str(e)}"
 

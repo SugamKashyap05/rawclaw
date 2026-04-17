@@ -8,13 +8,15 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "test": "turbo run test",
-    "check-types": "turbo run check-types"
+    "dev": "cross-env TURBO_FORCE_GIT=0 turbo run dev",
+    "build": "cross-env TURBO_FORCE_GIT=0 turbo run build",
+    "lint": "cross-env TURBO_FORCE_GIT=0 turbo run lint",
+    "test": "cross-env TURBO_FORCE_GIT=0 turbo run test",
+    "check-types": "cross-env TURBO_FORCE_GIT=0 turbo run check-types",
+    "verify:chat": "node scripts/chat-capability-check.mjs"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "turbo": "^2.0.0"
   }
 }

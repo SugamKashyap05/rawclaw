@@ -1,561 +1,403 @@
-import { useState, useRef, useEffect } from 'react';
-import { ChatStreamChunk, ToolResult } from '@rawclaw/shared';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { AgentProfile, ChatStreamChunk, ToolResult } from '@rawclaw/shared';
+import { api } from '../lib/api';
+import { AUTH_TOKEN_KEY } from '../lib/auth';
+import { ChatSidebar } from '../components/ChatSidebar';
 import { ConfirmationBanner } from '../components/ConfirmationBanner';
-import { FiChevronDown, FiChevronUp, FiClock, FiBox, FiTool } from 'react-icons/fi';
+import { WebSearchResult } from '../components/chat/WebSearchResult';
+import { BrowserResult } from '../components/chat/BrowserResult';
+import { FileResult } from '../components/chat/FileResult';
+import { CodeResult } from '../components/chat/CodeResult';
+import { TerminalResult } from '../components/chat/TerminalResult';
+import { ProvenanceTrace } from '../components/chat/ProvenanceTrace';
 
 interface Props {
   selectedModel: string;
 }
 
-interface ProvenanceTraceData {
-  run_id: string;
-  steps: ProvenanceStepData[];
-  step_count: number;
-  created_at: string;
-}
-
-interface ProvenanceStepData {
-  step_index: number;
-  step_type: 'plan' | 'tool_call' | 'tool_result' | 'synthesis' | 'error';
-  tool_name?: string | null;
-  input_summary?: string | null;
-  output_summary?: string | null;
-  source_url?: string | null;
-  duration_ms: number;
-  sandboxed: boolean;
-  timestamp: string;
-}
-
-interface MessageWithTools {
+interface SessionMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
-  name?: string;
+  tool_calls?: any[];
   toolResults?: ToolResult[];
-  provenanceTrace?: ProvenanceTraceData | null;
+  provenanceTrace?: ChatStreamChunk['provenance_trace'];
+  citations?: Array<{ url: string; title?: string }>;
+  error?: {
+    type: 'agent_unavailable' | 'model_unavailable' | 'mcp_unavailable' | 'tool_failed' | 'stream_interrupted' | 'auth_failure';
+    message: string;
+    details?: string;
+  };
 }
 
 export default function Chat({ selectedModel }: Props) {
-  const [messages, setMessages] = useState<MessageWithTools[]>([]);
+  const { sessionId: routeSessionId } = useParams();
+  const navigate = useNavigate();
+  const [localSessionId] = useState(() => cryptoRandom());
+  const sessionId = routeSessionId || localSessionId;
+
+  const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [input, setInput] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [sessionId] = useState(() => Math.random().toString(36).substring(7));
-
-  const historyRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    historyRef.current?.scrollTo({
-      top: historyRef.current.scrollHeight,
-      behavior: 'smooth'
-    });
-  };
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [agents, setAgents] = useState<AgentProfile[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    scrollToBottom();
+    void loadAgents();
+  }, []);
+
+  useEffect(() => {
+    if (!routeSessionId) {
+      setMessages([]);
+      return;
+    }
+    void loadHistory(routeSessionId);
+  }, [routeSessionId]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isStreaming) return;
+  const selectedAgent = useMemo(
+    () => agents.find((agent) => agent.id === selectedAgentId) || null,
+    [agents, selectedAgentId],
+  );
 
-    const userMessage: MessageWithTools = { role: 'user', content: input };
-    setMessages(prev => [...prev, userMessage]);
+  const loadAgents = async () => {
+    const response = await api.get<AgentProfile[]>('/agents');
+    setAgents(response.data);
+    const defaultAgent = response.data.find((agent) => agent.isDefault);
+    if (defaultAgent) setSelectedAgentId(defaultAgent.id);
+  };
+
+  const loadHistory = async (id: string) => {
+    setLoadingHistory(true);
+    try {
+      const response = await api.get<{ messages: SessionMessage[] }>(`/chat/sessions/${id}`);
+      setMessages(response.data?.messages || []);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const send = async () => {
+    if (!input.trim() || sending) return;
+    const prompt = input.trim();
     setInput('');
-    setIsStreaming(true);
+    setSending(true);
 
-    const assistantMessage: MessageWithTools = {
-      role: 'assistant',
-      content: '',
-      toolResults: [],
-    };
-    setMessages(prev => [...prev, assistantMessage]);
+    if (!routeSessionId) navigate(`/chat/${sessionId}`, { replace: true });
+
+    setMessages((current) => [
+      ...current,
+      { role: 'user', content: prompt },
+      { role: 'assistant', content: '', toolResults: [] },
+    ]);
 
     try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
       const isComplexity = selectedModel.startsWith('complexity:');
-      const payload = {
-        session_id: sessionId,
-        messages: [{ role: 'user', content: input }],
-        model: isComplexity ? undefined : selectedModel,
-        complexity: isComplexity ? selectedModel.split(':')[1] : undefined,
-        stream: true
-      };
-
       const response = await fetch('/api/chat/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          messages: [{ role: 'user', content: prompt }],
+          model: isComplexity ? undefined : selectedModel,
+          complexity: isComplexity ? selectedModel.split(':')[1] : undefined,
+          stream: true,
+          agent_id: selectedAgentId || undefined,
+        }),
       });
 
-      if (!response.body) throw new Error('No response body');
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Chat request failed with status ${response.status}`);
+      }
+
+      if (!response.body) throw new Error('No response body from chat stream.');
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let accumulatedContent = '';
+      let assistantText = '';
       const toolResults: ToolResult[] = [];
-      let provenanceTrace: ProvenanceTraceData | null = null;
+      let streamBuffer = '';
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        streamBuffer += decoder.decode(value, { stream: true });
+        const lines = streamBuffer.split('\n');
+        streamBuffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (!line.trim()) continue;
-
-          // Handle SSE format
-          const jsonStr = line.startsWith('data: ') ? line.replace('data: ', '') : line;
-          if (!jsonStr) continue;
+          const payload = line.startsWith('data:') ? line.slice(5).trim() : line;
+          if (!payload) continue;
 
           try {
-            const data: ChatStreamChunk = JSON.parse(jsonStr);
-
+            const data = JSON.parse(payload) as ChatStreamChunk;
             if (data.type === 'content' && data.content) {
-              accumulatedContent += data.content;
-              setMessages(prev => {
-                const newMessages = [...prev];
-                const last = newMessages[newMessages.length - 1];
-                if (last && last.role === 'assistant') {
-                  last.content = accumulatedContent;
-                }
-                return newMessages;
-              });
+              assistantText += data.content;
+              patchAssistant({ content: assistantText });
             } else if (data.type === 'tool_result' && data.tool_result) {
               toolResults.push(data.tool_result);
-              setMessages(prev => {
-                const newMessages = [...prev];
-                const last = newMessages[newMessages.length - 1];
-                if (last && last.role === 'assistant') {
-                  last.toolResults = [...toolResults];
-                }
-                return newMessages;
-              });
-            } else if (data.type === 'provenance' && 'provenance_trace' in data) {
-              provenanceTrace = (data as ChatStreamChunk & { provenance_trace: ProvenanceTraceData }).provenance_trace;
-              setMessages(prev => {
-                const newMessages = [...prev];
-                const last = newMessages[newMessages.length - 1];
-                if (last && last.role === 'assistant') {
-                  last.provenanceTrace = provenanceTrace;
-                }
-                return newMessages;
-              });
-            } else if (data.type === 'done') {
-              setIsStreaming(false);
+              patchAssistant({ toolResults: [...toolResults] });
+            } else if (data.type === 'provenance') {
+              patchAssistant({ provenanceTrace: data.provenance_trace });
             } else if (data.type === 'error') {
-              setMessages(prev => {
-                const newMessages = [...prev];
-                const last = newMessages[newMessages.length - 1];
-                if (last && last.role === 'assistant') {
-                  last.content = `Error: ${data.error || 'Unknown error'}`;
+              patchAssistant({
+                content: '',
+                error: {
+                  type: 'agent_unavailable',
+                  message: data.error || 'Unknown failure',
+                  details: ''
                 }
-                return newMessages;
               });
-              setIsStreaming(false);
             }
           } catch {
-            // Skip unparseable lines
+            // Ignore malformed SSE frames.
           }
         }
       }
-    } catch (err) {
-      console.error('Chat error', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to connect to agent.';
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Error: ${errorMessage}`,
-      }]);
-      setIsStreaming(false);
+
+      if (streamBuffer.trim()) {
+        const payload = streamBuffer.startsWith('data:') ? streamBuffer.slice(5).trim() : streamBuffer.trim();
+        if (payload) {
+          try {
+            const data = JSON.parse(payload) as ChatStreamChunk;
+            if (data.type === 'content' && data.content) {
+              assistantText += data.content;
+              patchAssistant({ content: assistantText });
+            } else if (data.type === 'tool_result' && data.tool_result) {
+              toolResults.push(data.tool_result);
+              patchAssistant({ toolResults: [...toolResults] });
+            } else if (data.type === 'provenance') {
+              patchAssistant({ provenanceTrace: data.provenance_trace });
+            } else if (data.type === 'error') {
+              patchAssistant({
+                content: '',
+                error: {
+                  type: 'agent_unavailable',
+                  message: data.error || 'Unknown failure',
+                  details: ''
+                }
+              });
+            }
+          } catch {
+            // Ignore malformed trailing frame.
+          }
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Chat failed.';
+      patchAssistant({
+        content: '',
+        error: {
+          type: 'agent_unavailable',
+          message: 'Connection failed',
+          details: message
+        }
+      });
+    } finally {
+      setSending(false);
     }
   };
 
+  const patchAssistant = (patch: Partial<SessionMessage>) => {
+    setMessages((current) => {
+      const next = [...current];
+      const index = next.map((item) => item.role).lastIndexOf('assistant');
+      if (index >= 0) next[index] = { ...next[index], ...patch };
+      return next;
+    });
+  };
+
   return (
-    <>
-      <div className="chat-container">
+    <div style={{ display: 'flex', minHeight: 'calc(100vh - 220px)', gap: '1rem' }}>
+      <ChatSidebar />
+
+      <div className="glass-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ paddingBottom: '1rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-glass)', display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: '1.6rem', marginBottom: '0.25rem' }}>Chat</h1>
+            <div style={{ color: 'var(--text-secondary)' }}>
+              Stream responses, inspect tool executions, and switch agent profiles mid-conversation.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', minWidth: '320px' }}>
+            <select value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)} style={fieldStyle}>
+              <option value="">No agent override</option>
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <ConfirmationBanner sessionId={sessionId} />
-        <div className="chat-history" ref={historyRef}>
-          {messages.length === 0 && (
-            <div className="empty-state">
-              <h2>Welcome to RawClaw</h2>
-              <p>Your local-first AI companion. How can I help you today?</p>
+
+        <div ref={scrollRef} className="custom-scrollbar" style={{ flex: 1, overflow: 'auto', display: 'grid', gap: '1rem', paddingRight: '0.25rem' }}>
+          {loadingHistory ? <div style={{ color: 'var(--text-muted)' }}>Loading history...</div> : null}
+
+          {!loadingHistory && messages.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', padding: '3rem 0', textAlign: 'center' }}>
+              Start a conversation to activate the full chat, tool, and memory pipeline.
             </div>
-          )}
-          {messages.map((msg, idx) => (
-            <MessageBlock key={idx} message={msg} isStreaming={isStreaming && idx === messages.length - 1} />
-          ))}
-        </div>
-
-        <div className="chat-input-area">
-          <textarea
-            className="chat-input"
-            placeholder="Type your message... (Shift + Enter for new line)"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            disabled={isStreaming}
-            rows={1}
-          />
-          <button
-            className="chat-send"
-            onClick={handleSend}
-            disabled={isStreaming || !input.trim()}
-          >
-            {isStreaming ? '...' : 'Send'}
-          </button>
-        </div>
-      </div>
-
-      <style>{`
-        .chat-container {
-          display: flex;
-          flex-direction: column;
-          height: calc(100vh - 80px);
-          max-width: 900px;
-          margin: 0 auto;
-          padding: 1rem;
-        }
-        .chat-history {
-          flex: 1;
-          overflow-y: auto;
-          padding: 1rem;
-          background: var(--panel-bg);
-          border-radius: 16px;
-          border: 1px solid var(--glass-border);
-          margin-bottom: 1rem;
-        }
-        .empty-state {
-          text-align: center;
-          padding: 4rem 2rem;
-          color: var(--text-muted);
-        }
-        .empty-state h2 {
-          margin-bottom: 0.5rem;
-        }
-        .msg-wrapper {
-          margin-bottom: 1.5rem;
-        }
-        .msg-header {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-          margin-bottom: 0.25rem;
-        }
-        .msg-user .msg-header { text-align: right; }
-        .msg-user .msg-content {
-          background: linear-gradient(135deg, var(--accent-cyan), #0088aa);
-          color: var(--bg-dark);
-          margin-left: auto;
-        }
-        .msg-assistant .msg-content {
-          background: rgba(255, 255, 255, 0.05);
-        }
-        .msg-content {
-          max-width: 80%;
-          padding: 1rem;
-          border-radius: 12px;
-          white-space: pre-wrap;
-          word-break: break-word;
-        }
-        .msg-user .msg-content { margin-left: auto; }
-        .msg-assistant .msg-content { margin-right: auto; }
-
-        .tool-results {
-          margin-top: 1rem;
-        }
-        .tool-result-card {
-          background: rgba(0, 0, 0, 0.2);
-          border-radius: 8px;
-          margin-bottom: 0.5rem;
-          overflow: hidden;
-        }
-        .tool-result-card.error {
-          border-left: 3px solid var(--error-red);
-        }
-        .tool-result-card.success {
-          border-left: 3px solid var(--success-green);
-        }
-        .tool-result-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 0.75rem 1rem;
-          cursor: pointer;
-        }
-        .tool-result-title {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-weight: 500;
-        }
-        .tool-duration {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-          font-weight: normal;
-        }
-        .tool-result-status {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-        .status-success { color: var(--success-green); font-size: 0.75rem; }
-        .status-error { color: var(--error-red); font-size: 0.75rem; }
-        .sandbox-badge {
-          color: var(--accent-cyan);
-          font-size: 0.75rem;
-        }
-        .tool-result-body {
-          padding: 1rem;
-          background: rgba(0, 0, 0, 0.3);
-        }
-        .tool-result-section {
-          margin-bottom: 0.75rem;
-        }
-        .tool-result-section:last-child { margin-bottom: 0; }
-        .tool-result-label {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-          margin-bottom: 0.25rem;
-        }
-        .tool-result-body pre {
-          margin: 0;
-          font-size: 0.75rem;
-          overflow-x: auto;
-        }
-
-        .provenance-section {
-          margin-top: 0.75rem;
-        }
-        .provenance-toggle {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          background: transparent;
-          border: none;
-          color: var(--text-muted);
-          cursor: pointer;
-          font-size: 0.75rem;
-          padding: 0.5rem;
-        }
-        .provenance-toggle:hover {
-          color: var(--accent-cyan);
-        }
-
-        .provenance-timeline {
-          background: rgba(0, 0, 0, 0.2);
-          padding: 1rem;
-          border-radius: 8px;
-          margin-top: 0.5rem;
-        }
-        .trace-header {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-          margin-bottom: 0.75rem;
-        }
-        .trace-header code {
-          color: var(--accent-cyan);
-        }
-        .trace-steps {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-        .trace-step {
-          display: flex;
-          gap: 0.75rem;
-        }
-        .step-marker {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: var(--accent-cyan);
-          margin-top: 0.35rem;
-          flex-shrink: 0;
-        }
-        .step-tool_call .step-marker { background: var(--warning-amber); }
-        .step-tool_result .step-marker { background: var(--success-green); }
-        .step-error .step-marker { background: var(--error-red); }
-        .step-content {
-          flex: 1;
-          font-size: 0.75rem;
-        }
-        .step-header {
-          display: flex;
-          gap: 0.5rem;
-          margin-bottom: 0.25rem;
-        }
-        .step-type {
-          color: var(--text-muted);
-          text-transform: uppercase;
-          font-size: 0.625rem;
-        }
-        .step-tool {
-          color: var(--accent-cyan);
-        }
-        .step-time {
-          color: var(--text-muted);
-          margin-left: auto;
-        }
-        .step-summary {
-          color: var(--text-muted);
-          font-size: 0.625rem;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .chat-input-area {
-          display: flex;
-          gap: 1rem;
-          align-items: flex-end;
-        }
-        .chat-input {
-          flex: 1;
-          background: var(--panel-bg);
-          border: 1px solid var(--glass-border);
-          border-radius: 12px;
-          padding: 1rem;
-          color: var(--text-primary);
-          font-size: 1rem;
-          resize: none;
-          min-height: 48px;
-          max-height: 200px;
-        }
-        .chat-input:focus {
-          outline: none;
-          border-color: var(--accent-cyan);
-        }
-        .chat-send {
-          background: var(--accent-cyan);
-          color: var(--bg-dark);
-          border: none;
-          border-radius: 12px;
-          padding: 1rem 2rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-        .chat-send:hover:not(:disabled) {
-          background: var(--accent-cyan-dark);
-        }
-        .chat-send:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-      `}</style>
-    </>
-  );
-}
-
-function MessageBlock({ message, isStreaming }: { message: MessageWithTools; isStreaming: boolean }) {
-  const [showTrace, setShowTrace] = useState(false);
-
-  return (
-    <div className={`msg-wrapper msg-${message.role}`}>
-      <div className="msg-header">
-        {message.role === 'user' ? 'You' : 'RawClaw'}
-      </div>
-      <div className="msg-content">
-        {message.content || (isStreaming ? '...' : '')}
-      </div>
-
-      {message.toolResults && message.toolResults.length > 0 && (
-        <div className="tool-results">
-          {message.toolResults.map((result, idx) => (
-            <ToolResultCard key={idx} result={result} />
-          ))}
-        </div>
-      )}
-
-      {message.provenanceTrace && (
-        <div className="provenance-section">
-          <button
-            className="provenance-toggle"
-            onClick={() => setShowTrace(!showTrace)}
-          >
-            <FiClock /> View Trace
-            {showTrace ? <FiChevronUp /> : <FiChevronDown />}
-          </button>
-          {showTrace && (
-            <ProvenanceTimeline trace={message.provenanceTrace} />
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ToolResultCard({ result }: { result: ToolResult }) {
-  const [expanded, setExpanded] = useState(false);
-  const hasError = !!result.error;
-
-  return (
-    <div className={`tool-result-card ${hasError ? 'error' : 'success'}`}>
-      <div
-        className="tool-result-header"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className="tool-result-title">
-          <FiTool />
-          <span>{result.tool_name}</span>
-          <span className="tool-duration">{result.duration_ms.toFixed(0)}ms</span>
-        </div>
-        <div className="tool-result-status">
-          {hasError ? (
-            <span className="status-error">Error</span>
           ) : (
-            <span className="status-success">Success</span>
+            messages.map((message, index) => (
+              <MessageCard key={`${message.role}-${index}`} message={message} />
+            ))
           )}
-          {result.sandboxed && (
-            <span className="sandbox-badge"><FiBox /></span>
-          )}
+        </div>
+
+        <div style={{ paddingTop: '1rem', marginTop: '1rem', borderTop: '1px solid var(--border-glass)' }}>
+          {selectedAgent ? (
+            <div style={{ marginBottom: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+              Active agent: <strong>{selectedAgent.name}</strong>
+            </div>
+          ) : null}
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
+            <textarea
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              rows={3}
+              placeholder="Ask RawClaw to search, browse, run tools, or reason through a task..."
+              style={{ ...fieldStyle, resize: 'vertical', minHeight: '84px' }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+            />
+            <button className="btn-primary" onClick={() => void send()} disabled={sending || !input.trim()}>
+              {sending ? 'Streaming...' : 'Send'}
+            </button>
+          </div>
         </div>
       </div>
-
-      {expanded && (
-        <div className="tool-result-body">
-          <div className="tool-result-section">
-            <div className="tool-result-label">Input</div>
-            <pre>{JSON.stringify(result.input, null, 2)}</pre>
-          </div>
-          <div className="tool-result-section">
-            <div className="tool-result-label">{hasError ? 'Error' : 'Output'}</div>
-            <pre>{hasError ? result.error : JSON.stringify(result.output, null, 2)}</pre>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function ProvenanceTimeline({ trace }: { trace: ProvenanceTraceData }) {
+function getErrorMessage(type: string): string {
+  switch (type) {
+    case 'agent_unavailable':
+      return 'Agent Service Unavailable';
+    case 'model_unavailable':
+      return 'Model Provider Unavailable';
+    case 'mcp_unavailable':
+      return 'Tool System Unavailable';
+    case 'tool_failed':
+      return 'Tool Execution Failed';
+    case 'stream_interrupted':
+      return 'Stream Interrupted';
+    case 'auth_failure':
+      return 'Authentication Failed';
+    case 'provider_routing_failed':
+      return 'Provider Routing Failed';
+    default:
+      return 'Error';
+  }
+}
+
+function MessageCard({ message }: { message: SessionMessage }) {
+  const isUser = message.role === 'user';
+
   return (
-    <div className="provenance-timeline">
-      <div className="trace-header">
-        Run ID: <code>{trace.run_id}</code>
+    <div style={{ display: 'grid', gap: '0.65rem', justifyItems: isUser ? 'end' : 'start' }}>
+      <div
+        style={{
+          maxWidth: '84%',
+          borderRadius: '16px',
+          padding: '1rem',
+          background: isUser ? 'rgba(0,240,255,0.08)' : 'rgba(255,255,255,0.03)',
+          border: `1px solid ${isUser ? 'rgba(0,240,255,0.18)' : 'var(--border-glass)'}`,
+        }}
+      >
+        <div className="mono" style={{ fontSize: '0.72rem', color: isUser ? 'var(--neon-cyan)' : 'var(--text-muted)', marginBottom: '0.45rem' }}>
+          {isUser ? 'USER' : 'RAWCLAW'}
+        </div>
+        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{message.content || '...'}</div>
       </div>
-      <div className="trace-steps">
-        {trace.steps.map((step: ProvenanceStepData, idx: number) => (
-          <div key={idx} className={`trace-step step-${step.step_type}`}>
-            <div className="step-marker" />
-            <div className="step-content">
-              <div className="step-header">
-                <span className="step-type">{step.step_type}</span>
-                {step.tool_name && <span className="step-tool">{step.tool_name}</span>}
-                <span className="step-time">{step.duration_ms}ms</span>
-              </div>
-              {step.input_summary && (
-                <div className="step-summary">{step.input_summary}</div>
-              )}
-              {step.sandboxed && (
-                <span className="sandbox-badge"><FiBox /> sandboxed</span>
-              )}
-            </div>
+
+      {message.error ? (
+        <div style={{
+          width: '100%',
+          marginTop: '0.8rem',
+          padding: '1rem',
+          background: 'rgba(255,77,77,0.08)',
+          border: '1px solid rgba(255,77,77,0.3)',
+          borderRadius: '12px',
+          color: 'var(--error)'
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+            {getErrorMessage(message.error.type)}
           </div>
-        ))}
-      </div>
+          <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+            {message.error.message}
+            {message.error.details && (
+              <>
+                <br />
+                {message.error.details}
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {!isUser && message.toolResults && message.toolResults.length > 0 ? (
+        <div style={{ width: '100%', display: 'grid', gap: '0.8rem' }}>
+          {message.toolResults.map((result, index) => (
+            <ToolResultRenderer key={`${result.tool_name}-${index}`} result={result} />
+          ))}
+        </div>
+      ) : null}
+
+      {!isUser && message.provenanceTrace ? <ProvenanceTrace trace={message.provenanceTrace} /> : null}
     </div>
   );
+}
+
+function ToolResultRenderer({ result }: { result: ToolResult }) {
+  const name = result.tool_name.toLowerCase();
+  if (name.includes('search')) return <WebSearchResult result={result} />;
+  if (name.includes('browser') || name.includes('fetch') || name.includes('navigate')) return <BrowserResult result={result} />;
+  if (name.includes('file')) return <FileResult result={result} />;
+  if (name.includes('python') || name.includes('code')) return <CodeResult result={result} />;
+  if (name.includes('shell') || name.includes('terminal') || name.includes('bash') || name.includes('command')) {
+    return <TerminalResult result={result} />;
+  }
+
+  return (
+    <div className="glass-card" style={{ padding: '1rem' }}>
+      <div className="mono" style={{ color: 'var(--neon-cyan)', fontSize: '0.74rem', marginBottom: '0.45rem' }}>
+        {result.tool_name}
+      </div>
+      <pre className="custom-scrollbar" style={{ margin: 0, whiteSpace: 'pre-wrap', overflowX: 'auto' }}>
+        {JSON.stringify(result.output ?? result.error ?? result.input, null, 2)}
+      </pre>
+    </div>
+  );
+}
+
+const fieldStyle = {
+  width: '100%',
+  padding: '0.8rem 0.9rem',
+  borderRadius: '12px',
+  border: '1px solid var(--border-glass)',
+  background: 'rgba(255,255,255,0.04)',
+  color: 'var(--text-primary)',
+};
+
+function cryptoRandom() {
+  return `session-${Math.random().toString(36).slice(2, 10)}`;
 }

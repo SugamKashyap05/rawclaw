@@ -29,6 +29,7 @@ class ChatRequest(BaseModel):
     stream: Optional[bool] = False
     workspace_id: Optional[str] = "default"
     sender_identifier: Optional[str] = "local"
+    agent_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

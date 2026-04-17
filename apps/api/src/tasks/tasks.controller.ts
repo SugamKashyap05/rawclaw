@@ -11,21 +11,32 @@ import {
   Res,
   HttpStatus,
   HttpCode,
+  UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { TasksService } from './tasks.service';
+import { ScheduleService } from './schedule.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskRunDto } from './dto/update-task-run.dto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('tasks')
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(
+    private readonly tasksService: TasksService,
+    private readonly scheduleService: ScheduleService,
+  ) {}
 
   @Post()
-  create(@Body() dto: CreateTaskDto) {
-    return this.tasksService.createDefinition(dto);
+  async create(@Body() dto: CreateTaskDto) {
+    const task = await this.tasksService.createDefinition(dto);
+    if (dto.schedule) {
+      await this.scheduleService.registerTask(task.id, task);
+    }
+    return task;
   }
 
   @Get()
@@ -38,13 +49,19 @@ export class TasksController {
     return this.tasksService.listRuns(+page || 1, +limit || 10);
   }
 
+  @Get('runs/recent')
+  listRecentRuns() {
+    return this.tasksService.listRuns(1, 10);
+  }
+
   @Get(':id')
   get(@Param('id') id: string) {
     return this.tasksService.getDefinition(id);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
+  async delete(@Param('id') id: string) {
+    await this.scheduleService.unregisterTask(id);
     return this.tasksService.deleteDefinition(id);
   }
 

@@ -26,9 +26,13 @@ class ModelRouter:
 
     async def list_models(self) -> List[ModelInfo]:
         all_models = []
-        for provider in self.providers.values():
-            models = await provider.list_models()
-            all_models.extend(models)
+        for provider_name, provider in self.providers.items():
+            try:
+                models = await provider.list_models()
+                all_models.extend(models)
+            except Exception as e:
+                logger.error(f"Error listing models for provider {provider_name}: {e}")
+                # We continue to the next provider instead of failing the whole request
         return all_models
 
     async def get_health(self) -> Dict[str, ProviderHealth]:
@@ -41,8 +45,9 @@ class ModelRouter:
         self, 
         messages: List[Dict[str, Any]], 
         model: Optional[str] = None, 
-        complexity: Optional[str] = None
-    ) -> AsyncIterator[str]:
+        complexity: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None
+    ) -> AsyncIterator[Any]:
         """
         Routes the completion request based on explicit model or complexity hint.
         Implements fallback logic.
@@ -79,9 +84,9 @@ class ModelRouter:
             try:
                 # Attempt completion
                 success = False
-                async for chunk in provider.complete(messages, {"model": inner_name}):
-                    if chunk.startswith("Error:"):
-                        last_error = chunk
+                async for chunk in provider.complete(messages, {"model": inner_name, "tools": tools}):
+                    if isinstance(chunk, dict) and chunk.get("type") == "error":
+                        last_error = chunk.get("message", "Unknown provider error")
                         break
                     success = True
                     yield chunk
@@ -92,4 +97,8 @@ class ModelRouter:
                 last_error = str(e)
                 continue
 
-        yield f"Routing Error: All providers failed. Last error: {last_error}"
+        yield {
+            "type": "error",
+            "error": "provider_routing_failed",
+            "message": f"All providers failed. Last error: {last_error}"
+        }

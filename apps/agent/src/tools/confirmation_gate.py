@@ -22,7 +22,12 @@ from src.contracts.tool import ToolResult
 logger = logging.getLogger("rawclaw.confirmation")
 
 # Default API URL (NestJS)
-DEFAULT_API_URL = os.getenv("API_URL", "http://localhost:3000")
+DEFAULT_API_URL = os.getenv("API_URL")
+if not DEFAULT_API_URL:
+    # Fallback to local default for development only, but warn
+    import logging
+    logging.warning("API_URL environment variable is not set. Falling back to localhost:3000")
+    DEFAULT_API_URL = "http://localhost:3000"
 # Polling interval (seconds)
 POLL_INTERVAL = 2
 # Maximum wait time (seconds)

@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 
 interface SessionState {
@@ -9,9 +10,11 @@ interface SessionState {
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client!: Redis;
 
+  constructor(private readonly configService: ConfigService) {}
+
   onModuleInit() {
-    // Rely exclusively on environment, no hardcoded urls per Requirement 5
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    // Rely exclusively on environment, no hardcoded defaults per Requirement 5
+    const redisUrl = this.configService.getOrThrow<string>('REDIS_URL');
     this.client = new Redis(redisUrl, {
       maxRetriesPerRequest: 3,
       enableOfflineQueue: false

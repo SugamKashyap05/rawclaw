@@ -3,10 +3,13 @@ import {
   Get,
   Param,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ToolsService } from './tools.service';
 import { ToolInfo, ToolHealthStatus } from '@rawclaw/shared';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('tools')
 export class ToolsController {
   constructor(private readonly toolsService: ToolsService) {}

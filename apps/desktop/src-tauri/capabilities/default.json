@@ -8,6 +8,10 @@
     "core:event:default",
     "core:window:default",
     "core:app:default",
-    "core:resources:default"
+    "core:resources:default",
+    "fs:default",
+    "shell:default",
+    "notification:default",
+    "opener:default"
   ]
 }

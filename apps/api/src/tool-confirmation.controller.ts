@@ -7,8 +7,10 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { ToolConfirmationService, ToolConfirmation } from './tool-confirmation.service';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
 
 interface CreateConfirmationBody {
   sessionId: string;
@@ -16,6 +18,7 @@ interface CreateConfirmationBody {
   toolInput: string;
 }
 
+@UseGuards(JwtAuthGuard)
 @Controller('tools/confirm')
 export class ToolConfirmationController {
   constructor(private readonly confirmationService: ToolConfirmationService) {}

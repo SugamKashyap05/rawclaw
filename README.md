@@ -51,6 +51,20 @@ The `docs/` folder contains the source of truth for rebuilding RawClaw:
 - Isolation by design: task workspaces and execution should be scoped
 - Documentation-first: architecture and decisions stay ahead of implementation
 
+## Build Prerequisites
+
+### Desktop (Tauri)
+
+The Tauri desktop shell at `apps/desktop` expects the web app to be pre-built. Before running `tauri build` or `tauri dev` for the first time, build the web frontend:
+
+```bash
+pnpm --filter @rawclaw/web build
+```
+
+This outputs to `apps/web/dist/`, which Tauri references via `frontendDist` in `tauri.conf.json`.
+
+> **Note:** During development you can skip this step if using `tauri dev`, which proxies to the Vite dev server at `http://localhost:5173`. The built `dist/` is only required for production builds.
+
 ## Immediate next steps
 
 1. Recreate the monorepo scaffold

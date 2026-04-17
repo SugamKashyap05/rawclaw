@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["TURBO_FORCE_GIT"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

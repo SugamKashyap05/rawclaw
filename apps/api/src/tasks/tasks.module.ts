@@ -9,6 +9,6 @@ import { PrismaService } from '../prisma.service';
   imports: [HttpModule],
   controllers: [TasksController],
   providers: [TasksService, ScheduleService, PrismaService],
-  exports: [TasksService],
+  exports: [TasksService, ScheduleService],
 })
 export class TasksModule {}

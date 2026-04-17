@@ -16,7 +16,7 @@ class ProviderHealth(BaseModel):
 
 class ModelProvider(ABC):
     @abstractmethod
-    async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[str]:
+    async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[Any]:
         """Provides a streaming completion for the given messages."""
         pass
 

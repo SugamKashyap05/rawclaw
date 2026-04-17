@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FiAlertCircle, FiCheck, FiX, FiClock } from 'react-icons/fi';
-import axios from 'axios';
+import { api } from '../lib/api';
 
 export interface ToolConfirmationType {
   id: string;
@@ -27,7 +27,7 @@ export function ConfirmationBanner({ sessionId, onRefresh }: Props) {
 
     const fetchPending = async () => {
       try {
-        const res = await axios.get(`/api/tools/confirm?sessionId=${sessionId}`);
+        const res = await api.get(`/tools/confirm?sessionId=${sessionId}`);
         setPending(res.data || []);
       } catch (err) {
         console.error('Failed to fetch pending confirmations', err);
@@ -58,7 +58,7 @@ export function ConfirmationBanner({ sessionId, onRefresh }: Props) {
 
   const handleAction = async (id: string, action: 'approve' | 'deny') => {
     try {
-      await axios.post(`/api/tools/confirm/${id}/${action}`);
+      await api.post(`/tools/confirm/${id}/${action}`);
       setPending(current => current.filter(p => p.id !== id));
       if (onRefresh) onRefresh();
     } catch (err) {
@@ -152,7 +152,7 @@ export function ConfirmationBanner({ sessionId, onRefresh }: Props) {
           font-size: 1rem;
         }
         .warning-icon {
-          color: var(--warning-amber);
+          color: var(--warning);
           font-size: 1.25rem;
         }
         .confirmation-description {
@@ -178,7 +178,7 @@ export function ConfirmationBanner({ sessionId, onRefresh }: Props) {
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          color: var(--warning-amber);
+          color: var(--warning);
           font-size: 0.875rem;
         }
         .confirmation-buttons {
@@ -197,14 +197,14 @@ export function ConfirmationBanner({ sessionId, onRefresh }: Props) {
           transition: all 0.2s;
         }
         .btn-primary {
-          background: var(--accent-cyan);
-          color: var(--bg-dark);
+          background: var(--neon-cyan);
+          color: var(--bg-obsidian);
         }
         .btn-primary:hover {
-          background: var(--accent-cyan-dark);
+          background: #67f6ff;
         }
         .btn-danger {
-          background: var(--error-red);
+          background: var(--error);
           color: white;
         }
         .btn-danger:hover {

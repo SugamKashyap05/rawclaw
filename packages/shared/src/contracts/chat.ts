@@ -1,12 +1,19 @@
 import { ToolCall, ToolResult } from './tool';
-import { ProvenanceStep } from './provenance';
+import { ProvenanceTrace, ProvenanceStep } from './provenance';
+
+export interface Citation {
+  url: string;
+  title?: string;
+}
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   name?: string;
   tool_calls?: ToolCall[];
-  tool_result?: ToolResult;
+  toolResults?: ToolResult[];
+  provenanceTrace?: ProvenanceTrace;
+  citations?: Citation[];
 }
 
 export type ChatComplexity = 'low' | 'medium' | 'high';
@@ -31,6 +38,8 @@ export interface ChatRequest {
   workspace_id?: string;
   /** Identity of the sender surface (e.g., 'web', 'desktop', 'api') */
   sender_identifier?: string;
+  /** Optional selected agent profile to apply additional system instructions */
+  agent_id?: string;
 }
 
 /**
