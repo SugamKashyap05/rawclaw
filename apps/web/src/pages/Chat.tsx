@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AgentProfile, ChatStreamChunk, ToolResult } from '@rawclaw/shared';
 import { api } from '../lib/api';
@@ -11,6 +11,42 @@ import { FileResult } from '../components/chat/FileResult';
 import { CodeResult } from '../components/chat/CodeResult';
 import { TerminalResult } from '../components/chat/TerminalResult';
 import { ProvenanceTrace } from '../components/chat/ProvenanceTrace';
+
+class ChatErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: string | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          padding: '2rem',
+          background: 'rgba(255,77,77,0.08)',
+          border: '1px solid rgba(255,77,77,0.3)',
+          borderRadius: '12px',
+          color: 'var(--error)'
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Chat Error</div>
+          <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>{this.state.error}</div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ marginTop: '1rem', padding: '0.5rem 1rem', cursor: 'pointer' }}
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface Props {
   selectedModel: string;
@@ -40,9 +76,18 @@ export default function Chat({ selectedModel }: Props) {
   const [input, setInput] = useState('');
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [sending, setSending] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setSending(false);
+    }
+  };
 
   useEffect(() => {
     void loadAgents();
@@ -96,6 +141,9 @@ export default function Chat({ selectedModel }: Props) {
       { role: 'assistant', content: '', toolResults: [] },
     ]);
 
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     try {
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
       const isComplexity = selectedModel.startsWith('complexity:');
@@ -113,6 +161,7 @@ export default function Chat({ selectedModel }: Props) {
           stream: true,
           agent_id: selectedAgentId || undefined,
         }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -130,82 +179,71 @@ export default function Chat({ selectedModel }: Props) {
 
       while (true) {
         const { value, done } = await reader.read();
+        
+        if (value) {
+          streamBuffer += decoder.decode(value, { stream: !done });
+          const lines = streamBuffer.split('\n');
+          streamBuffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const raw = line.trim();
+            if (!raw) continue;
+            
+            const payload = raw.startsWith('data:') ? raw.slice(5).trim() : raw;
+            if (!payload) continue;
+
+            try {
+              const data = JSON.parse(payload) as ChatStreamChunk;
+              if (data.type === 'content' && data.content) {
+                assistantText += data.content;
+                patchAssistant({ content: assistantText });
+              } else if (data.type === 'tool_result' && data.tool_result) {
+                toolResults.push(data.tool_result);
+                patchAssistant({ toolResults: [...toolResults] });
+              } else if (data.type === 'provenance') {
+                const trace = (data as any).provenance_trace || (data as any).provenance || data;
+                patchAssistant({ provenanceTrace: trace });
+              } else if (data.type === 'error') {
+                const err = data as any;
+                patchAssistant({
+                  error: {
+                    type: err.error === 'Aborted' ? 'stream_interrupted' : 'agent_unavailable',
+                    message: err.message || err.error || 'Generation error',
+                    details: ''
+                  }
+                });
+                // Errors from the stream shouldn't always stop processing if we have trailing data, 
+                // but usually 'error' frames are terminal from the API.
+              }
+            } catch (e) {
+              console.warn('Malformed SSE frame:', payload, e);
+            }
+          }
+        }
+
         if (done) break;
-
-        streamBuffer += decoder.decode(value, { stream: true });
-        const lines = streamBuffer.split('\n');
-        streamBuffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const payload = line.startsWith('data:') ? line.slice(5).trim() : line;
-          if (!payload) continue;
-
-          try {
-            const data = JSON.parse(payload) as ChatStreamChunk;
-            if (data.type === 'content' && data.content) {
-              assistantText += data.content;
-              patchAssistant({ content: assistantText });
-            } else if (data.type === 'tool_result' && data.tool_result) {
-              toolResults.push(data.tool_result);
-              patchAssistant({ toolResults: [...toolResults] });
-            } else if (data.type === 'provenance') {
-              patchAssistant({ provenanceTrace: data.provenance_trace });
-            } else if (data.type === 'error') {
-              patchAssistant({
-                content: '',
-                error: {
-                  type: 'agent_unavailable',
-                  message: data.error || 'Unknown failure',
-                  details: ''
-                }
-              });
-            }
-          } catch {
-            // Ignore malformed SSE frames.
-          }
-        }
       }
-
-      if (streamBuffer.trim()) {
-        const payload = streamBuffer.startsWith('data:') ? streamBuffer.slice(5).trim() : streamBuffer.trim();
-        if (payload) {
-          try {
-            const data = JSON.parse(payload) as ChatStreamChunk;
-            if (data.type === 'content' && data.content) {
-              assistantText += data.content;
-              patchAssistant({ content: assistantText });
-            } else if (data.type === 'tool_result' && data.tool_result) {
-              toolResults.push(data.tool_result);
-              patchAssistant({ toolResults: [...toolResults] });
-            } else if (data.type === 'provenance') {
-              patchAssistant({ provenanceTrace: data.provenance_trace });
-            } else if (data.type === 'error') {
-              patchAssistant({
-                content: '',
-                error: {
-                  type: 'agent_unavailable',
-                  message: data.error || 'Unknown failure',
-                  details: ''
-                }
-              });
-            }
-          } catch {
-            // Ignore malformed trailing frame.
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        patchAssistant({
+          error: {
+            type: 'stream_interrupted',
+            message: 'Stream stopped by user',
           }
-        }
+        });
+      } else {
+        const message = error instanceof Error ? error.message : 'Chat failed.';
+        patchAssistant({
+          error: {
+            type: 'agent_unavailable',
+            message: 'Connection failed',
+            details: message
+          }
+        });
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Chat failed.';
-      patchAssistant({
-        content: '',
-        error: {
-          type: 'agent_unavailable',
-          message: 'Connection failed',
-          details: message
-        }
-      });
     } finally {
       setSending(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -213,12 +251,15 @@ export default function Chat({ selectedModel }: Props) {
     setMessages((current) => {
       const next = [...current];
       const index = next.map((item) => item.role).lastIndexOf('assistant');
-      if (index >= 0) next[index] = { ...next[index], ...patch };
+      if (index >= 0) {
+        next[index] = { ...next[index], ...patch };
+      }
       return next;
     });
   };
 
   return (
+    <ChatErrorBoundary>
     <div style={{ display: 'flex', minHeight: 'calc(100vh - 220px)', gap: '1rem' }}>
       <ChatSidebar />
 
@@ -278,13 +319,25 @@ export default function Chat({ selectedModel }: Props) {
                 }
               }}
             />
-            <button className="btn-primary" onClick={() => void send()} disabled={sending || !input.trim()}>
-              {sending ? 'Streaming...' : 'Send'}
-            </button>
+            {sending ? (
+              <button 
+                className="btn-primary" 
+                onClick={stopGeneration}
+                style={{ background: 'var(--error-glow)', borderColor: 'var(--error)' }}
+              >
+                Stop
+              </button>
+            ) : (
+              <button className="btn-primary" onClick={() => void send()} disabled={sending || !input.trim()}>
+                Send
+              </button>
+            )}
           </div>
         </div>
+
       </div>
     </div>
+    </ChatErrorBoundary>
   );
 }
 

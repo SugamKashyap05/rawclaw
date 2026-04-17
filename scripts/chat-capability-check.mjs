@@ -7,6 +7,15 @@ async function main() {
     checks: {},
   };
 
+  summary.checks.apiHealth = await preflightApi();
+  if (!summary.checks.apiHealth.ok) {
+    summary.finishedAt = new Date().toISOString();
+    summary.failures = ['api unavailable'];
+    console.log(JSON.stringify(summary, null, 2));
+    process.exitCode = 1;
+    return;
+  }
+
   const token = await getToken();
   const authHeaders = {
     Authorization: `Bearer ${token}`,
@@ -95,6 +104,30 @@ async function getToken() {
   }
   const data = await response.json();
   return data.access_token;
+}
+
+async function preflightApi() {
+  try {
+    const response = await fetch(`${API_BASE}/health`);
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        message: `Health check failed: ${response.status}`,
+      };
+    }
+    const data = await response.json();
+    return {
+      ok: true,
+      status: response.status,
+      payload: data,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function apiGet(path, headers) {

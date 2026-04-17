@@ -36,21 +36,34 @@ export class ChatOrchestratorService {
     if (selectedAgent) {
       systemMessages.push({
         role: 'system',
-        content: `Selected agent: ${selectedAgent.name}\n${selectedAgent.systemPrompt}`
+        content: `You are now operating as the ${selectedAgent.name} agent.\n${selectedAgent.systemPrompt}`
       });
     }
 
+    // Filter out ANY previous system messages from history or request to prevent injection overrides
+    const cleanHistory = history.filter((m) => m.role !== 'system');
+    const cleanRequestMessages = request.messages.filter((m) => m.role !== 'system');
+
     request.messages = [
       ...systemMessages,
-      ...history.filter((message) => message.role !== 'system'),
-      ...request.messages,
+      ...cleanHistory,
+      ...cleanRequestMessages,
     ];
+
 
     // 2. Save user message immediately
     const userMsg = request.messages[request.messages.length - 1];
     await this.chatService.createMessage(request.session_id, userMsg.role, userMsg.content);
 
-    // 3. Request streaming from Agent with retry and timeout
+    // 3. Request streaming from Agent with AbortController for cancellation
+    const abortController = new AbortController();
+    
+    // Detect client disconnect and abort upstream
+    res.on('close', () => {
+      this.logger.log(`Client disconnected for session ${request.session_id}, aborting agent request.`);
+      abortController.abort();
+    });
+
     let agentStream: any;
     let retries = 0;
     const MAX_RETRIES = 2;
@@ -62,9 +75,13 @@ export class ChatOrchestratorService {
           this.httpService.post(`${agentUrl}/execute`, request, {
             responseType: 'stream',
             timeout: 30000,
+            signal: abortController.signal,
           }),
         );
-      } catch (err) {
+      } catch (err: any) {
+        if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+          throw err;
+        }
         if (retries < MAX_RETRIES) {
           retries++;
           const delay = RETRY_DELAY * Math.pow(2, retries - 1);
@@ -79,6 +96,10 @@ export class ChatOrchestratorService {
     try {
       agentStream = await attemptRequest();
     } catch (err: any) {
+      if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+        this.logger.log('Agent request aborted by client disconnect.');
+        return;
+      }
       this.logger.error('Agent connection failed after retries:', err.message);
       res.setHeader('Content-Type', 'text/event-stream');
       res.write(`data: ${JSON.stringify({ 
@@ -91,8 +112,8 @@ export class ChatOrchestratorService {
     }
 
     let fullAssistantResponse = '';
-    const toolCalls: any[] = [];
-    const toolResults: any[] = [];
+    let toolCalls: any[] = [];
+    let toolResults: any[] = [];
     let provenance: any = null;
     const sources: string[] = [];
 
@@ -109,22 +130,31 @@ export class ChatOrchestratorService {
         if (streamClosed) return;
         streamClosed = true;
 
-        // Always persist an assistant message, even for failed turns
+        // Ensure we persist whatever we have
         const citations = sources.length > 0 ? sources.map(url => ({ url, title: url })) : undefined;
-        await this.chatService.createMessage(
-          request.session_id,
-          'assistant',
-          fullAssistantResponse || 'Request failed',
-          toolCalls.length > 0 ? toolCalls : undefined,
-          toolResults.length > 0 ? toolResults : undefined,
-          provenance,
-          citations
-        );
+        
+        // Normalize metadata before persistence calls if necessary, 
+        // though chatService.createMessage already stringifies them.
+        try {
+          await this.chatService.createMessage(
+            request.session_id,
+            'assistant',
+            fullAssistantResponse || (payload?.type === 'error' ? 'Request failed' : 'Generation stopped'),
+            toolCalls.length > 0 ? toolCalls : undefined,
+            toolResults.length > 0 ? toolResults : undefined,
+            provenance,
+            citations
+          );
+        } catch (dbErr) {
+          this.logger.error('Failed to persist assistant response:', dbErr);
+        }
 
-        if (payload) {
+        if (payload && !res.writableEnded) {
           res.write(`data: ${JSON.stringify(payload)}\n\n`);
         }
-        res.end();
+        if (!res.writableEnded) {
+          res.end();
+        }
         resolve();
       };
 
@@ -142,7 +172,7 @@ export class ChatOrchestratorService {
           } else if (data.type === 'tool_result') {
             toolResults.push(data.tool_result || data);
           } else if (data.type === 'provenance') {
-            provenance = data.provenance || data;
+            provenance = data.provenance_trace || data.provenance || data;
           } else if (data.type === 'sources') {
             if (Array.isArray(data.sources)) {
               sources.push(...data.sources);
@@ -154,7 +184,14 @@ export class ChatOrchestratorService {
             return;
           }
 
-          res.write(`data: ${JSON.stringify(data)}\n\n`);
+          if (data.type === 'error') {
+            await finalize(data);
+            return;
+          }
+
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+          }
         } catch (e) {
           this.logger.error('SSE parse error:', e, trimmed);
         }
@@ -174,7 +211,7 @@ export class ChatOrchestratorService {
       });
 
       agentStream.data.on('error', (err: Error) => {
-        void finalize({ type: 'error', error: err.message });
+        void finalize({ type: 'error', error: 'Stream Error', message: err.message });
       });
 
       agentStream.data.on('end', () => {
@@ -185,6 +222,12 @@ export class ChatOrchestratorService {
           await finalize({ type: 'done' });
         })();
       });
+      
+      // Handle AbortSignal from either res 'close' or eventual manual trigger
+      abortController.signal.addEventListener('abort', () => {
+        void finalize({ type: 'error', error: 'Aborted', message: 'The request was cancelled.' });
+      });
     });
+
   }
 }

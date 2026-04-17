@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "cross-env TURBO_FORCE_GIT=0 turbo run dev",
+    "dev": "node scripts/dev-start.mjs",
     "build": "cross-env TURBO_FORCE_GIT=0 turbo run build",
     "lint": "cross-env TURBO_FORCE_GIT=0 turbo run lint",
     "test": "cross-env TURBO_FORCE_GIT=0 turbo run test",
