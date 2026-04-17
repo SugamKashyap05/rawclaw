@@ -115,6 +115,7 @@ export class ChatOrchestratorService {
     let toolCalls: any[] = [];
     let toolResults: any[] = [];
     let provenance: any = null;
+    let lastMetadata: any = null;
     const sources: string[] = [];
 
     let streamBuffer = '';
@@ -133,17 +134,26 @@ export class ChatOrchestratorService {
         // Ensure we persist whatever we have
         const citations = sources.length > 0 ? sources.map(url => ({ url, title: url })) : undefined;
         
-        // Normalize metadata before persistence calls if necessary, 
-        // though chatService.createMessage already stringifies them.
         try {
+          // If we had an error but also some content, prioritize content but mark it
+          let persistContent = fullAssistantResponse;
+          if (!persistContent) {
+            persistContent = payload?.type === 'error' ? `Error: ${payload.message}` : 'Request failed';
+          }
+
           await this.chatService.createMessage(
             request.session_id,
             'assistant',
-            fullAssistantResponse || (payload?.type === 'error' ? 'Request failed' : 'Generation stopped'),
-            toolCalls.length > 0 ? toolCalls : undefined,
-            toolResults.length > 0 ? toolResults : undefined,
-            provenance,
-            citations
+            persistContent,
+            {
+              toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+              toolResults: toolResults.length > 0 ? toolResults : undefined,
+              provenance,
+              citations,
+              ...lastMetadata,
+              agentId: request.agent_id,
+              ...(payload?.type === 'error' ? { error: { type: payload.error as string, message: payload.message as string } } : {})
+            }
           );
         } catch (dbErr) {
           this.logger.error('Failed to persist assistant response:', dbErr);
@@ -173,6 +183,8 @@ export class ChatOrchestratorService {
             toolResults.push(data.tool_result || data);
           } else if (data.type === 'provenance') {
             provenance = data.provenance_trace || data.provenance || data;
+          } else if (data.type === 'metadata') {
+            lastMetadata = data.metadata;
           } else if (data.type === 'sources') {
             if (Array.isArray(data.sources)) {
               sources.push(...data.sources);
@@ -197,30 +209,37 @@ export class ChatOrchestratorService {
         }
       };
 
+      let processingPromise = Promise.resolve();
+
       agentStream.data.on('data', (chunk: Buffer) => {
         streamBuffer += chunk.toString('utf8');
         const lines = streamBuffer.split('\n');
         streamBuffer = lines.pop() || '';
 
-        void (async () => {
+        // Chain the processing to ensure sequential order across data events
+        processingPromise = processingPromise.then(async () => {
           for (const line of lines) {
-            await processLine(line);
             if (streamClosed) break;
+            await processLine(line);
           }
-        })();
+        });
       });
 
       agentStream.data.on('error', (err: Error) => {
+        // If it's a standard abort because of client disconnect, ignore
+        if (err.message === 'aborted' || abortController.signal.aborted) return;
+        
+        this.logger.error(`Agent stream error: ${err.message}`);
         void finalize({ type: 'error', error: 'Stream Error', message: err.message });
       });
 
       agentStream.data.on('end', () => {
-        void (async () => {
+        processingPromise = processingPromise.then(async () => {
           if (streamBuffer.trim()) {
             await processLine(streamBuffer);
           }
           await finalize({ type: 'done' });
-        })();
+        });
       });
       
       // Handle AbortSignal from either res 'close' or eventual manual trigger
@@ -229,5 +248,53 @@ export class ChatOrchestratorService {
       });
     });
 
+  }
+
+  async editAndResend(sessionId: string, messageId: string, content: string, res: Response): Promise<void> {
+    // 1. Truncate history after this message (including any old assistant responses)
+    await this.chatService.deleteMessagesAfter(sessionId, messageId, false);
+    
+    // 2. Update the user message content
+    // We should actually verify it's a user message, but createMessage upserts or we can direct update
+    // For simplicity, let's assume we update the specific message
+    await (this.chatService as any).prisma.message.update({
+      where: { id: messageId },
+      data: { content }
+    });
+
+    // 3. Trigger new generation
+    const messages = await this.chatService.getMessages(sessionId);
+    const lastMsg = messages[messages.length - 1];
+    
+    // Construct a standard ChatRequest
+    const request: ChatRequest = {
+      session_id: sessionId,
+      messages: [lastMsg], // processAndStreamChat will fetch history anyway
+      model: 'default' // Or fetch from session settings
+    };
+
+    return this.processAndStreamChat(request, res);
+  }
+
+  async regenerate(sessionId: string, messageId: string, res: Response): Promise<void> {
+    // 1. Truncate history starting from this assistant message (include target)
+    await this.chatService.deleteMessagesAfter(sessionId, messageId, true);
+
+    // 2. Re-trigger generation based on previous state
+    const messages = await this.chatService.getMessages(sessionId);
+    const lastUserMsg = messages.reverse().find(m => m.role === 'user');
+    
+    if (!lastUserMsg) {
+      res.status(400).json({ error: 'No user message found to regenerate from' });
+      return;
+    }
+
+    const request: ChatRequest = {
+      session_id: sessionId,
+      messages: [lastUserMsg],
+      model: 'default'
+    };
+
+    return this.processAndStreamChat(request, res);
   }
 }

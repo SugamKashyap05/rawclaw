@@ -56,6 +56,8 @@ class Executor:
 
         session_id = request.session_id
 
+        memory_recall_occurred = False
+
         try:
             latest_user_query = next(
                 (message.content for message in reversed(request.messages) if getattr(message, "role", "") == "user" and getattr(message, "content", "").strip()),
@@ -65,6 +67,7 @@ class Executor:
             if knowledge_brain and latest_user_query:
                 retrieved_context = knowledge_brain.build_context(latest_user_query, session_id=session_id)
                 if retrieved_context:
+                    memory_recall_occurred = True
                     messages.insert(
                         0,
                         {
@@ -81,6 +84,7 @@ class Executor:
             if chroma_memory and session_id:
                 history = chroma_memory.get_session_history(session_id, limit=10)
                 if history:
+                    memory_recall_occurred = True
                     for msg in history:
                         messages.insert(0, {
                             "role": msg["role"],
@@ -161,14 +165,23 @@ class Executor:
                         "type": "content",
                         "content": content,
                     }) + "\n"
+                elif isinstance(delta, dict) and delta.get("type") == "metadata":
+                    # Supplement metadata with memory recall status
+                    md = delta.get("metadata", {})
+                    md["memoryRecall"] = memory_recall_occurred
+                    yield json.dumps({
+                        "type": "metadata",
+                        "metadata": md
+                    }) + "\n"
                 elif isinstance(delta, dict) and delta.get("type") == "error":
                     # Handle provider routing errors
+                    logger.warning(f"Router reported error: {delta.get('message')}")
                     yield json.dumps({
                         "type": "error",
                         "error": delta.get("error", "provider_failure"),
                         "message": delta.get("message", "Provider routing failed")
                     }) + "\n"
-                    # Break out of the stream since we have a fatal error
+                    # We continue after yielding error to flush provenance/done
                     break
 
             # Final synthesis step

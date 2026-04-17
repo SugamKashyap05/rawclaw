@@ -67,6 +67,19 @@ class LangGraphExecutor:
         config = {"configurable": {"thread_id": session_id}}
 
         try:
+            # Yield initial metadata
+            is_local = "ollama" in model_id.lower() or not (model_id.startswith("claude") or "anthropic" in model_id.lower() or model_id.startswith("gpt") or "openai" in model_id.lower())
+            
+            yield json.dumps({
+                "type": "metadata",
+                "metadata": {
+                    "modelId": model_id,
+                    "isLocal": is_local,
+                    "memoryRecall": True if retrieved_context or history else False,
+                    "fallbacks": []
+                }
+            }) + "\n"
+
             graph = build_graph(model_id, self.checkpointer, self.confirmation_gate)
 
             async for chunk in graph.astream(

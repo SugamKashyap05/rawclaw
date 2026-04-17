@@ -7,6 +7,7 @@ export interface Citation {
 }
 
 export interface ChatMessage {
+  id?: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   name?: string;
@@ -14,6 +15,17 @@ export interface ChatMessage {
   toolResults?: ToolResult[];
   provenanceTrace?: ProvenanceTrace;
   citations?: Citation[];
+  // P1 Metadata
+  modelId?: string;
+  isLocal?: boolean;
+  fallbacks?: string[];
+  memoryRecall?: boolean;
+  agentId?: string;
+  error?: {
+    type: string;
+    message: string;
+    details?: string;
+  };
 }
 
 export type ChatComplexity = 'low' | 'medium' | 'high';
@@ -69,7 +81,7 @@ export interface ModelInfo {
   context_window?: number;
 }
 
-export type ChatStreamChunkType = 'content' | 'tool_call' | 'tool_result' | 'sources' | 'error' | 'done' | 'provenance';
+export type ChatStreamChunkType = 'content' | 'tool_call' | 'tool_result' | 'sources' | 'error' | 'done' | 'provenance' | 'metadata';
 
 export interface ChatStreamChunk {
   type: ChatStreamChunkType;
@@ -84,4 +96,10 @@ export interface ChatStreamChunk {
     created_at: string;
   } | null;
   error?: string;
+  metadata?: {
+    modelId: string;
+    isLocal: boolean;
+    fallbacks?: string[];
+    memoryRecall: boolean;
+  };
 }

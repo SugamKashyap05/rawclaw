@@ -45,6 +45,16 @@ model Message {
   toolResults String? // Store as JSON string
   provenance String?  // Store as JSON string
   citations String?  // Store as JSON string
+  
+  // P1 Metadata
+  modelId      String?
+  isLocal      Boolean?
+  fallbacks    String?  // JSON string array
+  memoryRecall Boolean?
+  agentId      String?
+  errorType    String?
+  errorMessage String?
+
   createdAt DateTime @default(now())
   
   sessionId String

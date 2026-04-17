@@ -9,7 +9,9 @@ class OllamaProvider(ModelProvider):
         self.base_url = settings.OLLAMA_BASE_URL
 
     async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[Any]:
-        model = options.get("model", "llama3") if options else "llama3"
+        # Default to low model suffix if no model specified
+        default_model = settings.DEFAULT_LOW_MODEL.split('/')[-1]
+        model = options.get("model", default_model) if options else default_model
         tools = options.get("tools") if options else None
 
         # Prepare messages for Ollama /api/chat

@@ -39,6 +39,22 @@ export class ChatController {
     return { success: true };
   }
 
+  @Post('edit')
+  async editAndResend(
+    @Body() body: { sessionId: string; messageId: string; content: string },
+    @Res() res: Response
+  ) {
+    return this.orchestratorService.editAndResend(body.sessionId, body.messageId, body.content, res);
+  }
+
+  @Post('regenerate')
+  async regenerate(
+    @Body() body: { sessionId: string; messageId: string },
+    @Res() res: Response
+  ) {
+    return this.orchestratorService.regenerate(body.sessionId, body.messageId, res);
+  }
+
   @Get('models')
   async listModels(): Promise<{ models: ModelInfo[] }> {
     const agentUrl = this.configService.get<string>('agentUrl');

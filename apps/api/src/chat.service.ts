@@ -18,6 +18,14 @@ interface MessageWithRelations {
   citations: string | null;
   createdAt: Date;
   sessionId: string;
+  // P1 Metadata
+  modelId: string | null;
+  isLocal: boolean | null;
+  fallbacks: string | null;
+  memoryRecall: boolean | null;
+  agentId: string | null;
+  errorType: string | null;
+  errorMessage: string | null;
 }
 
 export interface SessionWithMessages {
@@ -41,11 +49,18 @@ export class ChatService {
     sessionId: string,
     role: string,
     content: string,
-    toolCalls?: any[],
-    toolResults?: any[],
-    provenance?: any,
-    citations?: Citation[],
-    sources?: string[]
+    metadata?: {
+      toolCalls?: any[];
+      toolResults?: any[];
+      provenance?: any;
+      citations?: Citation[];
+      modelId?: string;
+      isLocal?: boolean;
+      fallbacks?: string[];
+      memoryRecall?: boolean;
+      agentId?: string;
+      error?: { type: string; message: string };
+    }
   ): Promise<MessageWithRelations> {
     // Ensure session exists
     await this.prisma.session.upsert({
@@ -62,10 +77,17 @@ export class ChatService {
         sessionId,
         role,
         content,
-        toolCalls: toolCalls ? JSON.stringify(toolCalls) : null,
-        toolResults: toolResults ? JSON.stringify(toolResults) : null,
-        provenance: provenance ? JSON.stringify(provenance) : null,
-        citations: citations ? JSON.stringify(citations) : null,
+        toolCalls: metadata?.toolCalls ? JSON.stringify(metadata.toolCalls) : null,
+        toolResults: metadata?.toolResults ? JSON.stringify(metadata.toolResults) : null,
+        provenance: metadata?.provenance ? JSON.stringify(metadata.provenance) : null,
+        citations: metadata?.citations ? JSON.stringify(metadata.citations) : null,
+        modelId: metadata?.modelId,
+        isLocal: metadata?.isLocal,
+        fallbacks: metadata?.fallbacks ? JSON.stringify(metadata.fallbacks) : null,
+        memoryRecall: metadata?.memoryRecall,
+        agentId: metadata?.agentId,
+        errorType: metadata?.error?.type,
+        errorMessage: metadata?.error?.message,
       },
     });
   }
@@ -76,18 +98,32 @@ export class ChatService {
       orderBy: { createdAt: 'asc' },
     });
 
-    return messages.map((m: MessageWithRelations) => ({
+    return messages.map((m: MessageWithRelations) => this.mapToChatMessage(m));
+  }
+
+  private mapToChatMessage(m: MessageWithRelations): ChatMessage {
+    return {
       role: m.role as 'user' | 'assistant' | 'system' | 'tool',
       content: m.content,
       tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
       toolResults: m.toolResults ? JSON.parse(m.toolResults) : undefined,
       provenanceTrace: m.provenance ? JSON.parse(m.provenance) : undefined,
-    }));
+      modelId: m.modelId || undefined,
+      isLocal: m.isLocal ?? undefined,
+      fallbacks: m.fallbacks ? JSON.parse(m.fallbacks) : undefined,
+      memoryRecall: m.memoryRecall ?? undefined,
+      agentId: m.agentId || undefined,
+      error: m.errorType ? { type: m.errorType, message: m.errorMessage || '' } : undefined,
+    };
   }
 
   async listSessions(): Promise<SessionWithMessages[]> {
     const sessions = await this.prisma.session.findMany({
-      include: { messages: true },
+      include: { 
+        messages: {
+          orderBy: { createdAt: 'asc' }
+        }
+      },
       orderBy: { updatedAt: 'desc' },
       take: 20
     });
@@ -99,14 +135,7 @@ export class ChatService {
       senderIdentifier: session.senderIdentifier,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
-      messages: session.messages.map((m: MessageWithRelations) => ({
-        role: m.role as 'user' | 'assistant' | 'system' | 'tool',
-        content: m.content,
-        tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
-        toolResults: m.toolResults ? JSON.parse(m.toolResults) : undefined,
-        provenanceTrace: m.provenance ? JSON.parse(m.provenance) : undefined,
-        citations: m.citations ? JSON.parse(m.citations) : undefined,
-      })),
+      messages: session.messages.map((m: MessageWithRelations) => this.mapToChatMessage(m)),
     }));
   }
 
@@ -129,15 +158,22 @@ export class ChatService {
       senderIdentifier: session.senderIdentifier,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
-      messages: session.messages.map((m: MessageWithRelations) => ({
-        role: m.role as 'user' | 'assistant' | 'system' | 'tool',
-        content: m.content,
-        tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
-        toolResults: m.toolResults ? JSON.parse(m.toolResults) : undefined,
-        provenanceTrace: m.provenance ? JSON.parse(m.provenance) : undefined,
-        citations: m.citations ? JSON.parse(m.citations) : undefined,
-      })),
+      messages: session.messages.map((m: MessageWithRelations) => this.mapToChatMessage(m)),
     };
+  }
+
+  async deleteMessagesAfter(sessionId: string, messageId: string, includeTarget: boolean = false): Promise<void> {
+    const target = await this.prisma.message.findUnique({ where: { id: messageId } });
+    if (!target) return;
+
+    await this.prisma.message.deleteMany({
+      where: {
+        sessionId,
+        createdAt: {
+          [includeTarget ? 'gte' : 'gt']: target.createdAt,
+        },
+      },
+    });
   }
 
   async deleteSession(id: string): Promise<void> {

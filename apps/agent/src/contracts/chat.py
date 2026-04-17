@@ -32,9 +32,17 @@ class ChatRequest(BaseModel):
     agent_id: Optional[str] = None
 
 
+class ModelMetadata(BaseModel):
+    """Metadata about the model used for execution."""
+    modelId: str
+    isLocal: bool
+    fallbacks: Optional[List[str]] = None
+    memoryRecall: Optional[bool] = None
+
 class ChatResponse(BaseModel):
     """Response payload mapping the result of a chat execution."""
     response: str
     tool_calls: List[ToolCall] = []
     sources: List[str] = []
     provenance_trace: Optional[Dict[str, Any]] = None
+    metadata: Optional[ModelMetadata] = None

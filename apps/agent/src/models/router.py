@@ -1,8 +1,11 @@
+import logging
 from typing import AsyncIterator, List, Dict, Any, Optional
 from src.models.base import ModelProvider, ModelInfo, ProviderHealth
 from src.models.providers.ollama import OllamaProvider
 from src.models.providers.anthropic import AnthropicProvider
 from src.config import settings
+
+logger = logging.getLogger("rawclaw.router")
 
 class ModelRouter:
     def __init__(self):
@@ -17,6 +20,48 @@ class ModelRouter:
             "medium": settings.DEFAULT_MEDIUM_MODEL,
             "high": settings.DEFAULT_HIGH_MODEL
         }
+        
+        self._cached_ollama_tags: Optional[List[str]] = None
+
+    async def _get_ollama_tags(self) -> List[str]:
+        """Fetch and cache available Ollama tags."""
+        if self._cached_ollama_tags is not None:
+            return self._cached_ollama_tags
+        
+        try:
+            models = await self.providers["ollama"].list_models()
+            self._cached_ollama_tags = [m.name for m in models]
+            return self._cached_ollama_tags
+        except Exception:
+            return []
+
+    async def _normalize_model_id(self, model_id: str) -> str:
+        """
+        Normalizes a model ID. For Ollama, resolves base names (e.g. 'llama3') 
+        to the best available installed tag (e.g. 'llama3:8b').
+        """
+        provider_name, inner_name = self._parse_model_id(model_id)
+        
+        if provider_name != "ollama":
+            return model_id
+            
+        tags = await self._get_ollama_tags()
+        if not tags:
+            return model_id
+            
+        # 1. Exact match
+        if inner_name in tags:
+            return f"ollama/{inner_name}"
+            
+        # 2. Base name match (e.g. 'llama3' matching 'llama3:8b')
+        for tag in tags:
+            # Check if inner_name is the portion before the colon
+            if ":" in tag and tag.split(":")[0] == inner_name:
+                logger.info(f"Normalizing '{inner_name}' to installed tag '{tag}'")
+                return f"ollama/{tag}"
+                
+        # 3. Fallback to original
+        return model_id
 
     def _parse_model_id(self, model_id: str) -> tuple[str, str]:
         """Returns (provider_name, inner_model_name)"""
@@ -61,42 +106,116 @@ class ModelRouter:
             target_model_id = settings.DEFAULT_LOW_MODEL
 
         # 2. Determine provider chain (Primary -> Fallbacks)
-        # For now, simple fallback: if target fails, try DEFAULT_LOW_MODEL (Ollama)
-        chain = [target_model_id]
-        if target_model_id != settings.DEFAULT_LOW_MODEL:
-            chain.append(settings.DEFAULT_LOW_MODEL)
+        # Normalize ALL models in the chain, not just the target
+        all_ids = [target_model_id] + settings.OLLAMA_FALLBACK_ORDER
+        if settings.DEFAULT_LOW_MODEL not in all_ids:
+            all_ids.append(settings.DEFAULT_LOW_MODEL)
+
+        # Normalize each model ID (resolves bare names like 'llama3' to 'llama3:8b')
+        normalized_ids = []
+        for mid in all_ids:
+            normalized = await self._normalize_model_id(mid)
+            normalized_ids.append(normalized)
+
+        # Build deduplicated chain while preserving order
+        chain = []
+        seen = set()
+        for m_id in normalized_ids:
+            if m_id not in seen:
+                chain.append(m_id)
+                seen.add(m_id)
 
         last_error = ""
-        for current_model_id in chain:
-            provider_name, inner_name = self._parse_model_id(current_model_id)
-            provider = self.providers.get(provider_name)
-            
-            if not provider:
-                last_error = f"Provider {provider_name} not found"
-                continue
+        tried_models = []
+        success_model_id = None
 
-            # Check health before trying (optional but good for graceful degradation)
-            health = await provider.health()
-            if health.status not in ["ok", "unconfigured"]:
-                last_error = f"Provider {provider_name} is {health.status}: {health.error}"
-                continue
-
-            try:
-                # Attempt completion
-                success = False
-                async for chunk in provider.complete(messages, {"model": inner_name, "tools": tools}):
-                    if isinstance(chunk, dict) and chunk.get("type") == "error":
-                        last_error = chunk.get("message", "Unknown provider error")
-                        break
-                    success = True
-                    yield chunk
+        async def run_chain(model_list: List[str]) -> AsyncIterator[Any]:
+            nonlocal last_error, success_model_id
+            for current_model_id in model_list:
+                if current_model_id in tried_models:
+                    continue
+                tried_models.append(current_model_id)
                 
-                if success:
-                    return # Exit after successful completion
-            except Exception as e:
-                last_error = str(e)
-                continue
+                provider_name, inner_name = self._parse_model_id(current_model_id)
+                provider = self.providers.get(provider_name)
+                
+                if not provider:
+                    last_error = f"Provider {provider_name} not found"
+                    continue
 
+                try:
+                    success = False
+                    async for chunk in provider.complete(messages, {"model": inner_name, "tools": tools}):
+                        if isinstance(chunk, dict) and chunk.get("type") == "error":
+                            err_msg = chunk.get("message", "")
+                            if "not found" in err_msg.lower() or "404" in err_msg:
+                                last_error = err_msg
+                                break 
+                            yield chunk
+                        else:
+                            success = True
+                            yield chunk
+                    
+                    if success:
+                        success_model_id = current_model_id
+                        return # Success!
+                except Exception as e:
+                    last_error = str(e)
+                    logger.warning(f"Model {current_model_id} failed: {e}")
+                    continue
+            
+            yield None # Mark failure of this list
+
+        # Try the initial chain
+        async for result in run_chain(chain):
+            if result is None:
+                break
+            yield result
+        
+        # Success check
+        if success_model_id:
+            provider_name, _ = self._parse_model_id(success_model_id)
+            # Yield metadata
+            yield {
+                "type": "metadata",
+                "metadata": {
+                    "modelId": success_model_id,
+                    "isLocal": provider_name == "ollama",
+                    "fallbacks": [m for m in tried_models if m != success_model_id],
+                }
+            }
+            return
+
+        # 3. Dynamic Fallback: If initial chain fails, try any other discovered local Ollama models
+        logger.info("Initial fallback chain failed. Attempting dynamic discovery...")
+        try:
+            available_models = await self.list_models()
+            other_models = [
+                m.id for m in available_models 
+                if m.provider == "ollama" and m.id not in tried_models
+            ]
+            
+            if other_models:
+                async for result in run_chain([other_models[0]]):
+                    if result is None:
+                        break
+                    yield result
+                
+                if success_model_id:
+                    provider_name, _ = self._parse_model_id(success_model_id)
+                    yield {
+                        "type": "metadata",
+                        "metadata": {
+                            "modelId": success_model_id,
+                            "isLocal": provider_name == "ollama",
+                            "fallbacks": [m for m in tried_models if m != success_model_id],
+                        }
+                    }
+                    return
+        except Exception as e:
+            logger.error(f"Dynamic discovery failed: {e}")
+
+        # 4. Final failure frame
         yield {
             "type": "error",
             "error": "provider_routing_failed",
