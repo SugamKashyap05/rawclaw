@@ -21,6 +21,7 @@ const MAX_WAIT_SECONDS = 120;
 export function ConfirmationBanner({ sessionId, onRefresh }: Props) {
   const [pending, setPending] = useState<ToolConfirmationType[]>([]);
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
+  const [showInput, setShowInput] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let interval: number;
@@ -66,6 +67,10 @@ export function ConfirmationBanner({ sessionId, onRefresh }: Props) {
     }
   };
 
+  const toggleInput = (id: string) => {
+    setShowInput(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const getActionDescription = (toolName: string): string => {
     if (toolName === 'read_file') {
       return 'This tool wants to read a file from your filesystem';
@@ -98,15 +103,27 @@ export function ConfirmationBanner({ sessionId, onRefresh }: Props) {
             <p className="confirmation-description">
               {getActionDescription(conf.toolName)}
             </p>
-            <pre className="confirmation-input">
-              {(() => {
-                try {
-                  return JSON.stringify(JSON.parse(conf.toolInput), null, 2);
-                } catch {
-                  return conf.toolInput;
-                }
-              })()}
-            </pre>
+            
+            <div className="confirmation-input-section">
+              <button 
+                className="view-input-btn"
+                onClick={() => toggleInput(conf.id)}
+              >
+                {showInput[conf.id] ? 'Hide Input' : 'View Input Parameters'}
+              </button>
+              
+              {showInput[conf.id] && (
+                <pre className="confirmation-input animate-in">
+                  {(() => {
+                    try {
+                      return JSON.stringify(JSON.parse(conf.toolInput), null, 2);
+                    } catch {
+                      return conf.toolInput;
+                    }
+                  })()}
+                </pre>
+              )}
+            </div>
           </div>
           <div className="confirmation-actions">
             <div className="confirmation-countdown">
@@ -115,13 +132,13 @@ export function ConfirmationBanner({ sessionId, onRefresh }: Props) {
             </div>
             <div className="confirmation-buttons">
               <button
-                className="btn btn-primary"
+                className="btn-confirm btn-confirm-approve"
                 onClick={() => handleAction(conf.id, 'approve')}
               >
                 <FiCheck /> Approve
               </button>
               <button
-                className="btn btn-danger"
+                className="btn-confirm btn-confirm-reject"
                 onClick={() => handleAction(conf.id, 'deny')}
               >
                 <FiX /> Reject
@@ -130,87 +147,6 @@ export function ConfirmationBanner({ sessionId, onRefresh }: Props) {
           </div>
         </div>
       ))}
-
-      <style>{`
-        .confirmation-banner-container {
-          margin-bottom: 1rem;
-        }
-        .confirmation-banner {
-          background: linear-gradient(135deg, rgba(255, 165, 0, 0.1), rgba(255, 100, 0, 0.05));
-          border: 1px solid rgba(255, 165, 0, 0.3);
-          border-radius: 12px;
-          padding: 1rem;
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-          margin-bottom: 0.5rem;
-        }
-        .confirmation-title {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 1rem;
-        }
-        .warning-icon {
-          color: var(--warning);
-          font-size: 1.25rem;
-        }
-        .confirmation-description {
-          color: var(--text-muted);
-          font-size: 0.875rem;
-          margin: 0.25rem 0;
-        }
-        .confirmation-input {
-          background: rgba(0, 0, 0, 0.3);
-          padding: 0.75rem;
-          border-radius: 8px;
-          font-size: 0.75rem;
-          max-height: 150px;
-          overflow: auto;
-          margin: 0;
-        }
-        .confirmation-actions {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .confirmation-countdown {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          color: var(--warning);
-          font-size: 0.875rem;
-        }
-        .confirmation-buttons {
-          display: flex;
-          gap: 0.5rem;
-        }
-        .btn {
-          display: flex;
-          align-items: center;
-          gap: 0.25rem;
-          padding: 0.5rem 1rem;
-          border-radius: 8px;
-          border: none;
-          cursor: pointer;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-        .btn-primary {
-          background: var(--neon-cyan);
-          color: var(--bg-obsidian);
-        }
-        .btn-primary:hover {
-          background: #67f6ff;
-        }
-        .btn-danger {
-          background: var(--error);
-          color: white;
-        }
-        .btn-danger:hover {
-          background: #cc4444;
-        }
-      `}</style>
     </div>
   );
 }

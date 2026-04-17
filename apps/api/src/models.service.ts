@@ -147,24 +147,27 @@ export class ModelsService {
     }
   }
 
-  private async getConfig(): Promise<{
+  public async getConfig(): Promise<{
     routing: { low: string; medium: string; high: string };
     providerConfig: Record<string, ProviderConfigState>;
   }> {
     const saved = await this.prisma.appSetting.findUnique({ where: { key: this.settingsKey } });
+    
+    const hasAnthropicKey = !!this.configService.get<string>('ANTHROPIC_API_KEY');
+    
     const fallback = {
       routing: {
-        low: this.configService.get<string>('DEFAULT_LOW_MODEL') || 'ollama/llama3',
-        medium: this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || 'anthropic/claude-3-haiku',
-        high: this.configService.get<string>('DEFAULT_HIGH_MODEL') || 'anthropic/claude-3-5-sonnet',
+        low: this.configService.get<string>('DEFAULT_LOW_MODEL') || 'ollama/qwen2.5:1.5b',
+        medium: this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (hasAnthropicKey ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
+        high: this.configService.get<string>('DEFAULT_HIGH_MODEL') || (hasAnthropicKey ? 'anthropic/claude-3-5-sonnet' : 'ollama/llama3.2:3b'),
       },
       providerConfig: {
         openai: { enabled: false },
-        anthropic: { enabled: true },
+        anthropic: { enabled: hasAnthropicKey },
         google: { enabled: false },
         ollama: {
           enabled: true,
-          baseUrl: 'http://localhost:11434',
+          baseUrl: this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434',
         },
       } as Record<string, ProviderConfigState>,
     };
@@ -172,7 +175,13 @@ export class ModelsService {
     if (!saved) return fallback;
 
     try {
-      const parsed = JSON.parse(saved.value) as {
+      // Perform on-the-fly migration if stale llama3 ID is found
+      let updatedValue = saved.value;
+      if (updatedValue.includes('ollama/llama3"')) {
+        updatedValue = updatedValue.replace(/ollama\/llama3"/g, 'ollama/llama3.2:3b"');
+      }
+      
+      const parsed = JSON.parse(updatedValue) as {
         routing?: { low?: string; medium?: string; high?: string };
         providerConfig?: Record<string, ProviderConfigState>;
       };

@@ -1,5 +1,5 @@
-import React from 'react';
 import { ProvenanceTrace as IProvenanceTrace } from '@rawclaw/shared';
+import { FiActivity, FiTool, FiCheckCircle, FiCpu, FiAlertTriangle, FiZap } from 'react-icons/fi';
 
 interface ProvenanceTraceProps {
   trace: Partial<IProvenanceTrace> | null | undefined;
@@ -16,17 +16,17 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
   const getIcon = (type: string) => {
     switch (type) {
       case 'plan':
-        return '[P]';
+        return <FiActivity />;
       case 'tool_call':
-        return '[T]';
+        return <FiTool />;
       case 'tool_result':
-        return '[R]';
+        return <FiCheckCircle />;
       case 'synthesis':
-        return '[S]';
+        return <FiZap />;
       case 'error':
-        return '[!]';
+        return <FiAlertTriangle />;
       default:
-        return '[*]';
+        return <FiCpu />;
     }
   };
 
@@ -52,15 +52,17 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '0.5rem',
-          marginBottom: '0.8rem',
-          color: 'var(--text-muted)',
+          gap: '0.65rem',
+          marginBottom: '1rem',
+          color: 'var(--text-secondary)',
           fontWeight: 600,
-          letterSpacing: '0.05em',
+          fontSize: '0.75rem',
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase'
         }}
       >
-        <span style={{ fontSize: '1rem' }}>[TRACE]</span>
-        RAWCLAW REASONING TRACE
+        <FiActivity style={{ color: 'var(--neon-cyan)', filter: 'drop-shadow(0 0 5px var(--neon-cyan-glow))' }} />
+        REASONING TRACE
         <span style={{ marginLeft: 'auto', fontSize: '0.7rem', opacity: 0.5 }}>ID: {traceId.slice(0, 8)}</span>
       </div>
 
@@ -77,15 +79,16 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
               key={idx}
               style={{
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 gap: '0.8rem',
-                padding: '0.5rem 0.8rem',
+                padding: '0.65rem 0.8rem',
                 background: 'rgba(255, 255, 255, 0.03)',
                 borderRadius: '8px',
-                borderLeft: `3px solid ${timing.color}`,
+                borderLeft: `2px solid ${timing.color}`,
+                transition: 'transform 0.2s',
               }}
             >
-              <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>{getIcon(stepType)}</span>
+              <span style={{ fontSize: '1rem', marginTop: '0.1rem', display: 'flex' }}>{getIcon(stepType)}</span>
 
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 500, color: 'var(--text-main)', textTransform: 'capitalize' }}>

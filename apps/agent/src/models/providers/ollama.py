@@ -18,9 +18,15 @@ class OllamaProvider(ModelProvider):
         payload = {
             "model": model,
             "messages": messages,
-            "stream": True
+            "stream": True,
+            "options": {}
         }
         
+        if options.get("temperature") is not None:
+            payload["options"]["temperature"] = options["temperature"]
+        if options.get("top_p") is not None:
+            payload["options"]["top_p"] = options["top_p"]
+
         if tools:
             # Ollama /api/chat supports tools in newer versions, but we'll stick to basic chat for P0 stability
             pass

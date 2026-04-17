@@ -15,13 +15,15 @@ import Tools from './pages/Tools';
 import ModelSelector from './components/ModelSelector';
 import { Sidebar } from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
-import { bootstrapWorkspace, getBootstrapStatus, initializeAuth, isAuthenticated } from './lib/auth';
+import { bootstrapWorkspace, getBootstrapStatus, initializeAuth } from './lib/auth';
 import { SystemStatusSnapshot } from '@rawclaw/shared';
 
 function App() {
   const [selectedModel, setSelectedModel] = useState<string>('complexity:medium');
-  const [isAuth, setIsAuth] = useState<boolean>(isAuthenticated());
-  const [authLoading, setAuthLoading] = useState<boolean>(!isAuthenticated());
+  const [temperature, setTemperature] = useState<number>(0.7);
+  const [top_p, setTopP] = useState<number>(0.9);
+  const [isAuth, setIsAuth] = useState<boolean>(false);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [needsSetup, setNeedsSetup] = useState<boolean>(false);
   const [setupUser, setSetupUser] = useState<string>('');
   const [setupMemory, setSetupMemory] = useState<string>('');
@@ -29,29 +31,22 @@ function App() {
   const [systemStatus, setSystemStatus] = useState<SystemStatusSnapshot | null>(null);
   const location = useLocation();
 
+  const bootstrap = async () => {
+    setAuthLoading(true);
+    try {
+      const status = await getBootstrapStatus();
+      const ok = await initializeAuth();
+      setIsAuth(ok);
+      setNeedsSetup(status.needsSetup);
+    } catch {
+      setIsAuth(false);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let mounted = true;
-
-    const bootstrap = async () => {
-      try {
-        const status = await getBootstrapStatus();
-        const ok = await initializeAuth();
-        if (!mounted) return;
-        setIsAuth(ok);
-        setNeedsSetup(status.needsSetup);
-      } catch {
-        if (!mounted) return;
-        setIsAuth(false);
-      } finally {
-        if (mounted) setAuthLoading(false);
-      }
-    };
-
     void bootstrap();
-
-    return () => {
-      mounted = false;
-    };
   }, []);
 
   const pageTitle = useMemo(() => {
@@ -148,7 +143,7 @@ function App() {
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: 1.6 }}>
             RawClaw could not obtain a local access token from the API. Check that the API is running and that local auth is enabled in the environment.
           </p>
-          <button className="btn-primary" onClick={() => window.location.reload()}>
+          <button className="btn-primary" onClick={() => void bootstrap()}>
             Retry
           </button>
         </div>
@@ -184,7 +179,16 @@ function App() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: '320px', position: 'relative', overflow: 'visible' }}>
-            <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
+            <ModelSelector 
+              selectedModel={selectedModel} 
+              onModelChange={setSelectedModel} 
+              temperature={temperature}
+              top_p={top_p}
+              onParamsChange={(t, p) => {
+                setTemperature(t);
+                setTopP(p);
+              }}
+            />
             <NavLink to="/chat" className="btn-primary" style={{ textDecoration: 'none' }}>
               New Chat
             </NavLink>
@@ -194,7 +198,10 @@ function App() {
         <main className="custom-scrollbar" style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/chat/:sessionId?" element={<Chat selectedModel={selectedModel} />} />
+            <Route 
+              path="/chat/:sessionId?" 
+              element={<Chat selectedModel={selectedModel} temperature={temperature} top_p={top_p} />} 
+            />
             <Route path="/agents" element={<Agents />} />
             <Route path="/mcp" element={<MCPServers />} />
             <Route path="/tools" element={<Tools />} />

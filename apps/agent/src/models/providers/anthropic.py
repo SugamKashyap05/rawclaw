@@ -44,7 +44,9 @@ class AnthropicProvider(ModelProvider):
                 max_tokens=4096,
                 system=system_msg,
                 messages=filtered_messages,
-                tools=tools if tools else anthropic.NOT_GIVEN
+                tools=tools if tools else anthropic.NOT_GIVEN,
+                temperature=options.get("temperature", anthropic.NOT_GIVEN),
+                top_p=options.get("top_p", anthropic.NOT_GIVEN)
             ) as stream:
                 async for event in stream:
                     if event.type == "content_block_delta" and event.delta.type == "text_delta":

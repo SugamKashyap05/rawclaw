@@ -6,6 +6,13 @@ export interface Citation {
   title?: string;
 }
 
+export interface ChatAttachment {
+  filename: string;
+  type?: string;
+  size?: number;
+  content: string;
+}
+
 export interface ChatMessage {
   id?: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -15,6 +22,7 @@ export interface ChatMessage {
   toolResults?: ToolResult[];
   provenanceTrace?: ProvenanceTrace;
   citations?: Citation[];
+  attachments?: ChatAttachment[];
   // P1 Metadata
   modelId?: string;
   isLocal?: boolean;
@@ -26,6 +34,9 @@ export interface ChatMessage {
     message: string;
     details?: string;
   };
+  // P2 Metadata
+  createdAt?: Date | string;
+  durationMs?: number;
 }
 
 export type ChatComplexity = 'low' | 'medium' | 'high';
@@ -52,6 +63,9 @@ export interface ChatRequest {
   sender_identifier?: string;
   /** Optional selected agent profile to apply additional system instructions */
   agent_id?: string;
+  // P2 Parameters
+  temperature?: number;
+  top_p?: number;
 }
 
 /**
@@ -101,5 +115,6 @@ export interface ChatStreamChunk {
     isLocal: boolean;
     fallbacks?: string[];
     memoryRecall: boolean;
+    durationMs?: number;
   };
 }

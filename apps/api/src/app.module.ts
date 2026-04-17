@@ -25,6 +25,7 @@ import { SkillsController } from './skills.controller';
 import { SkillsService } from './skills.service';
 import { SystemController } from './system.controller';
 import { SystemService } from './system.service';
+import { WorkspaceController } from './workspace.controller';
 import { ChatOrchestratorService } from './chat-orchestrator.service';
 
 import { ConfigModule } from '@nestjs/config';
@@ -56,6 +57,7 @@ import { AuthModule } from './auth/auth.module';
     SettingsController,
     SkillsController,
     SystemController,
+    WorkspaceController,
   ],
   providers: [
     RedisService,

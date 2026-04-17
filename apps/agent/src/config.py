@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     
     # Models
     DEFAULT_LOW_MODEL: str = "ollama/qwen2.5:1.5b"
-    DEFAULT_MEDIUM_MODEL: str = "anthropic/claude-3-haiku-20240307"
+    DEFAULT_MEDIUM_MODEL: str = "ollama/llama3.2:3b"
     DEFAULT_HIGH_MODEL: str = "anthropic/claude-3-sonnet-20240229"
 
     # Deterministic fallback order for local models
@@ -25,8 +25,7 @@ class Settings(BaseSettings):
         "ollama/qwen2.5:1.5b",
         "ollama/phi3:3.8b",
         "ollama/llama3.2:3b",
-        "ollama/llama3.2:latest",
-        "ollama/llama3:8b"
+        "ollama/llama3:8b",
     ]
 
     # ChromaDB Vector Memory
@@ -54,14 +53,13 @@ except Exception:
         ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
         OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
         DEFAULT_LOW_MODEL = "ollama/qwen2.5:1.5b"
-        DEFAULT_MEDIUM_MODEL = "anthropic/claude-3-haiku-20240307"
+        DEFAULT_MEDIUM_MODEL = "ollama/llama3.2:3b"
         DEFAULT_HIGH_MODEL = "anthropic/claude-3-sonnet-20240229"
         OLLAMA_FALLBACK_ORDER = [
             "ollama/qwen2.5:1.5b", 
             "ollama/phi3:3.8b", 
             "ollama/llama3.2:3b", 
-            "ollama/llama3.2:latest", 
-            "ollama/llama3:8b"
+            "ollama/llama3:8b", 
         ]
         CHROMA_PERSIST_DIR = os.environ.get("CHROMA_PERSIST_DIR", "./data/chroma")
         CHROMA_COLLECTION = os.environ.get("CHROMA_COLLECTION", "rawclaw_memory")

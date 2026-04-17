@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import AsyncIterator, List, Dict, Any, Optional
 from src.models.base import ModelProvider, ModelInfo, ProviderHealth
 from src.models.providers.ollama import OllamaProvider
@@ -14,12 +15,19 @@ class ModelRouter:
             "anthropic": AnthropicProvider()
         }
         
+        # Check if we have external keys
+        has_anthropic = bool(settings.ANTHROPIC_API_KEY)
+        
         # Complexity to model ID mapping
+        # If no external keys, we route EVERYTHING to ollama to avoid frustrating errors
         self.complexity_map = {
             "low": settings.DEFAULT_LOW_MODEL,
-            "medium": settings.DEFAULT_MEDIUM_MODEL,
-            "high": settings.DEFAULT_HIGH_MODEL
+            "medium": settings.DEFAULT_MEDIUM_MODEL if has_anthropic else settings.DEFAULT_LOW_MODEL,
+            "high": settings.DEFAULT_HIGH_MODEL if has_anthropic else settings.DEFAULT_LOW_MODEL
         }
+        
+        # Log effective routing for easier debugging
+        logger.info(f"ModelRouter initialized. Routing map: {self.complexity_map}")
         
         self._cached_ollama_tags: Optional[List[str]] = None
 
@@ -91,7 +99,9 @@ class ModelRouter:
         messages: List[Dict[str, Any]], 
         model: Optional[str] = None, 
         complexity: Optional[str] = None,
-        tools: Optional[List[Dict[str, Any]]] = None
+        tools: Optional[List[Dict[str, Any]]] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None
     ) -> AsyncIterator[Any]:
         """
         Routes the completion request based on explicit model or complexity hint.
@@ -145,7 +155,12 @@ class ModelRouter:
 
                 try:
                     success = False
-                    async for chunk in provider.complete(messages, {"model": inner_name, "tools": tools}):
+                    async for chunk in provider.complete(messages, {
+                        "model": inner_name, 
+                        "tools": tools,
+                        "temperature": temperature,
+                        "top_p": top_p
+                    }):
                         if isinstance(chunk, dict) and chunk.get("type") == "error":
                             err_msg = chunk.get("message", "")
                             if "not found" in err_msg.lower() or "404" in err_msg:
@@ -166,6 +181,9 @@ class ModelRouter:
             
             yield None # Mark failure of this list
 
+        # Record start time
+        start_time = time.time()
+        
         # Try the initial chain
         async for result in run_chain(chain):
             if result is None:
@@ -174,6 +192,7 @@ class ModelRouter:
         
         # Success check
         if success_model_id:
+            duration_ms = int((time.time() - start_time) * 1000)
             provider_name, _ = self._parse_model_id(success_model_id)
             # Yield metadata
             yield {
@@ -182,6 +201,7 @@ class ModelRouter:
                     "modelId": success_model_id,
                     "isLocal": provider_name == "ollama",
                     "fallbacks": [m for m in tried_models if m != success_model_id],
+                    "durationMs": duration_ms
                 }
             }
             return
@@ -202,6 +222,7 @@ class ModelRouter:
                     yield result
                 
                 if success_model_id:
+                    duration_ms = int((time.time() - start_time) * 1000)
                     provider_name, _ = self._parse_model_id(success_model_id)
                     yield {
                         "type": "metadata",
@@ -209,6 +230,7 @@ class ModelRouter:
                             "modelId": success_model_id,
                             "isLocal": provider_name == "ollama",
                             "fallbacks": [m for m in tried_models if m != success_model_id],
+                            "durationMs": duration_ms
                         }
                     }
                     return

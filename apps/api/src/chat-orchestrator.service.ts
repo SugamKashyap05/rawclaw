@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { ChatService } from './chat.service';
 import { DocsService } from './docs.service';
 import { AgentsService } from './agents.service';
+import { ModelsService } from './models.service';
 import { ChatRequest, ChatMessage } from '@rawclaw/shared';
 import { Response } from 'express';
 import { firstValueFrom } from 'rxjs';
@@ -18,12 +19,23 @@ export class ChatOrchestratorService {
     private readonly configService: ConfigService,
     private readonly docsService: DocsService,
     private readonly agentsService: AgentsService,
+    private readonly modelsService: ModelsService,
   ) {}
 
-  async processAndStreamChat(request: ChatRequest, res: Response): Promise<void> {
+  async processAndStreamChat(request: ChatRequest, res: Response, options: { skipPromptPersistence?: boolean } = {}): Promise<void> {
     const agentUrl = this.configService.get<string>('agentUrl');
     const systemContext = await this.docsService.getSystemContext();
     const selectedAgent = await this.agentsService.getOptional(request.agent_id);
+
+    // Resolve complexity to a specific model mapping if model ID is not provided
+    if (!request.model && request.complexity) {
+      const config = await (this.modelsService as any).getConfig();
+      const resolvedModel = config.routing[request.complexity];
+      if (resolvedModel) {
+        request.model = resolvedModel;
+        this.logger.log(`Resolved complexity '${request.complexity}' to model '${resolvedModel}'`);
+      }
+    }
 
     // 1. Get history for context if needed
     const history = await this.chatService.getMessages(request.session_id);
@@ -42,7 +54,20 @@ export class ChatOrchestratorService {
 
     // Filter out ANY previous system messages from history or request to prevent injection overrides
     const cleanHistory = history.filter((m) => m.role !== 'system');
-    const cleanRequestMessages = request.messages.filter((m) => m.role !== 'system');
+    const cleanRequestMessages = request.messages.filter((m) => m.role !== 'system').map(m => {
+      if (m.attachments && m.attachments.length > 0) {
+        let attachmentText = '\n\n--- Attachments ---\n';
+        for (const att of m.attachments) {
+          attachmentText += `\n[File: ${att.filename}]\n\`\`\`\n${att.content}\n\`\`\`\n`;
+        }
+        return {
+          ...m,
+          content: m.content + attachmentText,
+          attachments: undefined // We remove them so the agent does not receive redundant data
+        };
+      }
+      return m;
+    });
 
     request.messages = [
       ...systemMessages,
@@ -51,9 +76,11 @@ export class ChatOrchestratorService {
     ];
 
 
-    // 2. Save user message immediately
-    const userMsg = request.messages[request.messages.length - 1];
-    await this.chatService.createMessage(request.session_id, userMsg.role, userMsg.content);
+    // 2. Save user message immediately if not skipped (e.g. for edit/regenerate)
+    if (!options.skipPromptPersistence) {
+      const userMsg = request.messages[request.messages.length - 1];
+      await this.chatService.createMessage(request.session_id, userMsg.role, userMsg.content);
+    }
 
     // 3. Request streaming from Agent with AbortController for cancellation
     const abortController = new AbortController();
@@ -100,12 +127,18 @@ export class ChatOrchestratorService {
         this.logger.log('Agent request aborted by client disconnect.');
         return;
       }
-      this.logger.error('Agent connection failed after retries:', err.message);
+      
+      const isConnectionError = err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT' || err.status >= 500;
+      const errorType = isConnectionError ? 'agent_unavailable' : 'agent_error';
+
+      this.logger.error(`Agent connection failed (${err.code}):`, err.message);
       res.setHeader('Content-Type', 'text/event-stream');
       res.write(`data: ${JSON.stringify({ 
         type: 'error', 
-        error: 'Agent Connection Failed',
-        message: 'The RawClaw agent is currently unreachable or timed out. Please check if the agent service is running.'
+        error: errorType,
+        message: isConnectionError 
+          ? 'The RawClaw agent is currently unreachable. Please check if the agent service is running.'
+          : `Agent error: ${err.message}`
       })}\n\n`);
       res.end();
       return;
@@ -137,8 +170,9 @@ export class ChatOrchestratorService {
         try {
           // If we had an error but also some content, prioritize content but mark it
           let persistContent = fullAssistantResponse;
-          if (!persistContent) {
-            persistContent = payload?.type === 'error' ? `Error: ${payload.message}` : 'Request failed';
+          // If no content but we have an error, keep content empty so UI only shows Error Card
+          if (!persistContent && payload?.type !== 'error') {
+            persistContent = 'Request failed';
           }
 
           await this.chatService.createMessage(
@@ -230,7 +264,7 @@ export class ChatOrchestratorService {
         if (err.message === 'aborted' || abortController.signal.aborted) return;
         
         this.logger.error(`Agent stream error: ${err.message}`);
-        void finalize({ type: 'error', error: 'Stream Error', message: err.message });
+        void finalize({ type: 'error', error: 'stream_interrupted', message: err.message });
       });
 
       agentStream.data.on('end', () => {
@@ -250,51 +284,66 @@ export class ChatOrchestratorService {
 
   }
 
-  async editAndResend(sessionId: string, messageId: string, content: string, res: Response): Promise<void> {
+  async editAndResend(
+    sessionId: string, 
+    messageId: string, 
+    content: string, 
+    res: Response, 
+    options: { model?: string; complexity?: string; agentId?: string; temperature?: number; top_p?: number } = {}
+  ): Promise<void> {
     // 1. Truncate history after this message (including any old assistant responses)
     await this.chatService.deleteMessagesAfter(sessionId, messageId, false);
     
-    // 2. Update the user message content
-    // We should actually verify it's a user message, but createMessage upserts or we can direct update
-    // For simplicity, let's assume we update the specific message
+    // 2. Update the user message content in database
     await (this.chatService as any).prisma.message.update({
       where: { id: messageId },
       data: { content }
     });
 
-    // 3. Trigger new generation
-    const messages = await this.chatService.getMessages(sessionId);
-    const lastMsg = messages[messages.length - 1];
-    
-    // Construct a standard ChatRequest
+    // 3. Trigger new generation using skipPromptPersistence since we just updated it
     const request: ChatRequest = {
       session_id: sessionId,
-      messages: [lastMsg], // processAndStreamChat will fetch history anyway
-      model: 'default' // Or fetch from session settings
+      messages: [{ role: 'user' as const, content }], 
+      model: options.model || 'default',
+      complexity: options.complexity as any,
+      agent_id: options.agentId,
+      temperature: options.temperature,
+      top_p: options.top_p
     };
 
-    return this.processAndStreamChat(request, res);
+    return this.processAndStreamChat(request, res, { skipPromptPersistence: true });
   }
 
-  async regenerate(sessionId: string, messageId: string, res: Response): Promise<void> {
+  async regenerate(
+    sessionId: string, 
+    messageId: string, 
+    res: Response,
+    options: { model?: string; complexity?: string; agentId?: string; temperature?: number; top_p?: number } = {}
+  ): Promise<void> {
     // 1. Truncate history starting from this assistant message (include target)
     await this.chatService.deleteMessagesAfter(sessionId, messageId, true);
 
-    // 2. Re-trigger generation based on previous state
+    // 2. Re-trigger generation based on the message that remained last (the user prompt)
     const messages = await this.chatService.getMessages(sessionId);
-    const lastUserMsg = messages.reverse().find(m => m.role === 'user');
+    const lastUserMsg = messages[messages.length - 1];
     
-    if (!lastUserMsg) {
-      res.status(400).json({ error: 'No user message found to regenerate from' });
+    if (!lastUserMsg || lastUserMsg.role !== 'user') {
+      if (!res.writableEnded) {
+        res.status(400).json({ error: 'No user message found to regenerate from' });
+      }
       return;
     }
 
     const request: ChatRequest = {
       session_id: sessionId,
       messages: [lastUserMsg],
-      model: 'default'
+      model: options.model || 'default',
+      complexity: options.complexity as any,
+      agent_id: options.agentId,
+      temperature: options.temperature,
+      top_p: options.top_p
     };
 
-    return this.processAndStreamChat(request, res);
+    return this.processAndStreamChat(request, res, { skipPromptPersistence: true });
   }
 }

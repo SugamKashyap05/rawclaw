@@ -26,6 +26,7 @@ interface MessageWithRelations {
   agentId: string | null;
   errorType: string | null;
   errorMessage: string | null;
+  durationMs: number | null;
 }
 
 export interface SessionWithMessages {
@@ -60,6 +61,7 @@ export class ChatService {
       memoryRecall?: boolean;
       agentId?: string;
       error?: { type: string; message: string };
+      durationMs?: number;
     }
   ): Promise<MessageWithRelations> {
     // Ensure session exists
@@ -88,6 +90,7 @@ export class ChatService {
         agentId: metadata?.agentId,
         errorType: metadata?.error?.type,
         errorMessage: metadata?.error?.message,
+        durationMs: metadata?.durationMs,
       },
     });
   }
@@ -114,6 +117,8 @@ export class ChatService {
       memoryRecall: m.memoryRecall ?? undefined,
       agentId: m.agentId || undefined,
       error: m.errorType ? { type: m.errorType, message: m.errorMessage || '' } : undefined,
+      createdAt: m.createdAt,
+      durationMs: m.durationMs || undefined,
     };
   }
 

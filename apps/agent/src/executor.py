@@ -96,12 +96,15 @@ class Executor:
             trace.add_plan_step(f"Processing request with {len(messages)} messages")
 
             # Stream from model
-            async for delta in self.model_router.complete(
+            async_it = self.model_router.complete(
                 messages,
                 model=request.model,
                 complexity=request.complexity,
                 tools=tools_schema if tools_schema else None,
-            ):
+                temperature=request.temperature,
+                top_p=request.top_p
+            )
+            async for delta in async_it:
                 # Check if model wants to call a tool
                 if isinstance(delta, dict) and delta.get("type") == "tool_call":
                     tool_call_data = delta.get("tool_call", {})
@@ -218,8 +221,15 @@ class Executor:
         except Exception as e:
             logger.error(f"Executor error: {e}")
             trace.add_error_step(str(e))
+            
+            # Detect specific internal errors if possible
+            error_code = "agent_error"
+            if "model" in str(e).lower() or "router" in str(e).lower():
+                error_code = "provider_routing_failed"
+            
             yield json.dumps({
                 "type": "error",
+                "error": error_code,
                 "message": str(e),
                 "provenance_trace": trace.to_dict(),
             }) + "\n"

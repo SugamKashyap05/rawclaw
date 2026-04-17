@@ -58,6 +58,23 @@ export function StatusBar({ onStatus }: StatusBarProps) {
     };
   }, [onStatus]);
 
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get<SystemStatusSnapshot>('/system/status');
+      setStatus(response.data);
+      onStatus?.(response.data);
+    } catch {
+      setStatus((current) => ({
+        ...current,
+        services: { ...current.services, api: 'down' },
+        websocket: { connected: false },
+      }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <footer
       style={{
@@ -88,7 +105,7 @@ export function StatusBar({ onStatus }: StatusBarProps) {
         <span style={{ fontSize: '0.82rem' }}>{status.git.lastCommit || 'No commit metadata'}</span>
         <button
           className="btn-ghost"
-          onClick={() => window.location.reload()}
+          onClick={handleRefresh}
           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.7rem' }}
         >
           <FiRefreshCw className={loading ? 'icon-spin' : undefined} />

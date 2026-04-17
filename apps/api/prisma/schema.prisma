@@ -54,6 +54,7 @@ model Message {
   agentId      String?
   errorType    String?
   errorMessage String?
+  durationMs   Int?
 
   createdAt DateTime @default(now())
   

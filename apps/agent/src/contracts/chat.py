@@ -10,6 +10,12 @@ from pydantic import BaseModel
 from src.contracts.tool import ToolCall
 
 
+class ChatAttachment(BaseModel):
+    filename: str
+    content: str
+    type: Optional[str] = None
+    size: Optional[int] = None
+
 class ChatMessage(BaseModel):
     """A single message in a chat conversation."""
     role: Literal['user', 'assistant', 'system', 'tool']
@@ -17,6 +23,7 @@ class ChatMessage(BaseModel):
     name: Optional[str] = None
     tool_calls: Optional[List[ToolCall]] = None
     tool_result: Optional[Dict[str, Any]] = None
+    attachments: Optional[List[ChatAttachment]] = None
 
 
 class ChatRequest(BaseModel):
@@ -30,6 +37,9 @@ class ChatRequest(BaseModel):
     workspace_id: Optional[str] = "default"
     sender_identifier: Optional[str] = "local"
     agent_id: Optional[str] = None
+    # P2 Parameters
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
 
 
 class ModelMetadata(BaseModel):
@@ -38,6 +48,7 @@ class ModelMetadata(BaseModel):
     isLocal: bool
     fallbacks: Optional[List[str]] = None
     memoryRecall: Optional[bool] = None
+    durationMs: Optional[int] = None
 
 class ChatResponse(BaseModel):
     """Response payload mapping the result of a chat execution."""

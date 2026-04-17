@@ -41,18 +41,46 @@ export class ChatController {
 
   @Post('edit')
   async editAndResend(
-    @Body() body: { sessionId: string; messageId: string; content: string },
+    @Body() body: { 
+      sessionId: string; 
+      messageId: string; 
+      content: string;
+      model?: string;
+      complexity?: string;
+      agentId?: string;
+      temperature?: number;
+      top_p?: number;
+    },
     @Res() res: Response
   ) {
-    return this.orchestratorService.editAndResend(body.sessionId, body.messageId, body.content, res);
+    return this.orchestratorService.editAndResend(
+      body.sessionId, 
+      body.messageId, 
+      body.content, 
+      res,
+      { model: body.model, complexity: body.complexity, agentId: body.agentId, temperature: body.temperature, top_p: body.top_p }
+    );
   }
 
   @Post('regenerate')
   async regenerate(
-    @Body() body: { sessionId: string; messageId: string },
+    @Body() body: { 
+      sessionId: string; 
+      messageId: string;
+      model?: string;
+      complexity?: string;
+      agentId?: string;
+      temperature?: number;
+      top_p?: number;
+    },
     @Res() res: Response
   ) {
-    return this.orchestratorService.regenerate(body.sessionId, body.messageId, res);
+    return this.orchestratorService.regenerate(
+      body.sessionId, 
+      body.messageId, 
+      res,
+      { model: body.model, complexity: body.complexity, agentId: body.agentId, temperature: body.temperature, top_p: body.top_p }
+    );
   }
 
   @Get('models')
@@ -70,8 +98,8 @@ export class ChatController {
       // Return a basic fallback if agent is down
       return { 
         models: [
-          { id: 'ollama/llama3', name: 'Llama 3 (Cached)', provider: 'ollama' },
-          { id: 'ollama/mistral', name: 'Mistral (Cached)', provider: 'ollama' }
+          { id: 'ollama/qwen2.5:1.5b', name: 'Qwen 2.5 1.5B (Fallback)', provider: 'ollama' },
+          { id: 'ollama/llama3.2:3b', name: 'Llama 3.2 (Fallback)', provider: 'ollama' }
         ]
       };
     }
