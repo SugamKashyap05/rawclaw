@@ -5,7 +5,11 @@ import { api } from '../lib/api';
 import { AUTH_TOKEN_KEY } from '../lib/auth';
 import { ChatSidebar } from '../components/ChatSidebar';
 import { ChatSkeleton } from '../components/chat/ChatSkeleton';
-import { ConfirmationBanner } from '../components/ConfirmationBanner';
+// DEPRECATED: ConfirmationBanner kept as fallback; replaced by PendingConfirmationsPanel
+// import { ConfirmationBanner } from '../components/ConfirmationBanner';
+import { HarnessStatusPanel } from '../components/chat/HarnessStatusPanel';
+import { PendingConfirmationsPanel } from '../components/chat/PendingConfirmationsPanel';
+import { useSystemPoller } from '../hooks/useSystemPoller';
 import { FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, FiCopy, FiFolder, FiFileText, FiX, FiPlus, FiMessageSquare } from 'react-icons/fi';
 import { WebSearchResult } from '../components/chat/WebSearchResult';
 import { BrowserResult } from '../components/chat/BrowserResult';
@@ -264,6 +268,9 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const [activeSelection, setActiveSelection] = useState<DocumentSelection | null>(null);
+
+  // Centralized system poller — replaces scattered useEffect intervals
+  const { status: systemStatus, pendingConfirmations, refresh: refreshPoller } = useSystemPoller(sessionId, 3000);
 
 
   const stopGeneration = () => {
@@ -726,7 +733,17 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
           </div>
         </div>
 
-        <ConfirmationBanner sessionId={sessionId} />
+        <HarnessStatusPanel
+          sessionId={sessionId}
+          selectedAgentId={selectedAgentId}
+          selectedModel={selectedModel}
+          systemStatus={systemStatus}
+        />
+
+        <PendingConfirmationsPanel
+          confirmations={pendingConfirmations}
+          onAction={() => void refreshPoller()}
+        />
 
         <div ref={scrollRef} className="custom-scrollbar" style={{ flex: 1, overflow: 'auto', display: 'grid', gap: '1rem', paddingRight: '0.25rem' }}>
           {loadingHistory && messages.length === 0 ? <ChatSkeleton /> : null}
