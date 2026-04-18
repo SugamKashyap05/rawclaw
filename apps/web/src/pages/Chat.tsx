@@ -10,7 +10,7 @@ import { ChatSkeleton } from '../components/chat/ChatSkeleton';
 import { HarnessStatusPanel } from '../components/chat/HarnessStatusPanel';
 import { PendingConfirmationsPanel } from '../components/chat/PendingConfirmationsPanel';
 import { useSystemPoller } from '../hooks/useSystemPoller';
-import { FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, FiCopy, FiFolder, FiFileText, FiX, FiPlus, FiMessageSquare } from 'react-icons/fi';
+import { FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, FiCopy, FiFolder, FiFileText, FiX, FiPlus, FiMessageSquare, FiSquare, FiEye, FiAlertTriangle } from 'react-icons/fi';
 import { WebSearchResult } from '../components/chat/WebSearchResult';
 import { BrowserResult } from '../components/chat/BrowserResult';
 import { FileResult } from '../components/chat/FileResult';
@@ -733,10 +733,59 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
           </div>
         </div>
 
+        {/* Operational Controls Bar */}
+        {(sending || activeDocumentId || pendingConfirmations.length > 0) && (
+          <div style={{ 
+            display: 'flex', 
+            gap: '0.75rem', 
+            marginBottom: '0.75rem', 
+            padding: '0.5rem', 
+            background: 'rgba(0, 0, 0, 0.2)', 
+            borderRadius: '8px',
+            border: '1px solid var(--border-glass)',
+            alignItems: 'center'
+          }}>
+            {sending && (
+              <button 
+                className="btn-danger" 
+                onClick={stopGeneration}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <FiSquare size={12} /> Stop Generation
+              </button>
+            )}
+            {activeDocumentId && (
+              <button 
+                className="btn-secondary" 
+                onClick={() => {
+                  const el = document.getElementById('document-canvas-container');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <FiEye size={12} /> Inspect Document
+              </button>
+            )}
+            {pendingConfirmations.length > 0 && (
+              <button 
+                className="btn-primary" 
+                onClick={() => {
+                  const el = document.getElementById('pending-confirmations-list');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1px solid var(--neon-cyan)', boxShadow: '0 0 10px rgba(0, 240, 255, 0.2)' }}
+              >
+                <FiAlertTriangle size={12} /> Jump to Confirmations ({pendingConfirmations.length})
+              </button>
+            )}
+          </div>
+        )}
+
         <HarnessStatusPanel
           sessionId={sessionId}
-          selectedAgentId={selectedAgentId}
-          selectedModel={selectedModel}
+          agentName={selectedAgent?.name || 'Default'}
+          modelDisplayLabel={selectedModel.startsWith('complexity:') ? selectedModel.split(':')[1] : (selectedModel.split('/').pop() || selectedModel)}
+          modelMode={selectedModel.startsWith('complexity:') ? 'complexity' : 'direct'}
           systemStatus={systemStatus}
         />
 
@@ -881,28 +930,30 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
         )}
 
         {activeDocumentId && (
-          <DocumentCanvas 
-            documentId={activeDocumentId} 
-            onClose={() => setActiveDocumentId(null)}
-            onSelect={(selection) => {
-              setActiveSelection({ ...selection, documentId: activeDocumentId! });
-            }}
-            activeSelection={activeSelection}
-            editSuggestion={
-              (() => {
-                const assistantMsgs = messages.filter(m => m.role === 'assistant');
-                if (!assistantMsgs.length) return null;
-                const lastMsg = assistantMsgs[assistantMsgs.length - 1];
-                return parseEditSuggestion(lastMsg.content).suggestion;
-              })()
-            }
-            onAcceptEdit={() => {
-              // In a real app we'd save this to the backend
-              // For now we just dismiss the selection
-              setActiveSelection(null);
-            }}
-            onRejectEdit={() => setActiveSelection(null)}
-          />
+          <div id="document-canvas-container">
+            <DocumentCanvas 
+              documentId={activeDocumentId} 
+              onClose={() => setActiveDocumentId(null)}
+              onSelect={(selection) => {
+                setActiveSelection({ ...selection, documentId: activeDocumentId! });
+              }}
+              activeSelection={activeSelection}
+              editSuggestion={
+                (() => {
+                  const assistantMsgs = messages.filter(m => m.role === 'assistant');
+                  if (!assistantMsgs.length) return null;
+                  const lastMsg = assistantMsgs[assistantMsgs.length - 1];
+                  return parseEditSuggestion(lastMsg.content).suggestion;
+                })()
+              }
+              onAcceptEdit={() => {
+                // In a real app we'd save this to the backend
+                // For now we just dismiss the selection
+                setActiveSelection(null);
+              }}
+              onRejectEdit={() => setActiveSelection(null)}
+            />
+          </div>
         )}
       </div>
 

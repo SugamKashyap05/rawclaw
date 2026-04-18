@@ -1,11 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../lib/api';
-import { SystemStatusSnapshot } from '@rawclaw/shared';
-import { ToolConfirmationType } from '../components/ConfirmationBanner';
+import { SystemStatusSnapshot, ToolConfirmation } from '@rawclaw/shared';
 
 interface SystemPollerData {
   status: SystemStatusSnapshot | null;
-  pendingConfirmations: ToolConfirmationType[];
+  pendingConfirmations: ToolConfirmation[];
   refresh: () => Promise<void>;
   isRefreshing: boolean;
 }
@@ -30,7 +29,7 @@ const EMPTY_STATUS: SystemStatusSnapshot = {
  */
 export function useSystemPoller(sessionId?: string, intervalMs = 3000): SystemPollerData {
   const [status, setStatus] = useState<SystemStatusSnapshot>(EMPTY_STATUS);
-  const [pendingConfirmations, setPendingConfirmations] = useState<ToolConfirmationType[]>([]);
+  const [pendingConfirmations, setPendingConfirmations] = useState<ToolConfirmation[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const activeSessionRef = useRef<string | undefined>(sessionId);
 
@@ -45,7 +44,7 @@ export function useSystemPoller(sessionId?: string, intervalMs = 3000): SystemPo
       const [statusRes, confRes] = await Promise.all([
         api.get<SystemStatusSnapshot>('/system/status').catch(() => null),
         activeSessionRef.current 
-          ? api.get<ToolConfirmationType[]>(`/tools/confirm?sessionId=${activeSessionRef.current}`).catch(() => null)
+          ? api.get<ToolConfirmation[]>(`/tools/confirm?sessionId=${activeSessionRef.current}`).catch(() => null)
           : Promise.resolve(null)
       ]);
 

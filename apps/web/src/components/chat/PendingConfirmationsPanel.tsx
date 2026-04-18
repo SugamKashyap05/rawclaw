@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FiShield, FiCheck, FiX, FiClock, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { api } from '../../lib/api';
-import { ToolConfirmationType } from '../ConfirmationBanner';
+import { ToolConfirmation } from '@rawclaw/shared';
 
 const MAX_WAIT_SECONDS = 120;
 
 interface Props {
   /** Pre-fetched confirmations from the centralized poller */
-  confirmations: ToolConfirmationType[];
+  confirmations: ToolConfirmation[];
   /** Called after an approve/deny action so the poller can refresh */
   onAction?: () => void;
 }
@@ -74,11 +74,14 @@ export function PendingConfirmationsPanel({ confirmations, onAction }: Props) {
   if (confirmations.length === 0) return null;
 
   return (
-    <div style={{
-      display: 'grid',
-      gap: '0.5rem',
-      marginBottom: '0.75rem',
-    }}>
+    <div 
+      id="pending-confirmations-list"
+      style={{
+        display: 'grid',
+        gap: '0.5rem',
+        marginBottom: '0.75rem',
+      }}
+    >
       {/* Queue header */}
       <div style={{
         display: 'flex',

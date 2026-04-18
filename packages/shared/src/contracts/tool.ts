@@ -110,3 +110,15 @@ export interface ProvenanceRecord {
   error?: string;
   sandbox_used: boolean;
 }
+
+/**
+ * Represents a tool operation waiting for user approval.
+ */
+export interface ToolConfirmation {
+  id: string;
+  sessionId: string;
+  toolName: string;
+  toolInput: string;
+  status: 'pending' | 'approved' | 'rejected' | 'timeout' | string;
+  requestedAt: string;
+}
