@@ -165,7 +165,37 @@ async function main() {
     content: scannedCheck.content
   };
 
-  // D. Post-Document API Health
+  // D. Document Edit Intent
+  const editSessionId = `verify-edit-${Date.now()}`;
+  const editCheck = await runChat({
+    sessionId: editSessionId,
+    model,
+    message: 'Rewrite this text to be more formal: "Hey dude what is up with the project?"',
+    editRequest: {
+      documentId: 'doc_1234',
+      selectedText: 'Hey dude what is up with the project?',
+      contextBefore: 'Background: ',
+      contextAfter: ' End.',
+      action: 'formalize'
+    },
+    headers: authHeaders,
+  });
+  
+  const editHistory = await apiGet(`/chat/sessions/${editSessionId}`, authHeaders).catch(() => null);
+  const assistantEditMsg = editHistory?.messages?.slice().reverse().find(m => m.role === 'assistant');
+  const hasEditTags = assistantEditMsg?.content?.includes('<edit_suggestion>') || false;
+
+  // The model may also output the tag in the stream chunks collected in editCheck.content
+  const responseHasEditTags = editCheck.content?.includes('<edit_suggestion>') || false;
+
+  summary.checks.editIntent = {
+    ok: editCheck.ok && (hasEditTags || responseHasEditTags),
+    responseHasEditTags,
+    historyHasEditTags: hasEditTags,
+    content: editCheck.content,
+  };
+
+  // E. Post-Document API Health
   const postHealth = await preflightApi();
   const postPlain = await runChat({
     sessionId: `verify-post-${Date.now()}`,
@@ -191,11 +221,21 @@ async function main() {
   // imageDocument failures are only counted if OCR was attempted and actually failed (not skipped)
   const img = summary.checks.imageDocument;
   if (!img.skipped && !img.ok) failures.push('image document OCR check failed');
+  if (!summary.checks.editIntent.ok) failures.push('document edit intent check failed');
 
   summary.failures = failures;
   summary.finishedAt = new Date().toISOString();
 
   console.log(JSON.stringify(summary, null, 2));
+
+  console.log('\n--- MANUAL VERIFICATION REQUIRED ---');
+  console.log('Repeated-Text Anchored Editing Validation:');
+  console.log('1. Open a document where the same phrase appears more than once.');
+  console.log('2. Select the second occurrence of that phrase.');
+  console.log('3. Trigger an edit suggestion (e.g. "rewrite").');
+  console.log('4. Apply it - confirm only the selected occurrence changes.');
+  console.log('5. Reject another suggestion and confirm no mutation.');
+  console.log('------------------------------------');
 
   if (failures.length) {
     process.exitCode = 1;
@@ -287,7 +327,7 @@ function chooseModel(models) {
   return firstOllama?.id || models[0]?.id;
 }
 
-async function runChat({ sessionId, model, message, agentId, attachments, headers }) {
+async function runChat({ sessionId, model, message, agentId, attachments, editRequest, headers }) {
   const response = await fetchWithTimeout(`${API_BASE}/chat/send`, {
     method: 'POST',
     headers,
@@ -297,6 +337,7 @@ async function runChat({ sessionId, model, message, agentId, attachments, header
       model,
       stream: true,
       agent_id: agentId,
+      editRequest,
     }),
   }, CHAT_REQUEST_TIMEOUT_MS);
 

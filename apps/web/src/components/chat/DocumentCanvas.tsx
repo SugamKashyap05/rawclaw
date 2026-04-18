@@ -1,6 +1,63 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { FiX, FiInfo } from 'react-icons/fi';
 import { api } from '../../lib/api';
+
+/**
+ * Find the character index of `needle` in `haystack` that best matches
+ * the surrounding context. Falls back to naive indexOf when context
+ * matching cannot disambiguate (e.g. single occurrence).
+ */
+function findAnchoredIndex(
+  haystack: string,
+  needle: string,
+  contextBefore: string,
+  contextAfter: string,
+): number {
+  if (!needle) return -1;
+
+  // Collect every occurrence
+  const indices: number[] = [];
+  let cursor = 0;
+  while (true) {
+    const idx = haystack.indexOf(needle, cursor);
+    if (idx === -1) break;
+    indices.push(idx);
+    cursor = idx + 1;
+  }
+
+  if (indices.length === 0) return -1;
+  if (indices.length === 1) return indices[0];
+
+  // Score each occurrence by how well the surrounding text matches
+  const cbTail = contextBefore.slice(-80);
+  const caHead = contextAfter.slice(0, 80);
+
+  let bestIdx = indices[0];
+  let bestScore = -1;
+
+  for (const idx of indices) {
+    let score = 0;
+    const actualBefore = haystack.substring(Math.max(0, idx - cbTail.length), idx);
+    const actualAfter = haystack.substring(idx + needle.length, idx + needle.length + caHead.length);
+
+    // Character-by-character overlap scoring (backwards for before, forwards for after)
+    for (let i = 0; i < Math.min(actualBefore.length, cbTail.length); i++) {
+      if (actualBefore[actualBefore.length - 1 - i] === cbTail[cbTail.length - 1 - i]) score++;
+      else break;
+    }
+    for (let i = 0; i < Math.min(actualAfter.length, caHead.length); i++) {
+      if (actualAfter[i] === caHead[i]) score++;
+      else break;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = idx;
+    }
+  }
+
+  return bestIdx;
+}
 
 interface Document {
   id: string;
@@ -16,8 +73,8 @@ interface DocumentCanvasProps {
   extractionFailed?: boolean;
   extractionError?: string;
   onClose: () => void;
-  onSelect: (selection: { text: string; contextBefore: string; contextAfter: string }) => void;
-  activeSelection?: { text: string; contextBefore: string; contextAfter: string } | null;
+  onSelect: (selection: { text: string; contextBefore: string; contextAfter: string; startOffset?: number; endOffset?: number; }) => void;
+  activeSelection?: { text: string; contextBefore: string; contextAfter: string; startOffset?: number; endOffset?: number; } | null;
   editSuggestion?: string | null;
   onAcceptEdit?: (newText: string) => void;
   onRejectEdit?: () => void;
@@ -103,34 +160,50 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
     fetchDoc();
   }, [documentId]);
 
-  const handleTextSelection = () => {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+  const handleTextSelection = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
 
-    const text = selection.toString().trim();
+    const text = sel.toString().trim();
     if (!text) return;
 
-    // The logic below identifies the selection within the pre-wrap container
-    const range = selection.getRangeAt(0);
+    const fullText = doc?.extractedText || '';
+    const range = sel.getRangeAt(0);
+
+    // Walk the pre-wrap container to compute character offset of the selection start
     const container = range.commonAncestorContainer;
     const parent = container.nodeType === 3 ? container.parentElement : (container as HTMLElement);
-    
     if (!parent) return;
 
-    const fullText = doc?.extractedText || '';
-    const startIdx = fullText.indexOf(text);
-    
-    if (startIdx === -1) return; // Fallback if direct match fails
+    const preWrapEl = parent.closest('[style*="pre-wrap"]') || parent;
+    let domOffset = 0;
+    const tw = document.createTreeWalker(preWrapEl, NodeFilter.SHOW_TEXT);
+    while (tw.nextNode()) {
+      if (tw.currentNode === range.startContainer) {
+        domOffset += range.startOffset;
+        break;
+      }
+      domOffset += (tw.currentNode.textContent?.length || 0);
+    }
 
-    // Get 200 chars of context as requested
+    // Search near the DOM offset first, then fall back to any match
+    const searchStart = Math.max(0, domOffset - 50);
+    let startIdx = fullText.indexOf(text, searchStart);
+    if (startIdx === -1) startIdx = fullText.indexOf(text);
+    if (startIdx === -1) return;
+
     const contextBefore = fullText.substring(Math.max(0, startIdx - 200), startIdx);
     const contextAfter = fullText.substring(startIdx + text.length, Math.min(fullText.length, startIdx + text.length + 200));
 
-    onSelect({ text, contextBefore, contextAfter });
-    
-    // Clear selection visually to avoid frustration
-    selection.removeAllRanges();
-  };
+    onSelect({ 
+      text, 
+      contextBefore, 
+      contextAfter, 
+      startOffset: startIdx, 
+      endOffset: startIdx + text.length 
+    });
+    sel.removeAllRanges();
+  }, [doc, onSelect]);
 
   const renderContent = () => {
     const fullText = doc?.extractedText || '';
@@ -139,11 +212,18 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
       return fullText;
     }
 
-    const { text } = activeSelection;
-    const startIdx = fullText.indexOf(text);
+    const { text, contextBefore = '', contextAfter = '', startOffset, endOffset } = activeSelection;
+    
+    let startIdx = -1;
+    if (startOffset !== undefined && endOffset !== undefined && fullText.substring(startOffset, endOffset) === text) {
+      startIdx = startOffset;
+    } else {
+      startIdx = findAnchoredIndex(fullText, text, contextBefore, contextAfter);
+    }
+    
+    if (startIdx === -1) return fullText;
     const before = fullText.substring(0, startIdx);
     const after = fullText.substring(startIdx + text.length);
-
     if (editSuggestion) {
       return (
         <React.Fragment>
@@ -180,10 +260,26 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
                 onClick={(e) => {
                   e.stopPropagation();
                   if (doc && activeSelection) {
-                    setDoc({
-                      ...doc,
-                      extractedText: doc.extractedText.replace(activeSelection.text, editSuggestion)
-                    });
+                    let idx = -1;
+                    if (activeSelection.startOffset !== undefined && activeSelection.endOffset !== undefined && doc.extractedText.substring(activeSelection.startOffset, activeSelection.endOffset) === activeSelection.text) {
+                      idx = activeSelection.startOffset;
+                    } else {
+                      idx = findAnchoredIndex(
+                        doc.extractedText,
+                        activeSelection.text,
+                        activeSelection.contextBefore || '',
+                        activeSelection.contextAfter || '',
+                      );
+                    }
+                    if (idx !== -1) {
+                      const patched =
+                        doc.extractedText.substring(0, idx) +
+                        editSuggestion +
+                        doc.extractedText.substring(idx + activeSelection.text.length);
+                      setDoc({ ...doc, extractedText: patched });
+                    } else {
+                      alert('Could not safely apply edit: the original text could not be located.');
+                    }
                   }
                   onAcceptEdit?.(editSuggestion);
                 }}

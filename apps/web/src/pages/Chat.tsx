@@ -106,6 +106,43 @@ interface SessionMessage {
   };
 }
 
+export function parseEditSuggestion(content?: string): { suggestion: string | null; textContent: string } {
+  if (!content) return { suggestion: null, textContent: '' };
+  
+  const match = content.match(/<edit_suggestion>([\s\S]*?)<\/edit_suggestion>/);
+  if (!match) return { suggestion: null, textContent: content };
+
+  let suggestion = match[1].trim();
+
+  // Strip markdown fences if the model wrapped the suggestion in them
+  if (suggestion.startsWith('```') && suggestion.endsWith('```')) {
+    const firstNewline = suggestion.indexOf('\n');
+    const lastNewline = suggestion.lastIndexOf('\n');
+    if (firstNewline !== -1 && lastNewline !== -1 && firstNewline < lastNewline) {
+      suggestion = suggestion.slice(firstNewline + 1, lastNewline).trim();
+    } else {
+      // Just stripped the exact fences if it was single line or similar
+      suggestion = suggestion.replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '');
+    }
+  }
+
+  // Strip JSON wrapper if it tried to output structured JSON
+  if (suggestion.startsWith('{') && suggestion.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(suggestion);
+      if (parsed.text) suggestion = String(parsed.text);
+      else if (parsed.suggestion) suggestion = String(parsed.suggestion);
+      else if (parsed.replacement) suggestion = String(parsed.replacement);
+      else if (parsed.editedText) suggestion = String(parsed.editedText);
+    } catch {
+      // Not valid JSON, ignore
+    }
+  }
+
+  const textContent = content.replace(/<edit_suggestion>[\s\S]*?<\/edit_suggestion>/g, '').trim();
+  return { suggestion, textContent };
+}
+
 function normalizeErrorType(errorCode?: string): NonNullable<SessionMessage['error']>['type'] {
   switch (errorCode) {
     case 'Aborted':
@@ -839,8 +876,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
                 const assistantMsgs = messages.filter(m => m.role === 'assistant');
                 if (!assistantMsgs.length) return null;
                 const lastMsg = assistantMsgs[assistantMsgs.length - 1];
-                const match = lastMsg.content.match(/<edit_suggestion>([\s\S]*?)<\/edit_suggestion>/);
-                return match ? match[1].trim() : null;
+                return parseEditSuggestion(lastMsg.content).suggestion;
               })()
             }
             onAcceptEdit={() => {
@@ -897,6 +933,8 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
                   selectedText: activeSelection.text,
                   contextBefore: activeSelection.contextBefore,
                   contextAfter: activeSelection.contextAfter,
+                  startOffset: activeSelection.startOffset,
+                  endOffset: activeSelection.endOffset,
                   action: action as DocumentEditAction,
                 };
                 void send(request);
@@ -1100,28 +1138,32 @@ function MessageCard({
           </div>
         ) : message.content ? (
           <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-            {message.content.includes('<edit_suggestion>') ? (
-              <>
-                {message.content.replace(/<edit_suggestion>[\s\S]*?<\/edit_suggestion>/g, '')}
-                <div style={{ 
-                  marginTop: '0.5rem', 
-                  padding: '8px 12px', 
-                  background: 'rgba(0, 255, 150, 0.1)', 
-                  border: '1px solid rgba(0, 255, 150, 0.3)',
-                  borderRadius: '6px',
-                  color: '#00ff96',
-                  fontSize: '0.8rem',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  <FiEdit2 size={12} />
-                  Document Edit Suggested — Preview above
-                </div>
-              </>
-            ) : (
-              message.content
-            )}
+            {(() => {
+              const { suggestion, textContent } = parseEditSuggestion(message.content);
+              if (suggestion) {
+                return (
+                  <>
+                    {textContent}
+                    <div style={{ 
+                      marginTop: '0.5rem', 
+                      padding: '8px 12px', 
+                      background: 'rgba(0, 255, 150, 0.1)', 
+                      border: '1px solid rgba(0, 255, 150, 0.3)',
+                      borderRadius: '6px',
+                      color: '#00ff96',
+                      fontSize: '0.8rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <FiEdit2 size={12} />
+                      Document Edit Suggested — Preview above
+                    </div>
+                  </>
+                );
+              }
+              return message.content;
+            })()}
           </div>
         ) : !message.error ? (
           <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, opacity: 0.5 }}>...</div>

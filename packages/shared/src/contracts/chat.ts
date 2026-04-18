@@ -11,15 +11,19 @@ export interface DocumentSelection {
   text: string;
   contextBefore: string;
   contextAfter: string;
+  startOffset?: number;
+  endOffset?: number;
 }
 
-export type DocumentEditAction = 'rewrite' | 'improve' | 'shorten' | 'formalize' | 'translate' | 'format';
+export type DocumentEditAction = 'rewrite' | 'improve' | 'shorten' | 'formalize';
 
 export interface DocumentEditRequest {
   documentId: string;
   selectedText: string;
   contextBefore: string;
   contextAfter: string;
+  startOffset?: number;
+  endOffset?: number;
   action: DocumentEditAction;
   instruction?: string;
 }
@@ -70,7 +74,11 @@ export interface ChatMessage {
   createdAt?: Date | string;
   durationMs?: number;
   /** Parsed edit suggestion containing originalText, suggestedText, action */
-  editSuggestion?: any;
+  editSuggestion?: {
+    originalText: string;
+    suggestedText: string;
+    action: DocumentEditAction;
+  };
 }
 
 export type ChatComplexity = 'low' | 'medium' | 'high';
