@@ -26,6 +26,7 @@ interface MessageWithRelations {
   agentId: string | null;
   errorType: string | null;
   errorMessage: string | null;
+  attachments: string | null;
   durationMs: number | null;
 }
 
@@ -61,6 +62,7 @@ export class ChatService {
       memoryRecall?: boolean;
       agentId?: string;
       error?: { type: string; message: string };
+      attachments?: any[];
       durationMs?: number;
     }
   ): Promise<MessageWithRelations> {
@@ -90,6 +92,7 @@ export class ChatService {
         agentId: metadata?.agentId,
         errorType: metadata?.error?.type,
         errorMessage: metadata?.error?.message,
+        attachments: metadata?.attachments ? JSON.stringify(metadata.attachments) : null,
         durationMs: metadata?.durationMs,
       },
     });
@@ -117,6 +120,7 @@ export class ChatService {
       memoryRecall: m.memoryRecall ?? undefined,
       agentId: m.agentId || undefined,
       error: m.errorType ? { type: m.errorType, message: m.errorMessage || '' } : undefined,
+      attachments: m.attachments ? JSON.parse(m.attachments) : undefined,
       createdAt: m.createdAt,
       durationMs: m.durationMs || undefined,
     };
@@ -178,6 +182,12 @@ export class ChatService {
           [includeTarget ? 'gte' : 'gt']: target.createdAt,
         },
       },
+    });
+  }
+
+  async getDocument(id: string) {
+    return this.prisma.document.findUnique({
+      where: { id }
     });
   }
 

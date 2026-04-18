@@ -6,8 +6,10 @@ import { DocsService } from './docs.service';
 import { AgentsService } from './agents.service';
 import { ModelsService } from './models.service';
 import { ChatRequest, ChatMessage } from '@rawclaw/shared';
-import { Response } from 'express';
+import { response, Response } from 'express';
 import { firstValueFrom } from 'rxjs';
+import { DocumentProcessorService } from './document-processor.service';
+import { PrismaService } from './prisma.service';
 
 @Injectable()
 export class ChatOrchestratorService {
@@ -20,7 +22,13 @@ export class ChatOrchestratorService {
     private readonly docsService: DocsService,
     private readonly agentsService: AgentsService,
     private readonly modelsService: ModelsService,
+    private readonly documentProcessor: DocumentProcessorService,
+    private readonly prisma: PrismaService,
   ) {}
+
+  private readonly MAX_TOTAL_PROMPT_CHARS = 180000;
+  private readonly MAX_ATTACHMENT_INLINE_CHARS = 50000;
+  private readonly MAX_TOOL_RESULT_CHARS = 20000;
 
   async processAndStreamChat(request: ChatRequest, res: Response, options: { skipPromptPersistence?: boolean } = {}): Promise<void> {
     const agentUrl = this.configService.get<string>('agentUrl');
@@ -52,35 +60,134 @@ export class ChatOrchestratorService {
       });
     }
 
+    // Add edit request system prompt if present
+    if (request.editRequest) {
+      systemMessages.push({
+        role: 'system',
+        content: `You are an expert document editor. The user has requested to perform an edit action on a specific selection of text.
+Action requested: ${request.editRequest.action}
+${request.editRequest.instruction ? `Additional instructions: ${request.editRequest.instruction}\n` : ''}
+Original text selection: "${request.editRequest.selectedText}"
+Context before: "...${request.editRequest.contextBefore.slice(-200)}"
+Context after: "${request.editRequest.contextAfter.slice(0, 200)}..."
+
+Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit_suggestion> tags. Do not include original text, conversational filler, or markdown fences outside the tags.`
+      });
+    }
+
     // Filter out ANY previous system messages from history or request to prevent injection overrides
     const cleanHistory = history.filter((m) => m.role !== 'system');
-    const cleanRequestMessages = request.messages.filter((m) => m.role !== 'system').map(m => {
-      if (m.attachments && m.attachments.length > 0) {
-        let attachmentText = '\n\n--- Attachments ---\n';
-        for (const att of m.attachments) {
-          attachmentText += `\n[File: ${att.filename}]\n\`\`\`\n${att.content}\n\`\`\`\n`;
-        }
-        return {
-          ...m,
-          content: m.content + attachmentText,
-          attachments: undefined // We remove them so the agent does not receive redundant data
-        };
-      }
-      return m;
-    });
+    const cleanRequestMessages = request.messages.filter((m) => m.role !== 'system');
 
-    request.messages = [
+    let allMessages: ChatMessage[] = [
       ...systemMessages,
       ...cleanHistory,
       ...cleanRequestMessages,
     ];
 
+    // 1.5 Process Document Ingestion and Selection Context
+    for (const msg of allMessages) {
+      // Handle Selection Context Injection
+      if (msg.selection) {
+        // Limit context to ~200 chars as requested
+        const selectionBlock = `\n\n[Context: User selected text from document]\nSelection: "${msg.selection.text}"\nContext Before: "...${msg.selection.contextBefore.slice(-200)}"\nContext After: "${msg.selection.contextAfter.slice(0, 200)}..."\n\nPlease focus your response on this specific selection.\n`;
+        msg.content = msg.content + selectionBlock;
+      }
 
-    // 2. Save user message immediately if not skipped (e.g. for edit/regenerate)
-    if (!options.skipPromptPersistence) {
-      const userMsg = request.messages[request.messages.length - 1];
-      await this.chatService.createMessage(request.session_id, userMsg.role, userMsg.content);
+      // Handle Document Extraction/Persistence
+      if (msg.attachments && msg.attachments.length > 0) {
+        for (const att of msg.attachments) {
+          const isDoc = att.type === 'application/pdf' || att.type?.startsWith('image/');
+          if (isDoc && !att.documentId) {
+            try {
+              const buffer = Buffer.from(att.content, 'base64');
+              const result = await this.documentProcessor.extractText(buffer, att.type!);
+
+              if (result.text) {
+                // Successful extraction - persist document
+                const doc = await this.prisma.document.create({
+                  data: {
+                    filename: att.filename,
+                    mimeType: att.type!,
+                    extractedText: result.text,
+                    extractionMethod: result.method,
+                  }
+                });
+                att.documentId = doc.id;
+                // Important: Replace base64 content with extracted text for the prompt
+                // and store it so budgeting uses the real text length.
+                if (result.text && result.text.length > 0) {
+                  att.extractedText = result.text;
+                  att.content = result.text; // For prompt loop
+                  this.logger.log(`Extracted ${result.text.length} chars from ${att.filename} using ${result.method}`);
+                } else {
+                  // Extraction failed - log but do NOT crash chat
+                  att.extractionError = result.error || `Extraction failed: ${result.method}`;
+                  att.extractionFailed = true;
+                  this.logger.error(`Document extraction failed for ${att.filename}: ${att.extractionError}`);
+                }
+              } else {
+                // Extraction failed - log but do NOT crash chat
+                att.extractionError = result.error || `Extraction failed: ${result.method}`;
+                att.extractionFailed = true;
+                this.logger.warn(`Document extraction failed for ${att.filename}: ${att.extractionError}`);
+              }
+            } catch (e: any) {
+              // Safety net: extraction failure must NEVER break chat
+              att.extractionError = e?.message || 'Document ingestion threw';
+              att.extractionFailed = true;
+              this.logger.error(`Document ingestion threw for ${att.filename}: ${att.extractionError}`);
+            }
+          } else if (att.documentId && !att.content) {
+            // Already ingested document, fetch text if content is missing (for older history messages)
+            const doc = await this.prisma.document.findUnique({ where: { id: att.documentId } });
+            if (doc) {
+              att.content = doc.extractedText;
+            }
+          }
+        }
+      }
     }
+
+    // 2. Save NEW user messages from request immediately (canonical, unbudgeted)
+    if (!options.skipPromptPersistence) {
+      for (const m of cleanRequestMessages) {
+        if (m.role === 'user') {
+          // Persistence: extractionError will be in the JSON stored in DB
+          await this.chatService.createMessage(request.session_id, m.role, m.content, {
+            attachments: m.attachments,
+            agentId: request.agent_id,
+          });
+        }
+      }
+    }
+
+    // 3. Apply budgeting heuristic for the PROMPT only
+    allMessages = this.budgetContext(allMessages);
+
+    // Finalize attachments for the prompt (inline them)
+    request.messages = allMessages.map(m => {
+      if (m.attachments && m.attachments.length > 0) {
+        let attachmentText = '\n\n--- Attachments ---\n';
+        for (const att of m.attachments) {
+          // Use att.content which now contains extracted text for documents
+          const isDoc = att.documentId || att.type === 'application/pdf' || att.type?.startsWith('image/');
+          const contentToInline = isDoc ? (att.extractedText || att.content) : att.content;
+          
+          if (att.extractionFailed) {
+            attachmentText += `\n[File: ${att.filename}] (Extraction Failed: ${att.extractionError})\n`;
+          } else {
+            attachmentText += `\n[File: ${att.filename}]${att.isTruncated ? ' (Truncated)' : ''}\n\`\`\`\n${contentToInline}\n\`\`\`\n`;
+          }
+        }
+        return {
+          ...m,
+          content: m.content + attachmentText,
+          attachments: undefined
+        };
+      }
+      return m;
+    });
 
     // 3. Request streaming from Agent with AbortController for cancellation
     const abortController = new AbortController();
@@ -345,5 +452,92 @@ export class ChatOrchestratorService {
     };
 
     return this.processAndStreamChat(request, res, { skipPromptPersistence: true });
+  }
+
+  private budgetContext(messages: ChatMessage[]): ChatMessage[] {
+    // Stage 0: Deep copy to avoid mutating canonical objects (which might be used by UI or saved later)
+    let budgetMessages = messages.map(m => ({
+      ...m,
+      attachments: m.attachments ? m.attachments.map(a => ({ ...a })) : undefined,
+      toolResults: m.toolResults ? m.toolResults.map(tr => ({ ...tr })) : undefined,
+    }));
+
+    let totalChars = budgetMessages.reduce((acc, msg) => acc + (msg.content?.length || 0), 0);
+    
+    // Add attachment and tool result length to total
+    budgetMessages.forEach(m => {
+      if (m.attachments) {
+        m.attachments.forEach(a => totalChars += (a.content?.length || 0));
+      }
+      if (m.toolResults) {
+        m.toolResults.forEach(tr => {
+          if (typeof tr.output === 'string') totalChars += tr.output.length;
+        });
+      }
+    });
+
+    if (totalChars <= this.MAX_TOTAL_PROMPT_CHARS) {
+      return budgetMessages;
+    }
+
+    this.logger.warn(`Prompt context (${totalChars} chars) exceeds budgeting heuristic (${this.MAX_TOTAL_PROMPT_CHARS}). Applying prioritized reduction.`);
+
+    // 1. Drop Memory Recall messages first (priority 1 reduction)
+    for (let i = 0; i < budgetMessages.length; i++) {
+        if (budgetMessages[i].memoryRecall) {
+            totalChars -= (budgetMessages[i].content?.length || 0);
+            budgetMessages.splice(i, 1);
+            i--;
+            if (totalChars <= this.MAX_TOTAL_PROMPT_CHARS) return budgetMessages;
+        }
+    }
+
+    // 2. Truncate Older History (priority 2 reduction)
+    let historyIndices: number[] = [];
+    budgetMessages.forEach((m, idx) => {
+        if (m.role !== 'system' && idx < budgetMessages.length - 1) {
+            historyIndices.push(idx);
+        }
+    });
+
+    while (historyIndices.length > 0 && totalChars > this.MAX_TOTAL_PROMPT_CHARS) {
+        const dropIdx = historyIndices.shift()!;
+        const msg = budgetMessages[dropIdx];
+        totalChars -= (msg.content?.length || 0);
+        budgetMessages[dropIdx] = { ...msg, content: '[... History Truncated ...]' };
+        totalChars += budgetMessages[dropIdx].content.length;
+        if (totalChars <= this.MAX_TOTAL_PROMPT_CHARS) return budgetMessages;
+    }
+
+    // 3. Truncate Massive Tool Results (priority 3 reduction)
+    budgetMessages.forEach(m => {
+      if (m.toolResults && totalChars > this.MAX_TOTAL_PROMPT_CHARS) {
+        for (const tr of m.toolResults) {
+          if (typeof tr.output === 'string' && tr.output.length > this.MAX_TOOL_RESULT_CHARS) {
+            const originalLen = tr.output.length;
+            tr.output = tr.output.slice(0, this.MAX_TOOL_RESULT_CHARS) + '\n[... Tool Result Truncated for Prompt Budget ...]';
+            totalChars -= (originalLen - (tr.output as string).length);
+            if (totalChars <= this.MAX_TOTAL_PROMPT_CHARS) return;
+          }
+        }
+      }
+    });
+
+    // 4. Truncate Attachments (priority 4 reduction)
+    budgetMessages.forEach(m => {
+        if (m.attachments && totalChars > this.MAX_TOTAL_PROMPT_CHARS) {
+            for (const att of m.attachments) {
+                if (att.content.length > this.MAX_ATTACHMENT_INLINE_CHARS) {
+                    const originalLen = att.content.length;
+                    att.content = att.content.slice(0, this.MAX_ATTACHMENT_INLINE_CHARS) + '\n[... File Truncated to stay within context limit ...]';
+                    att.isTruncated = true;
+                    totalChars -= (originalLen - att.content.length);
+                    if (totalChars <= this.MAX_TOTAL_PROMPT_CHARS) return;
+                }
+            }
+        }
+    });
+
+    return budgetMessages;
   }
 }

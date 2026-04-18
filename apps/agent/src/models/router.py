@@ -3,7 +3,6 @@ import time
 from typing import AsyncIterator, List, Dict, Any, Optional
 from src.models.base import ModelProvider, ModelInfo, ProviderHealth
 from src.models.providers.ollama import OllamaProvider
-from src.models.providers.anthropic import AnthropicProvider
 from src.config import settings
 
 logger = logging.getLogger("rawclaw.router")
@@ -11,19 +10,14 @@ logger = logging.getLogger("rawclaw.router")
 class ModelRouter:
     def __init__(self):
         self.providers: Dict[str, ModelProvider] = {
-            "ollama": OllamaProvider(),
-            "anthropic": AnthropicProvider()
+            "ollama": OllamaProvider()
         }
         
-        # Check if we have external keys
-        has_anthropic = bool(settings.ANTHROPIC_API_KEY)
-        
         # Complexity to model ID mapping
-        # If no external keys, we route EVERYTHING to ollama to avoid frustrating errors
         self.complexity_map = {
             "low": settings.DEFAULT_LOW_MODEL,
-            "medium": settings.DEFAULT_MEDIUM_MODEL if has_anthropic else settings.DEFAULT_LOW_MODEL,
-            "high": settings.DEFAULT_HIGH_MODEL if has_anthropic else settings.DEFAULT_LOW_MODEL
+            "medium": settings.DEFAULT_MEDIUM_MODEL,
+            "high": settings.DEFAULT_HIGH_MODEL
         }
         
         # Log effective routing for easier debugging

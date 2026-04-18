@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # Models
     DEFAULT_LOW_MODEL: str = "ollama/qwen2.5:1.5b"
     DEFAULT_MEDIUM_MODEL: str = "ollama/llama3.2:3b"
-    DEFAULT_HIGH_MODEL: str = "anthropic/claude-3-sonnet-20240229"
+    DEFAULT_HIGH_MODEL: str = "ollama/llama3:8b"
 
     # Deterministic fallback order for local models
     OLLAMA_FALLBACK_ORDER: list[str] = [
@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     ENABLE_WIKIPEDIA_RAG: bool = True
     AGENT_RELOAD: bool = False
 
+    def is_anthropic_usable(self) -> bool:
+        """Force-off for Ollama-only mode."""
+        return False
+
     class Config:
         env_file = [".env", "../../.env"]
         extra = "ignore"
@@ -54,7 +58,7 @@ except Exception:
         OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
         DEFAULT_LOW_MODEL = "ollama/qwen2.5:1.5b"
         DEFAULT_MEDIUM_MODEL = "ollama/llama3.2:3b"
-        DEFAULT_HIGH_MODEL = "anthropic/claude-3-sonnet-20240229"
+        DEFAULT_HIGH_MODEL = "ollama/llama3:8b"
         OLLAMA_FALLBACK_ORDER = [
             "ollama/qwen2.5:1.5b", 
             "ollama/phi3:3.8b", 
@@ -67,4 +71,9 @@ except Exception:
         SQLITE_CHECKPOINTER_PATH = os.environ.get("SQLITE_CHECKPOINTER_PATH", "./data/checkpoints.db")
         ENABLE_WIKIPEDIA_RAG = os.environ.get("ENABLE_WIKIPEDIA_RAG", "true").lower() == "true"
         AGENT_RELOAD = os.environ.get("AGENT_RELOAD", "false").lower() == "true"
+
+        def is_anthropic_usable(self) -> bool:
+            """Force-off for Ollama-only mode."""
+            return False
+
     settings = Settings()

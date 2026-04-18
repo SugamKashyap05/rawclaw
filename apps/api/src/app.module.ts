@@ -27,6 +27,7 @@ import { SystemController } from './system.controller';
 import { SystemService } from './system.service';
 import { WorkspaceController } from './workspace.controller';
 import { ChatOrchestratorService } from './chat-orchestrator.service';
+import { DocumentProcessorService } from './document-processor.service';
 
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
@@ -72,6 +73,7 @@ import { AuthModule } from './auth/auth.module';
     SettingsService,
     SkillsService,
     SystemService,
+    DocumentProcessorService,
   ],
 })
 export class AppModule {}

@@ -54,6 +54,7 @@ model Message {
   agentId      String?
   errorType    String?
   errorMessage String?
+  attachments  String? // JSON stringified ChatAttachment[]
   durationMs   Int?
 
   createdAt DateTime @default(now())
@@ -172,4 +173,17 @@ model MemoryEntry {
 
   @@index([collection])
   @@map("memory_entries")
+}
+
+model Document {
+  id            String   @id @default(cuid())
+  filename      String
+  mimeType      String
+  extractedText String
+  extractionMethod String @default("unknown")
+  metadata      String?  // JSON stringified
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("documents")
 }

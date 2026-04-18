@@ -7,7 +7,7 @@
     "build": "prisma generate && tsc",
     "lint": "echo 'Linting (ESLint) deferred to Phase 3'",
     "test": "echo 'Unit tests (Jest) deferred to Phase 3'",
-    "check-types": "prisma generate && tsc --noEmit",
+    "check-types": "npm run build --workspace @rawclaw/shared && prisma generate && tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
@@ -31,13 +31,16 @@
     "dotenv": "^16.6.1",
     "ioredis": "^5.10.1",
     "passport": "^0.7.0",
-    "passport-jwt": "^4.0.1"
+    "passport-jwt": "^4.0.1",
+    "pdf-parse": "^2.4.5",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
     "@types/node": "^25.6.0",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pdf-parse": "^1.1.5",
     "prisma": "^7.7.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"

@@ -6,6 +6,9 @@ from src.config import settings
 
 class OllamaProvider(ModelProvider):
     def __init__(self):
+        # NOTE: Verification has confirmed that models with '-cloud' or ':cloud' suffixes 
+        # (e.g. qwen3-coder:480b-cloud) are handled as virtual models by the local Ollama 
+        # daemon. They are accessible via the standard /api/chat endpoint.
         self.base_url = settings.OLLAMA_BASE_URL
 
     async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[Any]:
@@ -39,11 +42,18 @@ class OllamaProvider(ModelProvider):
                     json=payload
                 ) as response:
                     if response.status_code != 200:
-                        error_detail = await response.aread()
+                        error_detail_raw = await response.aread()
+                        error_detail = error_detail_raw.decode()
+                        
+                        error_type = "provider_http_error"
+                        # Heuristic: detect context length/prompt too long errors
+                        if "too long" in error_detail.lower() or "context" in error_detail.lower():
+                            error_type = "context_limit_exceeded"
+                            
                         yield {
                             "type": "error",
-                            "error": "provider_http_error",
-                            "message": f"Ollama returned {response.status_code}: {error_detail.decode()}"
+                            "error": error_type,
+                            "message": f"Ollama returned {response.status_code}: {error_detail}"
                         }
                         return
 

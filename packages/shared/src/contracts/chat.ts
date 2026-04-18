@@ -6,11 +6,41 @@ export interface Citation {
   title?: string;
 }
 
+export interface DocumentSelection {
+  documentId: string;
+  text: string;
+  contextBefore: string;
+  contextAfter: string;
+}
+
+export type DocumentEditAction = 'rewrite' | 'improve' | 'shorten' | 'formalize' | 'translate' | 'format';
+
+export interface DocumentEditRequest {
+  documentId: string;
+  selectedText: string;
+  contextBefore: string;
+  contextAfter: string;
+  action: DocumentEditAction;
+  instruction?: string;
+}
+
 export interface ChatAttachment {
   filename: string;
   type?: string;
   size?: number;
   content: string;
+  /** Link to stable persistence if extracted */
+  documentId?: string;
+  /** Primary byte size of the file before any extraction/truncation */
+  originalSize?: number;
+  /** Set to true if the content was truncated to fit context limits */
+  isTruncated?: boolean;
+  /** Set if extraction failed, so UI can show a clear error */
+  extractionError?: string;
+  /** Explicit flag for extraction failure */
+  extractionFailed?: boolean;
+  /** The text resulting from extraction (duplicated here for immediate context budgeting) */
+  extractedText?: string;
 }
 
 export interface ChatMessage {
@@ -23,6 +53,8 @@ export interface ChatMessage {
   provenanceTrace?: ProvenanceTrace;
   citations?: Citation[];
   attachments?: ChatAttachment[];
+  /** Active selection context for this message turn */
+  selection?: DocumentSelection;
   // P1 Metadata
   modelId?: string;
   isLocal?: boolean;
@@ -37,6 +69,8 @@ export interface ChatMessage {
   // P2 Metadata
   createdAt?: Date | string;
   durationMs?: number;
+  /** Parsed edit suggestion containing originalText, suggestedText, action */
+  editSuggestion?: any;
 }
 
 export type ChatComplexity = 'low' | 'medium' | 'high';
@@ -66,6 +100,10 @@ export interface ChatRequest {
   // P2 Parameters
   temperature?: number;
   top_p?: number;
+  /** Active selection context for the current turn */
+  selection?: DocumentSelection;
+  /** Direct edit request forcing the backend to issue a specific edit intent */
+  editRequest?: DocumentEditRequest;
 }
 
 /**
@@ -118,3 +156,26 @@ export interface ChatStreamChunk {
     durationMs?: number;
   };
 }
+
+export type ChatErrorType = 
+  | 'agent_error'
+  | 'agent_unavailable'
+  | 'provider_routing_failed'
+  | 'provider_offline'
+  | 'request_too_large'
+  | 'context_limit_exceeded'
+  | 'auth_failure'
+  | 'stream_interrupted'
+  | 'unsupported_file_type';
+
+export interface DocumentPayload {
+  id: string;
+  filename: string;
+  mimeType: string;
+  extractedText: string;
+  extractionMethod: string;
+  createdAt: string | Date;
+  updatedAt?: string | Date;
+  metadata?: any;
+}
+

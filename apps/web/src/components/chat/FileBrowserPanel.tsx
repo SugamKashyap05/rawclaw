@@ -100,17 +100,23 @@ export function FileBrowserPanel({ onClose, onAttach }: FileBrowserPanelProps) {
     void loadFiles();
   }, []);
 
+  const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+
   const handleAttachClick = async (path: string, name: string) => {
     try {
       const res = await api.get<{ content: string; filename: string }>(`/workspace/file?path=${encodeURIComponent(path)}`);
+      let content = res.data.content;
+      if (content.length > MAX_ATTACHMENT_BYTES) {
+        content = content.slice(0, MAX_ATTACHMENT_BYTES);
+        console.warn(`Workspace file "${name}" truncated to 2MB for attachment.`);
+      }
       onAttach({
         filename: res.data.filename || name,
-        content: res.data.content,
-        // Calculate size roughly via UTF-8 string length assumption
+        content,
         size: new Blob([res.data.content]).size
       });
     } catch (err: any) {
-      alert(`Failed to attach ${name}: ${err.message}`);
+      setError(`Failed to attach ${name}: ${err.response?.data?.message || err.message}`);
     }
   };
 

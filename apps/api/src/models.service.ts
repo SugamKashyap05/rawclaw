@@ -130,21 +130,22 @@ export class ModelsService {
           { timeout: 5000 },
         ),
       );
-      return Object.fromEntries(
-        Object.entries(res.data.providers ?? {}).map(([name, info]) => [
-          name,
-          {
-            status: (info.status || 'down') as ModelsHealthResponse['providers'][string]['status'],
-            error: info.error ?? null,
-          },
-        ]),
-      );
+      return {
+        ollama: {
+          status: (res.data.providers?.ollama?.status || 'down') as any,
+          error: res.data.providers?.ollama?.error ?? null,
+        },
+      };
     } catch {
       return {
         ollama: { status: 'down', error: 'Agent unavailable' },
-        anthropic: { status: 'down', error: 'Agent unavailable' },
       };
     }
+  }
+
+  private isAnthropicUsable(): boolean {
+    // FORCE-OFF: Ollama-only mode enabled
+    return false;
   }
 
   public async getConfig(): Promise<{
@@ -153,17 +154,17 @@ export class ModelsService {
   }> {
     const saved = await this.prisma.appSetting.findUnique({ where: { key: this.settingsKey } });
     
-    const hasAnthropicKey = !!this.configService.get<string>('ANTHROPIC_API_KEY');
+    const isUsable = this.isAnthropicUsable();
     
     const fallback = {
       routing: {
         low: this.configService.get<string>('DEFAULT_LOW_MODEL') || 'ollama/qwen2.5:1.5b',
-        medium: this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (hasAnthropicKey ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
-        high: this.configService.get<string>('DEFAULT_HIGH_MODEL') || (hasAnthropicKey ? 'anthropic/claude-3-5-sonnet' : 'ollama/llama3.2:3b'),
+        medium: this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (isUsable ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
+        high: this.configService.get<string>('DEFAULT_HIGH_MODEL') || (isUsable ? 'anthropic/claude-3-5-sonnet' : 'ollama/llama3.2:3b'),
       },
       providerConfig: {
         openai: { enabled: false },
-        anthropic: { enabled: hasAnthropicKey },
+        anthropic: { enabled: isUsable },
         google: { enabled: false },
         ollama: {
           enabled: true,
@@ -185,14 +186,37 @@ export class ModelsService {
         routing?: { low?: string; medium?: string; high?: string };
         providerConfig?: Record<string, ProviderConfigState>;
       };
+
+      const finalRouting = {
+        low: parsed.routing?.low || fallback.routing.low,
+        medium: parsed.routing?.medium || fallback.routing.medium,
+        high: parsed.routing?.high || fallback.routing.high,
+      };
+
+      // SANITIZATION: Force all routes to Ollama-only mode
+      if (!finalRouting.low.startsWith('ollama/')) {
+        finalRouting.low = fallback.routing.low;
+      }
+      if (!finalRouting.medium.startsWith('ollama/')) {
+        finalRouting.medium = fallback.routing.medium;
+      }
+      if (!finalRouting.high.startsWith('ollama/')) {
+        finalRouting.high = fallback.routing.high;
+      }
+
       return {
-        routing: {
-          ...fallback.routing,
-          ...(parsed.routing ?? {}),
-        },
+        routing: finalRouting,
         providerConfig: {
           ...fallback.providerConfig,
           ...(parsed.providerConfig ?? {}),
+          // Force non-Ollama providers to be disabled in this mode
+          openai: { enabled: false },
+          anthropic: { enabled: false },
+          google: { enabled: false },
+          ollama: { 
+            ...fallback.providerConfig.ollama, 
+            ...(parsed.providerConfig?.ollama ?? {}) 
+          }
         },
       };
     } catch {

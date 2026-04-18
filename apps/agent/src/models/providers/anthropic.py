@@ -13,7 +13,11 @@ class AnthropicProvider(ModelProvider):
 
     async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[Any]:
         if not self.client:
-            yield "Error: Anthropic API key not configured."
+            yield {
+                "type": "error",
+                "error": "provider_routing_failed",
+                "message": "Anthropic API key not configured or invalid."
+            }
             return
 
         model = options.get("model", "claude-3-haiku-20240307") if options else "claude-3-haiku-20240307"
@@ -96,15 +100,20 @@ class AnthropicProvider(ModelProvider):
                             }
                         }
         except Exception as e:
-            yield f"Error calling Anthropic: {str(e)}"
+            yield {
+                "type": "error",
+                "error": "agent_error",
+                "message": f"Anthropic error: {str(e)}"
+            }
 
     async def health(self) -> ProviderHealth:
-        if not self.api_key:
+        if not settings.is_anthropic_usable():
             return ProviderHealth(status="unconfigured")
-        # Simple list_models check to verify connectivity
+        # Simple check for connectivity if we have a client
+        if not self.client:
+            return ProviderHealth(status="unconfigured")
+            
         try:
-            # Note: There isn't a direct 'ping' endpoint, but we can try to list models
-            # but list_models isn't actually in the AsyncAnthropic client in the same way.
             # We'll just check if key exists for now.
             return ProviderHealth(status="ok")
         except Exception as e:

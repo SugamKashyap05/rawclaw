@@ -6,7 +6,7 @@ import { AUTH_TOKEN_KEY } from '../lib/auth';
 import { ChatSidebar } from '../components/ChatSidebar';
 import { ChatSkeleton } from '../components/chat/ChatSkeleton';
 import { ConfirmationBanner } from '../components/ConfirmationBanner';
-import { FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, FiCopy, FiFolder, FiFileText, FiX, FiPlus } from 'react-icons/fi';
+import { FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, FiCopy, FiFolder, FiFileText, FiX, FiPlus, FiMessageSquare } from 'react-icons/fi';
 import { WebSearchResult } from '../components/chat/WebSearchResult';
 import { BrowserResult } from '../components/chat/BrowserResult';
 import { FileResult } from '../components/chat/FileResult';
@@ -14,7 +14,18 @@ import { CodeResult } from '../components/chat/CodeResult';
 import { TerminalResult } from '../components/chat/TerminalResult';
 import { ProvenanceTrace } from '../components/chat/ProvenanceTrace';
 import { FileBrowserPanel } from '../components/chat/FileBrowserPanel';
-import { ChatAttachment } from '@rawclaw/shared';
+import { ChatAttachment, DocumentSelection, DocumentEditRequest, DocumentEditAction } from '@rawclaw/shared';
+import { DocumentCanvas } from '../components/chat/DocumentCanvas';
+import { ErrorCard } from '../components/chat/ErrorCard';
+
+/** Max file content size to inline into prompt (2MB). Larger files are stored but truncated in prompt. */
+const MAX_ATTACHMENT_PROMPT_CHARS = 2 * 1024 * 1024;
+
+/** Max raw file size allowed for upload to platform (20MB) */
+const MAX_RAW_FILE_BYTES = 20 * 1024 * 1024;
+
+/** Number of bytes to sniff for binary detection */
+const BIN_SNIFF_LIMIT = 2048;
 
 class ChatErrorBoundary extends React.Component<
   { children: React.ReactNode; onReset?: () => void },
@@ -86,7 +97,10 @@ interface SessionMessage {
       | 'mcp_unavailable'
       | 'tool_failed'
       | 'stream_interrupted'
-      | 'auth_failure';
+      | 'auth_failure'
+      | 'request_too_large'
+      | 'context_limit_exceeded'
+      | 'unsupported_file_type';
     message: string;
     details?: string;
   };
@@ -111,8 +125,82 @@ function normalizeErrorType(errorCode?: string): NonNullable<SessionMessage['err
       return 'agent_error';
     case 'agent_unavailable':
       return 'agent_unavailable';
+    case 'request_too_large':
+    case 'context_limit_exceeded':
+      return 'context_limit_exceeded';
+    case 'unsupported_file_type':
+      return 'unsupported_file_type';
     default:
       return 'agent_unavailable';
+  }
+}
+
+/** Safely process a file for attachment. Handles binary detection and size limits. */
+async function processFileForAttachment(file: File): Promise<{ attachment?: ChatAttachment; error?: string }> {
+  // 1. Hard check on raw file size
+  if (file.size > MAX_RAW_FILE_BYTES) {
+    return { error: `"${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max allowed is 20MB.` };
+  }
+
+  const isDoc = file.type === 'application/pdf' || file.type.startsWith('image/');
+  
+  if (isDoc) {
+    // 2. Read binary file as Base64 for ingestion
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64 = (e.target?.result as string).split(',')[1];
+        resolve({
+          attachment: {
+            filename: file.name,
+            size: file.size,
+            type: file.type,
+            content: base64, // Sent as b64 to API
+          }
+        });
+      };
+      reader.onerror = () => resolve({ error: `Failed to read "${file.name}"` });
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // 3. Binary detection via null-byte sniffing for text files
+  try {
+    const chunk = file.slice(0, BIN_SNIFF_LIMIT);
+    const buffer = await chunk.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i++) {
+       if (bytes[i] === 0) {
+         return { error: `"${file.name}" appears to be a binary file. RawClaw currently only supports text, PDF, and image attachments.` };
+       }
+    }
+  } catch (e) {
+    return { error: `Could not read "${file.name}" for analysis.` };
+  }
+
+  // 4. Read content as text
+  try {
+    const text = await file.text();
+    let content = text;
+    let isTruncated = false;
+    
+    // We store the full content up to 20MB in the state (sent to API), 
+    // but we mark it if it exceeds the prompt limit for later brain-side budgeting.
+    if (content.length > MAX_ATTACHMENT_PROMPT_CHARS) {
+      isTruncated = true;
+    }
+
+    return {
+      attachment: {
+        filename: file.name,
+        size: file.size,
+        type: file.type,
+        content,
+        isTruncated,
+      }
+    };
+  } catch (e) {
+    return { error: `Failed to read text from "${file.name}". It may be encoded incorrectly.` };
   }
 }
 
@@ -134,8 +222,12 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
   const isNewChatNavigating = useRef(false);
 
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [showWorkspace, setShowWorkspace] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
+  const [activeSelection, setActiveSelection] = useState<DocumentSelection | null>(null);
+
 
   const stopGeneration = () => {
     if (abortControllerRef.current) {
@@ -295,10 +387,10 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
     }
   };
 
-  const send = async () => {
-    if (!input.trim() || sending) return;
-    const prompt = input.trim();
-    setInput('');
+  const send = async (explicitEditRequest?: DocumentEditRequest) => {
+    if ((!input.trim() && !explicitEditRequest) || sending) return;
+    const prompt = input.trim() || `[Edit] ${explicitEditRequest?.action}`;
+    if (!explicitEditRequest) setInput('');
     setSending(true);
 
     if (!routeSessionId) {
@@ -313,7 +405,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
     }
 
     const currentAttachments = [...attachments];
-    setAttachments([]);
+    if (!explicitEditRequest) setAttachments([]);
 
     setMessages((current) => [
       ...current,
@@ -342,6 +434,8 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
           top_p,
           stream: true,
           agent_id: selectedAgentId || undefined,
+          selection: !explicitEditRequest ? (activeSelection || undefined) : undefined,
+          editRequest: explicitEditRequest,
         }),
         signal: abortController.signal,
       });
@@ -363,12 +457,19 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
         });
       } else {
         const message = error instanceof Error ? error.message : 'Chat failed.';
+        const lowerMsg = message.toLowerCase();
+        let errorType: NonNullable<SessionMessage['error']>['type'] = 'agent_unavailable';
+        let errorLabel = 'Connection failed';
+        if (lowerMsg.includes('entity too large') || lowerMsg.includes('413') || lowerMsg.includes('payload too large')) {
+          errorType = 'request_too_large';
+          errorLabel = 'Request too large';
+        } else if (lowerMsg.includes('provider') || lowerMsg.includes('routing')) {
+          errorType = 'provider_routing_failed';
+        }
         patchAssistant({
           error: {
-            type: message.toLowerCase().includes('provider') || message.toLowerCase().includes('routing')
-              ? 'provider_routing_failed'
-              : 'agent_unavailable',
-            message: 'Connection failed',
+            type: errorType,
+            message: errorLabel,
             details: message
           }
         });
@@ -376,6 +477,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
     } finally {
       setSending(false);
       abortControllerRef.current = null;
+      setActiveSelection(null);
       // Immediate deterministic sync once persistence is confirmed by stream end
       if (sessionId) {
         void loadHistory(sessionId, true);
@@ -530,26 +632,20 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
         }}
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
-        onDrop={(e) => {
+        onDrop={async (e) => {
           e.preventDefault();
           setIsDragging(false);
+          setAttachmentError(null);
           if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            Array.from(e.dataTransfer.files).forEach(file => {
-              const reader = new FileReader();
-              // Try to read as text for simplicity
-              reader.onload = (re) => {
-                const text = re.target?.result as string;
-                if (text) {
-                  setAttachments(prev => [...prev, {
-                    filename: file.name,
-                    size: file.size,
-                    type: file.type,
-                    content: text
-                  }]);
-                }
-              };
-              reader.readAsText(file);
-            });
+            const files = Array.from(e.dataTransfer.files);
+            for (const file of files) {
+              const result = await processFileForAttachment(file);
+              if (result.error) {
+                setAttachmentError(result.error);
+              } else if (result.attachment) {
+                setAttachments(prev => [...prev, result.attachment!]);
+              }
+            }
           }
         }}
       >
@@ -609,6 +705,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
                 message={message} 
                 onEdit={handleEdit}
                 onRegenerate={handleRegenerate}
+                onViewDocument={setActiveDocumentId}
               />
             ))
           )}
@@ -647,6 +744,26 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
             </div>
           )}
 
+          {attachmentError && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '6px 12px', marginBottom: '8px',
+              background: 'rgba(255, 77, 77, 0.1)',
+              border: '1px solid rgba(255, 77, 77, 0.3)',
+              borderRadius: '8px',
+              color: 'var(--error)',
+              fontSize: '0.85rem'
+            }}>
+              <span>{attachmentError}</span>
+              <button 
+                onClick={() => setAttachmentError(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', display: 'flex', padding: 0 }}
+              >
+                <FiX size={14} />
+              </button>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', position: 'relative' }}>
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: '0.7rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid var(--border-glass)' }} title="Attach local file">
               <FiPlus size={20} />
@@ -654,23 +771,18 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
                 type="file" 
                 multiple
                 style={{ display: 'none' }}
-                onChange={(e) => {
+                onChange={async (e) => {
+                  setAttachmentError(null);
                   if (e.target.files) {
-                    Array.from(e.target.files).forEach(file => {
-                      const reader = new FileReader();
-                      reader.onload = (re) => {
-                        const text = re.target?.result as string;
-                        if (text) {
-                          setAttachments(prev => [...prev, {
-                            filename: file.name,
-                            size: file.size,
-                            type: file.type,
-                            content: text
-                          }]);
-                        }
-                      };
-                      reader.readAsText(file);
-                    });
+                    const files = Array.from(e.target.files);
+                    for (const file of files) {
+                      const result = await processFileForAttachment(file);
+                      if (result.error) {
+                        setAttachmentError(result.error);
+                      } else if (result.attachment) {
+                        setAttachments(prev => [...prev, result.attachment!]);
+                      }
+                    }
                   }
                   e.target.value = ''; // reset so same file can trigger again
                 }} 
@@ -707,14 +819,106 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
         
       </div>
 
-      {showWorkspace && (
-        <FileBrowserPanel 
-          onClose={() => setShowWorkspace(false)} 
-          onAttach={(att) => setAttachments(prev => [...prev, att])}
-        />
-      )}
+        {showWorkspace && (
+          <FileBrowserPanel 
+            onClose={() => setShowWorkspace(false)} 
+            onAttach={(att) => setAttachments(prev => [...prev, att])}
+          />
+        )}
 
-    </div>
+        {activeDocumentId && (
+          <DocumentCanvas 
+            documentId={activeDocumentId} 
+            onClose={() => setActiveDocumentId(null)}
+            onSelect={(selection) => {
+              setActiveSelection({ ...selection, documentId: activeDocumentId! });
+            }}
+            activeSelection={activeSelection}
+            editSuggestion={
+              (() => {
+                const assistantMsgs = messages.filter(m => m.role === 'assistant');
+                if (!assistantMsgs.length) return null;
+                const lastMsg = assistantMsgs[assistantMsgs.length - 1];
+                const match = lastMsg.content.match(/<edit_suggestion>([\s\S]*?)<\/edit_suggestion>/);
+                return match ? match[1].trim() : null;
+              })()
+            }
+            onAcceptEdit={() => {
+              // In a real app we'd save this to the backend
+              // For now we just dismiss the selection
+              setActiveSelection(null);
+            }}
+            onRejectEdit={() => setActiveSelection(null)}
+          />
+        )}
+      </div>
+
+    {activeSelection && (
+      <div 
+        style={{
+          position: 'fixed',
+          bottom: '120px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(10, 15, 25, 0.95)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid var(--neon-cyan)',
+          borderRadius: '12px',
+          padding: '12px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          zIndex: 1000,
+          boxShadow: '0 8px 32px rgba(0, 240, 255, 0.15)',
+          minWidth: '320px',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <FiMessageSquare style={{ color: 'var(--neon-cyan)' }} />
+            <span style={{ fontSize: '0.85rem', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-primary)' }}>
+              Selected: "{activeSelection.text}"
+            </span>
+          </div>
+          <button 
+            onClick={() => setActiveSelection(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+          >
+            <FiX size={16} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+          {['rewrite', 'improve', 'shorten', 'formalize'].map((action) => (
+            <button
+              key={action}
+              onClick={() => {
+                const request: DocumentEditRequest = {
+                  documentId: activeSelection.documentId,
+                  selectedText: activeSelection.text,
+                  contextBefore: activeSelection.contextBefore,
+                  contextAfter: activeSelection.contextAfter,
+                  action: action as DocumentEditAction,
+                };
+                void send(request);
+              }}
+              style={{
+                background: 'rgba(0, 240, 255, 0.1)',
+                border: '1px solid rgba(0, 240, 255, 0.3)',
+                color: 'var(--neon-cyan)',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textTransform: 'capitalize'
+              }}
+            >
+              {action}
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
     </ChatErrorBoundary>
   );
 }
@@ -737,19 +941,27 @@ function getErrorMessage(type: string): string {
       return 'Authentication Failed';
     case 'provider_routing_failed':
       return 'Provider Routing Failed';
+    case 'request_too_large':
+      return 'Attachment Too Large';
+    case 'context_limit_exceeded':
+      return 'Context Limit Exceeded';
+    case 'unsupported_file_type':
+      return 'Unsupported File Type';
     default:
       return 'Error';
-  }
+    }
 }
 
 function MessageCard({ 
   message, 
   onEdit, 
-  onRegenerate 
+  onRegenerate,
+  onViewDocument
 }: { 
   message: SessionMessage; 
   onEdit: (id: string, content: string) => void;
   onRegenerate: (id: string) => void;
+  onViewDocument: (id: string) => void;
 }) {
   const isUser = message.role === 'user';
   const [editing, setEditing] = useState(false);
@@ -887,28 +1099,102 @@ function MessageCard({
             </div>
           </div>
         ) : message.content ? (
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{message.content}</div>
+          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+            {message.content.includes('<edit_suggestion>') ? (
+              <>
+                {message.content.replace(/<edit_suggestion>[\s\S]*?<\/edit_suggestion>/g, '')}
+                <div style={{ 
+                  marginTop: '0.5rem', 
+                  padding: '8px 12px', 
+                  background: 'rgba(0, 255, 150, 0.1)', 
+                  border: '1px solid rgba(0, 255, 150, 0.3)',
+                  borderRadius: '6px',
+                  color: '#00ff96',
+                  fontSize: '0.8rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <FiEdit2 size={12} />
+                  Document Edit Suggested — Preview above
+                </div>
+              </>
+            ) : (
+              message.content
+            )}
+          </div>
         ) : !message.error ? (
           <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, opacity: 0.5 }}>...</div>
         ) : null}
 
         {!editing && message.attachments && message.attachments.length > 0 && (
-          <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            {message.attachments.map((att, idx) => (
-              <div key={idx} style={{
-                display: 'flex', alignItems: 'center', gap: '0.4rem',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid var(--border-glass)',
-                padding: '4px 8px',
-                borderRadius: '8px',
-                fontSize: '0.75rem',
-                color: 'var(--text-secondary)'
-              }}>
-                <FiFileText size={12} />
-                <span>{att.filename}</span>
-                {att.size && <span style={{ opacity: 0.5 }}>({(att.size / 1024).toFixed(1)} KB)</span>}
+          <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {message.attachments.map((att, idx) => (
+                <div key={idx} style={{
+                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                  background: att.extractionFailed ? 'rgba(255, 77, 77, 0.05)' : 'rgba(255, 255, 255, 0.05)',
+                  border: att.extractionFailed ? '1px solid rgba(255, 77, 77, 0.3)' : '1px solid var(--border-glass)',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
+                  fontSize: '0.75rem',
+                  color: att.extractionFailed ? 'var(--error)' : 'var(--text-secondary)'
+                }}>
+                  <FiFileText size={12} />
+                  <span>{att.filename}</span>
+                  {att.documentId && (
+                    <button 
+                      onClick={() => onViewDocument(att.documentId!)}
+                      style={{
+                        background: 'var(--neon-cyan)',
+                        color: 'var(--bg-deep)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '2px 6px',
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        marginLeft: '0.4rem'
+                      }}
+                    >
+                      VIEW
+                    </button>
+                  )}
+                  {att.isTruncated && (
+                    <span style={{ 
+                      color: '#ff9d00', 
+                      background: 'rgba(255,157,0,0.1)', 
+                      padding: '1px 5px', 
+                      borderRadius: '4px', 
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      border: '1px solid rgba(255,157,0,0.3)'
+                    }}>
+                      TRUNCATED
+                    </span>
+                  )}
+                  {att.extractionFailed && (
+                    <span style={{ 
+                      color: 'var(--error)', 
+                      background: 'rgba(255,77,77,0.1)', 
+                      padding: '1px 5px', 
+                      borderRadius: '4px', 
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      border: '1px solid rgba(255,77,77,0.3)'
+                    }}>
+                      FAILED
+                    </span>
+                  )}
+                  {att.size && <span style={{ opacity: 0.5 }}>({(att.size / 1024).toFixed(1)} KB)</span>}
+                </div>
+              ))}
+            </div>
+            {message.attachments?.some(a => a.extractionError) && (
+              <div style={{ fontSize: '0.75rem', color: 'var(--error)', opacity: 0.8, paddingLeft: '0.5rem' }}>
+                Note: Some attachments could not be processed fully. Raw content was used if available.
               </div>
-            ))}
+            )}
           </div>
         )}
 
@@ -963,28 +1249,12 @@ function MessageCard({
       </div>
 
       {message.error ? (
-        <div style={{
-          width: '100%',
-          marginTop: '0.8rem',
-          padding: '1rem',
-          background: 'rgba(255,77,77,0.08)',
-          border: '1px solid rgba(255,77,77,0.3)',
-          borderRadius: '12px',
-          color: 'var(--error)'
-        }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-            {getErrorMessage(message.error.type)}
-          </div>
-          <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>
-            {message.error.message}
-            {message.error.details && (
-              <>
-                <br />
-                {message.error.details}
-              </>
-            )}
-          </div>
-        </div>
+        <ErrorCard 
+          type={message.error.type}
+          message={getErrorMessage(message.error.type)}
+          details={message.error.message + (message.error.details ? `\n${message.error.details}` : '')}
+          onRetry={!isUser && message.id ? () => onRegenerate(message.id!) : undefined}
+        />
       ) : null}
 
       {!isUser && message.toolResults && message.toolResults.length > 0 ? (

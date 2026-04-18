@@ -80,17 +80,8 @@ class Executor:
                         },
                     )
 
-            # Load session history from ChromaDB if available
-            if chroma_memory and session_id:
-                history = chroma_memory.get_session_history(session_id, limit=10)
-                if history:
-                    memory_recall_occurred = True
-                    for msg in history:
-                        messages.insert(0, {
-                            "role": msg["role"],
-                            "content": msg["content"],
-                        })
-                    logger.info(f"Loaded {len(history)} messages from memory for session {session_id}")
+            # History is already provided by the API orchestrator in request.messages
+            # We only keep the knowledge brain / memory recall insertion here
 
             # Initial planning step
             trace.add_plan_step(f"Processing request with {len(messages)} messages")

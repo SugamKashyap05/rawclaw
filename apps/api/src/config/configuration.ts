@@ -25,5 +25,6 @@ export default () => {
     authSecret: process.env.AUTH_SECRET || 'A_STRONG_SECRET_FOR_BOOTSTRAP',
     allowLocalAuth: process.env.ALLOW_LOCAL_AUTH || 'true',
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    allowCloudOcr: process.env.ALLOW_CLOUD_OCR === 'true',
   };
 };

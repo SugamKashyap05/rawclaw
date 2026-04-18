@@ -83,6 +83,11 @@ export class ChatController {
     );
   }
 
+  @Get('docs/:id')
+  async getDocument(@Param('id') id: string) {
+    return this.chatService.getDocument(id);
+  }
+
   @Get('models')
   async listModels(): Promise<{ models: ModelInfo[] }> {
     const agentUrl = this.configService.get<string>('agentUrl');
