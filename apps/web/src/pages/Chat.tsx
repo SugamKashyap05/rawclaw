@@ -9,8 +9,13 @@ import { ChatSkeleton } from '../components/chat/ChatSkeleton';
 // import { ConfirmationBanner } from '../components/ConfirmationBanner';
 import { HarnessStatusPanel } from '../components/chat/HarnessStatusPanel';
 import { PendingConfirmationsPanel } from '../components/chat/PendingConfirmationsPanel';
+import { TaskRunPanel } from '../components/chat/TaskRunPanel';
 import { useSystemPoller } from '../hooks/useSystemPoller';
-import { FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, FiCopy, FiFolder, FiFileText, FiX, FiPlus, FiMessageSquare, FiSquare, FiEye, FiAlertTriangle } from 'react-icons/fi';
+import { 
+  FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, 
+  FiCopy, FiFolder, FiFileText, FiX, FiPlus, 
+  FiMessageSquare, FiSquare, FiEye, FiAlertTriangle, FiActivity 
+} from 'react-icons/fi';
 import { WebSearchResult } from '../components/chat/WebSearchResult';
 import { BrowserResult } from '../components/chat/BrowserResult';
 import { FileResult } from '../components/chat/FileResult';
@@ -268,9 +273,22 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const [activeSelection, setActiveSelection] = useState<DocumentSelection | null>(null);
+  const [showTasks, setShowTasks] = useState(false);
 
   // Centralized system poller — replaces scattered useEffect intervals
-  const { status: systemStatus, pendingConfirmations, refresh: refreshPoller } = useSystemPoller(sessionId, 3000);
+  const { 
+    status: systemStatus, 
+    pendingConfirmations, 
+    recentRuns,
+    refresh: refreshPoller 
+  } = useSystemPoller(sessionId, 3000);
+
+  // Auto-expand task panel when background work starts
+  useEffect(() => {
+    if (recentRuns.some(r => r.status === 'running')) {
+      setShowTasks(true);
+    }
+  }, [recentRuns]);
 
 
   const stopGeneration = () => {
@@ -730,6 +748,26 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
             >
               <FiFolder /> Workspace
             </button>
+            <button 
+              className="btn-secondary" 
+              onClick={() => setShowTasks(!showTasks)}
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.5rem', 
+                background: showTasks ? 'rgba(0, 240, 255, 0.1)' : undefined,
+                position: 'relative'
+              }}
+            >
+              <FiActivity /> Tasks
+              {recentRuns.some(r => r.status === 'running') && (
+                <span className="pulse-dot" style={{ 
+                  position: 'absolute', top: -4, right: -4, 
+                  width: 10, height: 10, borderRadius: '50%', 
+                  background: 'var(--neon-cyan)', boxShadow: '0 0 8px var(--neon-cyan)' 
+                }} />
+              )}
+            </button>
           </div>
         </div>
 
@@ -927,6 +965,43 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
             onClose={() => setShowWorkspace(false)} 
             onAttach={(att) => setAttachments(prev => [...prev, att])}
           />
+        )}
+
+        {showTasks && (
+          <aside 
+            className="glass-card task-sidebar-float"
+            style={{ 
+              width: '320px', 
+              display: 'flex', 
+              flexDirection: 'column',
+              borderLeft: '1px solid var(--border-glass)',
+              background: 'rgba(8, 8, 14, 0.8)',
+              backdropFilter: 'blur(20px)',
+              marginLeft: '-1rem',
+              height: '100%',
+              zIndex: 10
+            }}
+          >
+            <div style={{ 
+              padding: '1.2rem', 
+              borderBottom: '1px solid var(--border-glass)', 
+              display: 'flex', 
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <FiActivity style={{ color: 'var(--neon-cyan)' }} />
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Background Runs</h3>
+              </div>
+              <button 
+                onClick={() => setShowTasks(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
+                <FiX size={18} />
+              </button>
+            </div>
+            <TaskRunPanel runs={recentRuns} currentSessionId={sessionId} onRefresh={refreshPoller} />
+          </aside>
         )}
 
         {activeDocumentId && (

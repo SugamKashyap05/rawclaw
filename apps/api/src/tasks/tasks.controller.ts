@@ -81,6 +81,12 @@ export class TasksController {
     return this.tasksService.deleteRun(runId);
   }
 
+  @Post('runs/:runId/resume')
+  @HttpCode(HttpStatus.ACCEPTED)
+  resumeRun(@Param('runId') runId: string, @Body('sessionId') sessionId: string) {
+    return this.tasksService.resumeRun(runId, sessionId);
+  }
+
   @Post('runs/:runId/update')
   @HttpCode(HttpStatus.OK)
   updateRun(@Param('runId') runId: string, @Body() dto: UpdateTaskRunDto) {

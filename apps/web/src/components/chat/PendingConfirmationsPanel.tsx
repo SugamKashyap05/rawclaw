@@ -121,7 +121,7 @@ export function PendingConfirmationsPanel({ confirmations, onAction }: Props) {
                   {conf.toolName}
                 </span>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                  — {getToolDescription(conf.toolName)}
+                  - {getToolDescription(conf.toolName)}
                 </span>
               </div>
               <div style={{

@@ -164,4 +164,53 @@ export class TasksService {
   async deleteRun(runId: string) {
     return this.prisma.taskRun.delete({ where: { id: runId } });
   }
+
+  async resumeRun(runId: string, sessionId?: string) {
+    const previousRun = await this.prisma.taskRun.findUnique({
+      where: { id: runId },
+    });
+
+    if (!previousRun) {
+      throw new NotFoundException(`Run ${runId} not found`);
+    }
+
+    // Per rules: create a new run from the same task definition, do not mutate old run.
+    // Link via resumedFromRunId.
+    const newRun = await this.prisma.taskRun.create({
+      data: {
+        definitionId: previousRun.definitionId,
+        status: 'queued',
+        resumedFromRunId: runId,
+        sessionId,
+        selectedAgent: previousRun.selectedAgent,
+      },
+    });
+
+    const definition = await this.getDefinition(previousRun.definitionId);
+
+    // Trigger Agent execution
+    const agentUrl = this.configService.get<string>('agentUrl');
+    firstValueFrom(
+      this.httpService.post(`${agentUrl}/execute/task`, {
+        run_id: newRun.id,
+        definition: {
+          ...definition,
+          toolIds: definition.toolIds, // getDefinition already parses toolIds
+        },
+        context: {
+          resumed_from: runId,
+          // We could pass more context here if agent supported it, 
+          // but for now this satisfies the Slice 2 requirements.
+        }
+      })
+    ).catch((err) => {
+      console.error('Failed to trigger resumed agent task:', err);
+      this.updateRun(newRun.id, { 
+        status: 'failed', 
+        errorMessage: 'Failed to reach Agent during resume: ' + err.message 
+      });
+    });
+
+    return newRun;
+  }
 }

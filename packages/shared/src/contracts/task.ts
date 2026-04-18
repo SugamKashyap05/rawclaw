@@ -23,9 +23,11 @@ export interface TaskRun {
   finishedAt?: string;
   selectedAgent?: string;
   outputPath?: string;
-  provenance?: ProvenanceTrace;
-  errorMessage?: string;
-  createdAt: string;
+   provenance?: ProvenanceTrace;
+   errorMessage?: string;
+   resumedFromRunId?: string;
+   sessionId?: string;
+   createdAt: string;
   steps: RunStep[];
   task?: Task;
 }

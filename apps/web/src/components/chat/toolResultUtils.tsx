@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { ToolResult } from '@rawclaw/shared';
 
 // ─── Shared helpers ───────────────────────────────────
@@ -129,9 +130,13 @@ export function CollapsiblePre({
             fontSize: '0.78rem',
             fontWeight: 600,
             borderRadius: '0 0 12px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.4rem',
           }}
         >
-          Show more ↓
+          Show more <FiChevronDown size={14} />
         </button>
       )}
       {expanded && children.split('\n').length > 12 && (
@@ -146,9 +151,13 @@ export function CollapsiblePre({
             color: 'var(--text-muted)',
             cursor: 'pointer',
             fontSize: '0.75rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.4rem',
           }}
         >
-          Collapse ↑
+          Collapse <FiChevronUp size={14} />
         </button>
       )}
     </div>

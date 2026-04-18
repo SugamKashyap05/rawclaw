@@ -47,7 +47,7 @@ export function HarnessStatusPanel({ sessionId, agentName, modelDisplayLabel, mo
           <FiHash size={13} style={{ color: 'var(--text-muted)' }} />
           <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Session:</span>
           <span className="mono" style={{ color: 'var(--text-primary)', fontSize: '0.82rem' }}>
-            {sessionId ? sessionId.slice(0, 8) + '\u2026' : 'none'}
+            {sessionId ? sessionId.slice(0, 8) + '...' : 'none'}
           </span>
         </div>
 

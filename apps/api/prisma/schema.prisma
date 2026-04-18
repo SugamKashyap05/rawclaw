@@ -91,6 +91,8 @@ model TaskRun {
   outputPath      String?
   provenance      String?         // JSON stringified ProvenanceTrace
   errorMessage    String?
+  resumedFromRunId String?
+  sessionId       String?
   createdAt       DateTime        @default(now())
   steps           RunStep[]
 
