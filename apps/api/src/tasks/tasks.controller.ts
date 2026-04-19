@@ -105,15 +105,10 @@ export class TasksController {
     }
 
     const filePath = path.join(process.cwd(), '../..', run.outputPath);
-    if (!fs.existsSync(filePath)) {
-      throw new Error('Artifact file not found on disk');
-    }
-
     const fileName = path.basename(filePath);
     res.set({
       'Content-Disposition': `attachment; filename="${fileName}"`,
     });
-
     const file = fs.createReadStream(filePath);
     return new StreamableFile(file);
   }

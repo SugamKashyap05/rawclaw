@@ -5,6 +5,16 @@ import { ToolConfirmation } from '@rawclaw/shared';
 
 const MAX_WAIT_SECONDS = 120;
 
+function getToolDescription(toolName: string): string {
+  if (toolName === 'read_file') return 'Read a file from your filesystem';
+  if (toolName === 'write_file' || toolName === 'create_file') return 'Write or create a file';
+  if (toolName === 'execute_command' || toolName === 'run_terminal') return 'Execute a shell command';
+  if (toolName.includes('search') || toolName.includes('fetch') || toolName.includes('browse'))
+    return 'Access the network';
+  if (toolName.includes('delete')) return 'Delete a resource';
+  return 'Execute an operation requiring approval';
+}
+
 interface Props {
   /** Pre-fetched confirmations from the centralized poller */
   confirmations: ToolConfirmation[];
@@ -24,18 +34,20 @@ export function PendingConfirmationsPanel({ confirmations, onAction }: Props) {
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
   const [expandedInputs, setExpandedInputs] = useState<Record<string, boolean>>({});
 
-  // 1-second countdown tick
+  // 1-second countdown tick — only re-renders if at least one value changed
   useEffect(() => {
     if (confirmations.length === 0) return;
 
     const tick = setInterval(() => {
-      setCountdowns(() => {
+      setCountdowns(prev => {
         const next: Record<string, number> = {};
+        let changed = false;
         for (const conf of confirmations) {
           const elapsed = Math.floor((Date.now() - new Date(conf.requestedAt).getTime()) / 1000);
           next[conf.id] = Math.max(0, MAX_WAIT_SECONDS - elapsed);
+          if (prev[conf.id] !== next[conf.id]) changed = true;
         }
-        return next;
+        return changed ? next : prev;
       });
     }, 1000);
 
@@ -59,16 +71,6 @@ export function PendingConfirmationsPanel({ confirmations, onAction }: Props) {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const getToolDescription = (toolName: string): string => {
-    if (toolName === 'read_file') return 'Read a file from your filesystem';
-    if (toolName === 'write_file' || toolName === 'create_file') return 'Write or create a file';
-    if (toolName === 'execute_command' || toolName === 'run_terminal') return 'Execute a shell command';
-    if (toolName.includes('search') || toolName.includes('fetch') || toolName.includes('browse'))
-      return 'Access the network';
-    if (toolName.includes('delete')) return 'Delete a resource';
-    return 'Execute an operation requiring approval';
   };
 
   if (confirmations.length === 0) return null;

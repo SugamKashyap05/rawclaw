@@ -147,15 +147,13 @@ export class TasksService {
     });
 
     if (dto.steps && dto.steps.length > 0) {
-      // For simplicity, we just sync the steps provided
-      // In a real app we might append them
-      for (const step of dto.steps) {
-        await this.prisma.runStep.upsert({
+      await Promise.all(dto.steps.map(step =>
+        this.prisma.runStep.upsert({
           where: { id: step.id || 'new-step-' + step.stepIndex },
           update: { ...step, runId },
           create: { ...step, runId, id: undefined },
-        });
-      }
+        })
+      ));
     }
 
     return run;

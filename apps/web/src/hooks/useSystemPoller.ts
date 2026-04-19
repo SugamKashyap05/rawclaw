@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../lib/api';
 import { SystemStatusSnapshot, ToolConfirmation, TaskRun } from '@rawclaw/shared';
+import { DEFAULT_SYSTEM_STATUS } from '../lib/constants';
 
 interface SystemPollerData {
   status: SystemStatusSnapshot | null;
@@ -10,26 +11,12 @@ interface SystemPollerData {
   isRefreshing: boolean;
 }
 
-const EMPTY_STATUS: SystemStatusSnapshot = {
-  services: {
-    api: 'down',
-    agent: 'down',
-    redis: 'down',
-    chroma: 'down',
-    database: 'down',
-  },
-  websocket: { connected: false },
-  git: { branch: 'unknown', lastCommit: null },
-  counts: { agents: 0, mcpServers: 0, pendingTasks: 0 },
-  updatedAt: new Date(0).toISOString(),
-};
-
 /**
  * Centralized polling hook for Chat view to avoid multiple scattered intervals.
  * Polls for system status and pending tool confirmations.
  */
 export function useSystemPoller(sessionId?: string, intervalMs = 3000): SystemPollerData {
-  const [status, setStatus] = useState<SystemStatusSnapshot>(EMPTY_STATUS);
+  const [status, setStatus] = useState<SystemStatusSnapshot>(DEFAULT_SYSTEM_STATUS);
   const [pendingConfirmations, setPendingConfirmations] = useState<ToolConfirmation[]>([]);
   const [recentRuns, setRecentRuns] = useState<TaskRun[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);

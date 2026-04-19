@@ -283,12 +283,14 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
     refresh: refreshPoller 
   } = useSystemPoller(sessionId, 3000);
 
+  const hasRunningRun = useMemo(() => recentRuns.some(r => r.status === 'running'), [recentRuns]);
+
   // Auto-expand task panel when background work starts
   useEffect(() => {
-    if (recentRuns.some(r => r.status === 'running')) {
+    if (hasRunningRun) {
       setShowTasks(true);
     }
-  }, [recentRuns]);
+  }, [hasRunningRun]);
 
 
   const stopGeneration = () => {
@@ -540,10 +542,6 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
       setSending(false);
       abortControllerRef.current = null;
       setActiveSelection(null);
-      // Immediate deterministic sync once persistence is confirmed by stream end
-      if (sessionId) {
-        void loadHistory(sessionId, true);
-      }
     }
   };
 
@@ -760,7 +758,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
               }}
             >
               <FiActivity /> Tasks
-              {recentRuns.some(r => r.status === 'running') && (
+              {hasRunningRun && (
                 <span className="pulse-dot" style={{ 
                   position: 'absolute', top: -4, right: -4, 
                   width: 10, height: 10, borderRadius: '50%', 
@@ -1149,36 +1147,6 @@ function MessageCard({
   const [copied, setCopied] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
 
-  const formatTime = (date?: string | Date) => {
-    if (!date) return '';
-    const d = new Date(date);
-    const now = new Date();
-    
-    // Normalize to start of day for comparison
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const startOfYesterday = startOfToday - 86400000;
-    const msgTime = d.getTime();
-
-    const timeStr = new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
-      minute: 'numeric',
-      hour12: true,
-    }).format(d);
-
-    if (msgTime >= startOfToday) {
-      return `Today at ${timeStr}`;
-    } else if (msgTime >= startOfYesterday) {
-      return `Yesterday at ${timeStr}`;
-    } else {
-      const dateStr = new Intl.DateTimeFormat('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: now.getFullYear() === d.getFullYear() ? undefined : 'numeric'
-      }).format(d);
-      return `${dateStr} at ${timeStr}`;
-    }
-  };
-
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -1475,6 +1443,36 @@ function ToolResultRenderer({ result }: { result: ToolResult }) {
       </pre>
     </div>
   );
+}
+
+export function formatTime(date?: string | Date) {
+  if (!date) return '';
+  const d = new Date(date);
+  const now = new Date();
+
+  // Normalize to start of day for comparison
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfYesterday = startOfToday - 86400000;
+  const msgTime = d.getTime();
+
+  const timeStr = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: true,
+  }).format(d);
+
+  if (msgTime >= startOfToday) {
+    return `Today at ${timeStr}`;
+  } else if (msgTime >= startOfYesterday) {
+    return `Yesterday at ${timeStr}`;
+  } else {
+    const dateStr = new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: now.getFullYear() === d.getFullYear() ? undefined : 'numeric'
+    }).format(d);
+    return `${dateStr} at ${timeStr}`;
+  }
 }
 
 const fieldStyle = {
