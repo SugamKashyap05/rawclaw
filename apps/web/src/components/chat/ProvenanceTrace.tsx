@@ -1,13 +1,16 @@
 import { ProvenanceTrace as IProvenanceTrace } from '@rawclaw/shared';
-import { FiActivity, FiTool, FiCheckCircle, FiCpu, FiAlertTriangle, FiZap } from 'react-icons/fi';
+import { useState } from 'react';
+import { FiActivity, FiTool, FiCheckCircle, FiCpu, FiAlertTriangle, FiZap, FiChevronDown, FiChevronUp, FiLink } from 'react-icons/fi';
 
 interface ProvenanceTraceProps {
   trace: Partial<IProvenanceTrace> | null | undefined;
 }
 
 export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const steps = Array.isArray(trace?.steps) ? trace.steps : [];
-  const traceId = typeof trace?.run_id === 'string' && trace.run_id.trim() ? trace.run_id : 'unknown';
+  const summary = trace?.summary;
+  const traceId = typeof trace?.runId === 'string' ? trace.runId : (typeof (trace as any)?.run_id === 'string' ? (trace as any).run_id : 'unknown');
 
   if (!steps.length) {
     return null;
@@ -49,30 +52,76 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
       }}
     >
       <div
+        onClick={() => setIsExpanded(!isExpanded)}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: '0.65rem',
-          marginBottom: '1rem',
+          padding: isExpanded ? '0 0.2rem 1rem 0.2rem' : '0 0.2rem',
           color: 'var(--text-secondary)',
           fontWeight: 600,
           fontSize: '0.75rem',
           letterSpacing: '0.1em',
-          textTransform: 'uppercase'
+          textTransform: 'uppercase',
+          cursor: 'pointer',
+          userSelect: 'none'
         }}
       >
         <FiActivity style={{ color: 'var(--neon-cyan)', filter: 'drop-shadow(0 0 5px var(--neon-cyan-glow))' }} />
         REASONING TRACE
-        <span style={{ marginLeft: 'auto', fontSize: '0.7rem', opacity: 0.5 }}>ID: {traceId.slice(0, 8)}</span>
+        {summary && !isExpanded && (
+          <span style={{ 
+            color: 'var(--text-muted)', 
+            textTransform: 'none', 
+            fontWeight: 400, 
+            letterSpacing: 'normal',
+            marginLeft: '0.4rem',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '320px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem'
+          }}>
+            <span style={{ opacity: 0.5 }}>|</span>
+            {summary.brief}
+          </span>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: '0.7rem', opacity: 0.5, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {trace?.runIds && trace.runIds.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.3rem', marginRight: '0.5rem' }}>
+              {trace.runIds.slice(0, 2).map(rid => (
+                <span key={rid} title={`Linked Task Run: ${rid}`} style={{ 
+                  background: 'rgba(0, 255, 163, 0.1)', 
+                  color: '#00ffa3', 
+                  padding: '1px 5px', 
+                  borderRadius: '4px', 
+                  fontSize: '0.65rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '2px',
+                  border: '1px solid rgba(0, 255, 163, 0.2)'
+                }}>
+                  <FiLink size={8} /> {rid.slice(0, 6)}
+                </span>
+              ))}
+            </div>
+          )}
+          {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
+          ID: {traceId.slice(0, 8)}
+        </span>
       </div>
 
-      <div style={{ display: 'grid', gap: '0.6rem' }}>
-        {steps.map((step, idx) => {
-          const duration = typeof step.duration_ms === 'number' ? step.duration_ms : 0;
-          const timing = getTimeStatus(duration);
-          const stepType = typeof step.step_type === 'string' ? step.step_type : 'unknown';
-          const toolName = typeof step.tool_name === 'string' ? step.tool_name : null;
-          const outputSummary = typeof step.output_summary === 'string' ? step.output_summary : '';
+      {isExpanded && (
+        <div style={{ display: 'grid', gap: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+          {steps.map((step, idx) => {
+            const rawStep = step as any;
+            const duration = typeof step.durationMs === 'number' ? step.durationMs : (typeof rawStep.duration_ms === 'number' ? rawStep.duration_ms : 0);
+            const timing = getTimeStatus(duration);
+            const stepType = typeof step.stepType === 'string' ? step.stepType : (typeof rawStep.step_type === 'string' ? rawStep.step_type : 'unknown');
+            const toolName = typeof step.toolName === 'string' ? step.toolName : (typeof rawStep.tool_name === 'string' ? rawStep.tool_name : null);
+            const outputSummary = typeof step.outputSummary === 'string' ? step.outputSummary : (typeof rawStep.output_summary === 'string' ? rawStep.output_summary : '');
 
           return (
             <div
@@ -108,8 +157,9 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
               </div>
             </div>
           );
-        })}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 };

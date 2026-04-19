@@ -34,7 +34,7 @@ export function PendingConfirmationsPanel({ confirmations, onAction }: Props) {
   const [countdowns, setCountdowns] = useState<Record<string, number>>({});
   const [expandedInputs, setExpandedInputs] = useState<Record<string, boolean>>({});
 
-  // 1-second countdown tick — only re-renders if at least one value changed
+  // 1-second countdown tick - only re-renders if at least one value changed
   useEffect(() => {
     if (confirmations.length === 0) return;
 

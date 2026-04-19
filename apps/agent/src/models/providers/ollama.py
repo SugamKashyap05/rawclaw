@@ -1,8 +1,101 @@
 import httpx
 import json
-from typing import AsyncIterator, List, Dict, Any
+import re
+from typing import AsyncIterator, List, Dict, Any, Optional
 from src.models.base import ModelProvider, ModelInfo, ProviderHealth
 from src.config import settings
+
+
+def _extract_textual_tool_calls(content: str) -> tuple[str, List[Dict[str, Any]]]:
+    """
+    Extract textual tool-call markup from model output.
+
+    Some models emit tool calls as text markup like:
+    - <minimax:tool_call>{"name": "web_search", "arguments": {...}}</minimax:tool_call>
+    - <invoke name="web_search">...</invoke>
+    - <tool>web_search</tool>
+
+    Returns: (cleaned_content, list of tool_call dicts)
+    """
+    if not content or not isinstance(content, str):
+        return content, []
+
+    tool_calls = []
+    cleaned = content
+
+    # Pattern 1: <minimax:tool_call>{"name": "...", "arguments": {...}}</minimax:tool_call>
+    # Pattern 2: <minimax:tool_call>{"function": {"name": "...", "arguments": {...}}}</minimax:tool_call>
+    minimax_pattern = r'<minimax:tool_call>(.*?)</minimax:tool_call>'
+    for match in re.finditer(minimax_pattern, content, re.DOTALL):
+        try:
+            data = json.loads(match.group(1))
+            # Handle both formats
+            if "name" in data:
+                tool_calls.append({
+                    "name": data.get("name", ""),
+                    "arguments": data.get("arguments", {})
+                })
+            elif "function" in data:
+                func = data["function"]
+                tool_calls.append({
+                    "name": func.get("name", ""),
+                    "arguments": func.get("arguments", {})
+                })
+            # Remove from cleaned content
+            cleaned = cleaned.replace(match.group(0), "")
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+    # Pattern 3: <invoke name="..."><parameter name="...">...</parameter>...</invoke>
+    invoke_pattern = r'<invoke\s+name="([^"]+)"[^>]*>(.*?)</invoke>'
+    for match in re.finditer(invoke_pattern, content, re.DOTALL):
+        try:
+            tool_name = match.group(1)
+            inner = match.group(2)
+            # Extract parameters
+            args = {}
+            param_pattern = r'<parameter\s+name="([^"]+)"[^>]*>(.*?)</parameter>'
+            for pmatch in re.finditer(param_pattern, inner, re.DOTALL):
+                args[pmatch.group(1)] = pmatch.group(2).strip()
+
+            tool_calls.append({
+                "name": tool_name,
+                "arguments": args
+            })
+            cleaned = cleaned.replace(match.group(0), "")
+        except (AttributeError, IndexError):
+            pass
+
+    # Pattern 4: <tool_call>{"name": "...", "arguments": {...}}</tool_call> (generic)
+    generic_pattern = r'<tool_call>(.*?)</tool_call>'
+    for match in re.finditer(generic_pattern, content, re.DOTALL):
+        try:
+            data = json.loads(match.group(1))
+            if "name" in data:
+                tool_calls.append({
+                    "name": data.get("name", ""),
+                    "arguments": data.get("arguments", {})
+                })
+            cleaned = cleaned.replace(match.group(0), "")
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+    # Pattern 5: <tool>name</tool> with arguments in various formats
+    tool_pattern = r'<tool>([^<]+)</tool>'
+    for match in re.finditer(tool_pattern, content, re.DOTALL):
+        try:
+            tool_name = match.group(1).strip()
+            # Look for following arguments in various formats
+            tool_calls.append({
+                "name": tool_name,
+                "arguments": {}
+            })
+            cleaned = cleaned.replace(match.group(0), "")
+        except AttributeError:
+            pass
+
+    return cleaned.strip(), tool_calls
+
 
 class OllamaProvider(ModelProvider):
     def __init__(self):
@@ -31,8 +124,9 @@ class OllamaProvider(ModelProvider):
             payload["options"]["top_p"] = options["top_p"]
 
         if tools:
-            # Ollama /api/chat supports tools in newer versions, but we'll stick to basic chat for P0 stability
-            pass
+            # Ollama /api/chat supports tools in newer versions (0.2.8+)
+            # Pass tools to the model for native function calling support
+            payload["tools"] = tools
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             try:
@@ -63,11 +157,46 @@ class OllamaProvider(ModelProvider):
                         try:
                             chunk = json.loads(line)
 
-                            # Handle content
+                            # Handle tool calls from Ollama
+                            # Ollama returns tool calls in message.tool_calls
+                            if "message" in chunk and "tool_calls" in chunk["message"]:
+                                tool_calls = chunk["message"]["tool_calls"]
+                                if tool_calls:
+                                    for tc in tool_calls:
+                                        # Ollama format: {"function": {"name": "...", "arguments": {...}}}
+                                        func = tc.get("function", {})
+                                        tool_name = func.get("name", "")
+                                        arguments = func.get("arguments", {})
+                                        if tool_name:
+                                            yield {
+                                                "type": "tool_call",
+                                                "tool_call": {
+                                                    "name": tool_name,
+                                                    "arguments": arguments,
+                                                }
+                                            }
+
+                            # Handle content - also check for textual tool-call markup
                             if "message" in chunk and "content" in chunk["message"]:
                                 content = chunk["message"]["content"]
                                 if content:
-                                    yield content
+                                    # Check for textual tool-call markup in content
+                                    cleaned_content, textual_tool_calls = _extract_textual_tool_calls(content)
+
+                                    # Yield any textual tool calls found
+                                    for tc in textual_tool_calls:
+                                        if tc.get("name"):
+                                            yield {
+                                                "type": "tool_call",
+                                                "tool_call": {
+                                                    "name": tc["name"],
+                                                    "arguments": tc.get("arguments", {}),
+                                                }
+                                            }
+
+                                    # Yield cleaned content (without tool markup)
+                                    if cleaned_content:
+                                        yield cleaned_content
 
                             if chunk.get("done"):
                                 break

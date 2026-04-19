@@ -43,7 +43,7 @@ body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background-color: var(--bg-obsidian);
-  background-image: 
+  background-image:
     radial-gradient(circle at 0% 0%, rgba(157, 0, 255, 0.05) 0%, transparent 50%),
     radial-gradient(circle at 100% 100%, rgba(0, 240, 255, 0.05) 0%, transparent 50%);
   background-attachment: fixed;
@@ -51,6 +51,14 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+}
+
+/* Chat page specific: app shell that fills viewport and prevents body scroll */
+.chat-page-shell {
+  display: flex;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
 }
 
 code, pre, .mono {
@@ -239,6 +247,84 @@ code, pre, .mono {
   100% { opacity: 0.4; transform: scale(0.9); }
 }
 
+/* Utility animation classes */
+.spin {
+  animation: icon-spin 1s linear infinite;
+}
+
+.pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.pulse-dot {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(150%); }
+  100% { transform: translateX(-100%); }
+}
+
+/* Micro buttons */
+.btn-tiny {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-tiny:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  border-color: var(--border-neon);
+}
+
+.btn-tiny:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border-color: var(--border-neon);
+}
+
+.btn-danger {
+  background: transparent;
+  border: 1px solid var(--error);
+  color: var(--error);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.btn-danger:hover {
+  background: var(--error);
+  color: white;
+  box-shadow: 0 0 12px rgba(255, 61, 0, 0.3);
+}
+
 textarea,
 input,
 select,
@@ -267,6 +353,87 @@ a {
 
 .message-actions button:hover {
   opacity: 1;
+  color: var(--neon-cyan);
+}
+
+/* Chat Layout - Flex containment for proper scroll behavior */
+.chat-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-right: 0.25rem;
+}
+
+.chat-sidebar {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-glass);
+  background: rgba(8, 8, 14, 0.8);
+  backdrop-filter: blur(20px);
+  height: 100%;
+  max-height: 100%;
+  z-index: 10;
+  overflow: hidden;
+}
+
+/* Chat page container - ensures proper flex behavior within shell */
+.chat-page-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Collapsible sidebar states */
+.chat-sidebar-collapsed {
+  width: 48px !important;
+  min-width: 48px;
+  transition: width 0.2s ease;
+}
+
+.chat-sidebar-collapsed .sidebar-content {
+  display: none;
+}
+
+.chat-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.chat-sidebar-toggle:hover {
+  background: rgba(0, 240, 255, 0.1);
+  border-color: var(--neon-cyan);
   color: var(--neon-cyan);
 }
 

@@ -35,7 +35,11 @@ export function useSystemPoller(sessionId?: string, intervalMs = 3000): SystemPo
         activeSessionRef.current 
           ? api.get<ToolConfirmation[]>(`/tools/confirm?sessionId=${activeSessionRef.current}`).catch(() => null)
           : Promise.resolve(null),
-        api.get<TaskRun[]>('/tasks/runs/recent').catch(() => null)
+        api.get<TaskRun[]>(
+          activeSessionRef.current
+            ? `/tasks/runs/recent?sessionId=${activeSessionRef.current}`
+            : '/tasks/runs/recent'
+        ).catch(() => null)
       ]);
 
       if (statusRes?.data) {

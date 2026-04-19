@@ -151,11 +151,13 @@ function App() {
     );
   }
 
+  const isChatPage = location.pathname.startsWith('/chat');
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', maxHeight: '100vh', overflow: 'hidden' }}>
+    <div className={isChatPage ? 'chat-page-shell' : ''} style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar counts={systemStatus?.counts} />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: isChatPage ? 'hidden' : 'auto' }}>
         <header
           style={{
             display: 'flex',
@@ -169,6 +171,7 @@ function App() {
             position: 'relative',
             zIndex: 60,
             overflow: 'visible',
+            flexShrink: 0,
           }}
         >
           <div>
@@ -179,9 +182,9 @@ function App() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: '320px', position: 'relative', overflow: 'visible' }}>
-            <ModelSelector 
-              selectedModel={selectedModel} 
-              onModelChange={setSelectedModel} 
+            <ModelSelector
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
               temperature={temperature}
               top_p={top_p}
               onParamsChange={(t, p) => {
@@ -195,12 +198,12 @@ function App() {
           </div>
         </header>
 
-        <main className="custom-scrollbar" style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
+        <main style={{ flex: 1, overflow: isChatPage ? 'hidden' : 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route 
-              path="/chat/:sessionId?" 
-              element={<Chat selectedModel={selectedModel} temperature={temperature} top_p={top_p} />} 
+            <Route
+              path="/chat/:sessionId?"
+              element={<Chat selectedModel={selectedModel} temperature={temperature} top_p={top_p} />}
             />
             <Route path="/agents" element={<Agents />} />
             <Route path="/mcp" element={<MCPServers />} />

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { ToolResult } from '@rawclaw/shared';
 
-// ─── Shared helpers ───────────────────────────────────
+// --- Shared helpers -----------------------------------
 
 export function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -32,7 +32,7 @@ const statusColors: Record<ToolExecStatus, string> = {
   FAILED: 'var(--error, #ef4444)',
 };
 
-// ─── Reusable UI pieces ────────────────────────────────
+// --- Reusable UI pieces --------------------------------
 
 /** Small colored status badge */
 export function StatusBadge({ status }: { status: ToolExecStatus }) {

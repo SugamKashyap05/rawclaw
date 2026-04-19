@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
-import { FiPlus, FiClock, FiX } from 'react-icons/fi';
+import { FiPlus, FiClock, FiX, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { api } from '../lib/api';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -12,8 +12,22 @@ interface Session {
 
 export function ChatSidebar() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const { sessionId } = useParams();
   const navigate = useNavigate();
+
+  // Load collapsed state from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('rawclaw_chat_sidebar_collapsed');
+    if (saved) {
+      setIsCollapsed(saved === 'true');
+    }
+  }, []);
+
+  // Save collapsed state when it changes
+  useEffect(() => {
+    localStorage.setItem('rawclaw_chat_sidebar_collapsed', String(isCollapsed));
+  }, [isCollapsed]);
 
   useEffect(() => {
     fetchSessions();
@@ -50,33 +64,56 @@ export function ChatSidebar() {
   };
 
   return (
-    <div style={{
-      width: '280px',
-      height: '100%',
-      background: 'rgba(255, 255, 255, 0.02)',
-      borderRight: '1px solid var(--border-glass)',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden'
-    }}>
-      <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-glass)' }}>
-        <button 
-          onClick={handleNewChat}
-          className="btn-primary" 
-          style={{ 
-            width: '100%', 
-            justifyContent: 'center', 
-            padding: '0.75rem', 
-            fontSize: '0.85rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem'
-          }}
+    <div
+      className={isCollapsed ? 'chat-sidebar-collapsed' : ''}
+      style={{
+        width: isCollapsed ? '48px' : '280px',
+        minWidth: isCollapsed ? '48px' : '280px',
+        height: '100%',
+        background: 'rgba(255, 255, 255, 0.02)',
+        borderRight: '1px solid var(--border-glass)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        transition: 'width 0.2s ease, min-width 0.2s ease',
+      }}
+    >
+      <div style={{
+        padding: isCollapsed ? '1rem 0.5rem' : '1.5rem',
+        borderBottom: '1px solid var(--border-glass)',
+        display: 'flex',
+        gap: '0.5rem',
+        justifyContent: isCollapsed ? 'center' : 'flex-start',
+        alignItems: 'center'
+      }}>
+        {!isCollapsed && (
+          <button
+            onClick={handleNewChat}
+            className="btn-primary"
+            style={{
+              flex: 1,
+              justifyContent: 'center',
+              padding: '0.75rem',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            <FiPlus size={16} />
+            <span className="mono">NEW_SESSION</span>
+          </button>
+        )}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="chat-sidebar-toggle"
+          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <FiPlus size={16} />
-          <span className="mono">NEW_SESSION</span>
+          {isCollapsed ? <FiChevronRight size={16} /> : <FiChevronLeft size={16} />}
         </button>
       </div>
+
+      {!isCollapsed && (
 
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '1rem 0.5rem' }}>
         <div className="mono" style={{ fontSize: '0.65rem', color: 'var(--text-muted)', paddingLeft: '1rem', marginBottom: '1rem' }}>
@@ -150,18 +187,22 @@ export function ChatSidebar() {
         )}
       </div>
 
-      <style>{`
-        .active-session::after {
-          content: '';
-          position: absolute;
-          left: 0;
-          top: 20%;
-          bottom: 20%;
-          width: 2px;
-          background: var(--neon-cyan);
-          box-shadow: 0 0 10px var(--neon-cyan-glow);
-        }
-      `}</style>
+      )}
+
+      {!isCollapsed && (
+        <style>{`
+          .active-session::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 20%;
+            bottom: 20%;
+            width: 2px;
+            background: var(--neon-cyan);
+            box-shadow: 0 0 10px var(--neon-cyan-glow);
+          }
+        `}</style>
+      )}
     </div>
   );
 }

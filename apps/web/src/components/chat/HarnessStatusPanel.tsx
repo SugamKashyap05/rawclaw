@@ -80,7 +80,7 @@ export function HarnessStatusPanel({ sessionId, agentName, modelDisplayLabel, mo
           </span>
         </div>
 
-        {/* Pending tasks — only show if nonzero */}
+        {/* Pending tasks - only show if nonzero */}
         {pendingTasks > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span style={{ color: 'var(--warning, #f59e0b)', fontWeight: 600, fontSize: '0.82rem' }}>

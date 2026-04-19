@@ -50,8 +50,8 @@ export class TasksController {
   }
 
   @Get('runs/recent')
-  listRecentRuns() {
-    return this.tasksService.listRuns(1, 10);
+  listRecentRuns(@Query('sessionId') sessionId?: string) {
+    return this.tasksService.listRecentRuns(sessionId);
   }
 
   @Get(':id')

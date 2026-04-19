@@ -10,6 +10,7 @@ import { response, Response } from 'express';
 import { firstValueFrom } from 'rxjs';
 import { DocumentProcessorService } from './document-processor.service';
 import { PrismaService } from './prisma.service';
+import { ProvenanceSanitizer } from './common/provenance-sanitizer';
 
 @Injectable()
 export class ChatOrchestratorService {
@@ -51,6 +52,16 @@ export class ChatOrchestratorService {
     const systemMessages: ChatMessage[] = [
       { role: 'system', content: systemContext }
     ];
+
+    // Add tool-selection guidance when tools are available
+    // This helps the model understand when to invoke tools vs answer directly
+    const toolGuidance = this.buildToolGuidance();
+    if (toolGuidance) {
+      systemMessages.push({
+        role: 'system',
+        content: toolGuidance
+      });
+    }
 
     // Add agent system prompt if selected
     if (selectedAgent) {
@@ -255,6 +266,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     let toolCalls: any[] = [];
     let toolResults: any[] = [];
     let provenance: any = null;
+    let processedProvenance: any = null;
     let lastMetadata: any = null;
     const sources: string[] = [];
 
@@ -282,6 +294,11 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
             persistContent = 'Request failed';
           }
 
+          // Finalize provenance if we have it
+          if (provenance) {
+            processedProvenance = ProvenanceSanitizer.processTrace(provenance);
+          }
+
           await this.chatService.createMessage(
             request.session_id,
             'assistant',
@@ -289,7 +306,8 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
             {
               toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
               toolResults: toolResults.length > 0 ? toolResults : undefined,
-              provenance,
+              provenance: processedProvenance || undefined,
+              runIds: processedProvenance?.runIds || undefined,
               citations,
               ...lastMetadata,
               agentId: request.agent_id,
@@ -323,13 +341,26 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           } else if (data.type === 'tool_result') {
             toolResults.push(data.tool_result || data);
           } else if (data.type === 'provenance') {
-            provenance = data.provenance_trace || data.provenance || data;
+            const rawTrace = data.provenance_trace || data.provenance || data;
+            provenance = ProvenanceSanitizer.processTrace(rawTrace);
+            // Replace with sanitized version for client
+            data.provenanceTrace = provenance;
+            delete (data as any).provenance_trace;
+            delete (data as any).provenance;
           } else if (data.type === 'metadata') {
             lastMetadata = data.metadata;
           } else if (data.type === 'sources') {
             if (Array.isArray(data.sources)) {
               sources.push(...data.sources);
             }
+          }
+
+          // Real-time runId synchronization: if we found new runIds in provenance, inject into metadata
+          if (provenance?.runIds?.length && (data as any).metadata) {
+            (data as any).metadata.runIds = Array.from(new Set([
+              ...((data as any).metadata.runIds || []),
+              ...provenance.runIds
+            ]));
           }
 
           if (data.type === 'done') {
@@ -539,5 +570,32 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     });
 
     return budgetMessages;
+  }
+
+  /**
+   * Build tool-selection guidance for the system prompt.
+   * This helps the model understand when to invoke tools vs answer directly.
+   * Returns null if no tools are configured.
+   */
+  private buildToolGuidance(): string | null {
+    // Tool capability hints - guide the model on when to use tools
+    const toolGuidance = `You have access to tools that can extend your capabilities. Follow these rules:
+
+**When to use tools:**
+- Use \`web_search\` when the user asks to "search", "look up", "find latest", "check online", "what's the news", or when current information beyond your training data is needed
+- Use \`web_fetch\` when the user asks to "browse", "open site", "get page", "summarize URL", or when specific webpage content is needed
+- Use \`read_file\` when the user asks about local files or documents
+
+**When NOT to use tools:**
+- General conversation, explanations, or reasoning tasks
+- Questions answerable from your training knowledge (e.g., historical facts, established concepts)
+- Coding help, math problems, or creative writing
+
+**Tool calling behavior:**
+- If a tool is available for the task, prefer using it over hallucinating an answer
+- If no tools are available for web/network tasks, truthfully state that you cannot browse or search
+- Do not claim to have performed an action if the tool was not actually invoked`;
+
+    return toolGuidance;
   }
 }

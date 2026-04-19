@@ -73,6 +73,7 @@ export interface ChatMessage {
   // P2 Metadata
   createdAt?: Date | string;
   durationMs?: number;
+  runIds?: string[];
   /** Parsed edit suggestion containing originalText, suggestedText, action */
   editSuggestion?: {
     originalText: string;
@@ -125,12 +126,7 @@ export interface ChatResponse {
   /** Document sources/URLs that contributed to the generated response */
   sources: string[];
   /** Provenance trace for auditing tool execution */
-  provenance_trace?: {
-    run_id: string;
-    steps: ProvenanceStep[];
-    step_count: number;
-    created_at: string;
-  } | null;
+  provenanceTrace?: ProvenanceTrace | null;
 }
 
 export interface ModelInfo {
@@ -149,12 +145,8 @@ export interface ChatStreamChunk {
   tool_call?: ToolCall;
   tool_result?: ToolResult;
   sources?: string[];
-  provenance_trace?: {
-    run_id: string;
-    steps: ProvenanceStep[];
-    step_count: number;
-    created_at: string;
-  } | null;
+  provenance?: ProvenanceTrace | null;
+  provenanceTrace?: ProvenanceTrace | null;
   error?: string;
   metadata?: {
     modelId: string;
@@ -162,6 +154,7 @@ export interface ChatStreamChunk {
     fallbacks?: string[];
     memoryRecall: boolean;
     durationMs?: number;
+    runIds?: string[];
   };
 }
 

@@ -110,6 +110,21 @@ export class TasksService {
     });
   }
 
+  /**
+   * List recent runs, optionally filtered by sessionId.
+   * When sessionId is provided, returns runs linked to that session.
+   * Otherwise returns the 10 most recent runs across all sessions.
+   */
+  async listRecentRuns(sessionId?: string) {
+    const where = sessionId ? { sessionId } : {};
+    return this.prisma.taskRun.findMany({
+      where,
+      take: 20,
+      orderBy: { createdAt: 'desc' },
+      include: { definition: true },
+    });
+  }
+
   async getRunDetail(runId: string) {
     const run = await this.prisma.taskRun.findUnique({
       where: { id: runId },

@@ -89,13 +89,14 @@ interface SessionMessage {
   attachments?: ChatAttachment[];
   tool_calls?: any[];
   toolResults?: ToolResult[];
-  provenanceTrace?: ChatStreamChunk['provenance_trace'];
+  provenanceTrace?: ChatStreamChunk['provenanceTrace'];
   citations?: Array<{ url: string; title?: string }>;
   memoryRecall?: boolean;
   modelId?: string;
   isLocal?: boolean;
   createdAt?: string | Date;
   durationMs?: number;
+  runIds?: string[];
   id?: string;
   error?: {
     type:
@@ -275,7 +276,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
   const [activeSelection, setActiveSelection] = useState<DocumentSelection | null>(null);
   const [showTasks, setShowTasks] = useState(false);
 
-  // Centralized system poller — replaces scattered useEffect intervals
+  // Centralized system poller - replaces scattered useEffect intervals
   const { 
     status: systemStatus, 
     pendingConfirmations, 
@@ -430,6 +431,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
                 isLocal: data.metadata.isLocal,
                 memoryRecall: data.metadata.memoryRecall,
                 durationMs: data.metadata.durationMs,
+                runIds: data.metadata.runIds,
               });
             } else if (data.type === 'error') {
               const err = data as any;
@@ -675,18 +677,20 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
       void loadAgents();
       if (routeSessionId) void loadHistory(routeSessionId);
     }}>
-    <div style={{ display: 'flex', minHeight: 'calc(100vh - 220px)', gap: '1rem', position: 'relative' }}>
+    <div className="chat-page-container" style={{ display: 'flex', flex: 1, minHeight: 0, gap: '1rem', position: 'relative', overflow: 'hidden' }}>
       <ChatSidebar />
 
       {/* Main Chat Area */}
-      <div 
-        className="glass-card" 
-        style={{ 
-          flex: 1, 
-          display: 'flex', 
-          flexDirection: 'column', 
+      <div
+        className="glass-card"
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
           minWidth: 0,
+          minHeight: 0,
           position: 'relative',
+          overflow: 'hidden',
           border: isDragging ? '2px dashed var(--neon-cyan)' : undefined,
           background: isDragging ? 'rgba(0, 240, 255, 0.05)' : undefined,
         }}
@@ -830,7 +834,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
           onAction={() => void refreshPoller()}
         />
 
-        <div ref={scrollRef} className="custom-scrollbar" style={{ flex: 1, overflow: 'auto', display: 'grid', gap: '1rem', paddingRight: '0.25rem' }}>
+        <div ref={scrollRef} className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: '1rem', paddingRight: '0.25rem', minHeight: 0 }}>
           {loadingHistory && messages.length === 0 ? <ChatSkeleton /> : null}
 
           {!loadingHistory && messages.length === 0 ? (
@@ -966,18 +970,20 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
         )}
 
         {showTasks && (
-          <aside 
+          <aside
             className="glass-card task-sidebar-float"
-            style={{ 
-              width: '320px', 
-              display: 'flex', 
+            style={{
+              width: '320px',
+              display: 'flex',
               flexDirection: 'column',
               borderLeft: '1px solid var(--border-glass)',
               background: 'rgba(8, 8, 14, 0.8)',
               backdropFilter: 'blur(20px)',
               marginLeft: '-1rem',
               height: '100%',
-              zIndex: 10
+              maxHeight: '100%',
+              zIndex: 10,
+              overflow: 'hidden'
             }}
           >
             <div style={{ 
@@ -1268,7 +1274,7 @@ function MessageCard({
                       gap: '6px'
                     }}>
                       <FiEdit2 size={12} />
-                      Document Edit Suggested — Preview above
+                      Document Edit Suggested - Preview above
                     </div>
                   </>
                 );

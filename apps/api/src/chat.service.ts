@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { RedisService } from './redis.service';
 import { ChatMessage, ChatResponse, ToolCall } from '@rawclaw/shared';
+import { ProvenanceSanitizer } from './common/provenance-sanitizer';
 
 interface Citation {
   url: string;
@@ -28,6 +29,7 @@ interface MessageWithRelations {
   errorMessage: string | null;
   attachments: string | null;
   durationMs: number | null;
+  runIds?: string | null;
 }
 
 export interface SessionWithMessages {
@@ -64,6 +66,7 @@ export class ChatService {
       error?: { type: string; message: string };
       attachments?: any[];
       durationMs?: number;
+      runIds?: string[];
     }
   ): Promise<MessageWithRelations> {
     // Ensure session exists
@@ -94,6 +97,7 @@ export class ChatService {
         errorMessage: metadata?.error?.message,
         attachments: metadata?.attachments ? JSON.stringify(metadata.attachments) : null,
         durationMs: metadata?.durationMs,
+        runIds: metadata?.runIds ? JSON.stringify(metadata.runIds) : null,
       },
     });
   }
@@ -113,7 +117,8 @@ export class ChatService {
       content: m.content,
       tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
       toolResults: m.toolResults ? JSON.parse(m.toolResults) : undefined,
-      provenanceTrace: m.provenance ? JSON.parse(m.provenance) : undefined,
+      provenanceTrace: m.provenance ? ProvenanceSanitizer.processTrace(JSON.parse(m.provenance)) : undefined,
+      runIds: m.runIds ? JSON.parse(m.runIds) : undefined,
       modelId: m.modelId || undefined,
       isLocal: m.isLocal ?? undefined,
       fallbacks: m.fallbacks ? JSON.parse(m.fallbacks) : undefined,
