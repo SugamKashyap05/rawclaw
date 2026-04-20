@@ -89,9 +89,9 @@ class ModelRouter:
         return healths
 
     async def complete(
-        self, 
-        messages: List[Dict[str, Any]], 
-        model: Optional[str] = None, 
+        self,
+        messages: List[Dict[str, Any]],
+        model: Optional[str] = None,
         complexity: Optional[str] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         temperature: Optional[float] = None,
@@ -105,9 +105,11 @@ class ModelRouter:
         target_model_id = model
         if not target_model_id and complexity:
             target_model_id = self.complexity_map.get(complexity, settings.DEFAULT_LOW_MODEL)
-        
+
         if not target_model_id:
             target_model_id = settings.DEFAULT_LOW_MODEL
+
+        logger.info(f"[TOOL_TRACE] Router.complete called: model={target_model_id}, tools_count={len(tools) if tools else 0}")
 
         # 2. Determine provider chain (Primary -> Fallbacks)
         # Normalize ALL models in the chain, not just the target

@@ -58,6 +58,8 @@ class Executor:
 
         memory_recall_occurred = False
 
+        logger.info(f"[TOOL_TRACE] Executor received request: session={session_id}, model={request.model}, tools_in_request={len(request.tools) if request.tools else 0}, registry_tools={len(tools_schema)}")
+
         try:
             latest_user_query = next(
                 (message.content for message in reversed(request.messages) if getattr(message, "role", "") == "user" and getattr(message, "content", "").strip()),
@@ -86,6 +88,18 @@ class Executor:
             # Initial planning step
             trace.add_plan_step(f"Processing request with {len(messages)} messages")
 
+            # Use tools from request if provided, otherwise fall back to registry
+            if request.tools:
+                tools_schema = request.tools
+                tool_names = [t.get('function', {}).get('name', 'unknown') for t in tools_schema]
+                logger.info(f"[TOOL_TRACE] Using {len(tools_schema)} tools from request: {tool_names}")
+            else:
+                tools_schema = TOOL_REGISTRY.get_schemas()
+                logger.info(f"[TOOL_TRACE] Using {len(tools_schema)} tools from registry")
+
+            if not tools_schema:
+                logger.warning("[TOOL_TRACE] No tools available!")
+
             # Stream from model
             async_it = self.model_router.complete(
                 messages,
@@ -99,9 +113,12 @@ class Executor:
                 # Check if model wants to call a tool
                 if isinstance(delta, dict) and delta.get("type") == "tool_call":
                     tool_call_data = delta.get("tool_call", {})
+                    tool_name = tool_call_data.get("name", "")
+                    tool_input = tool_call_data.get("arguments", {})
+                    logger.info(f"[TOOL_TRACE] Executor received tool_call: {tool_name} with input {tool_input}")
                     tool_call = ToolCall(
-                        tool_name=tool_call_data.get("name", ""),
-                        input=tool_call_data.get("arguments", {}),
+                        tool_name=tool_name,
+                        input=tool_input,
                     )
 
                     # Record tool call
@@ -113,6 +130,7 @@ class Executor:
                         tool_call,
                         trace,
                     )
+                    logger.info(f"[TOOL_TRACE] Tool {tool_name} executed: success={tool_result.error is None}, error={tool_result.error}")
 
                     # Record tool result
                     trace.add_tool_result(tool_result, int(tool_result.duration_ms))
@@ -147,6 +165,10 @@ class Executor:
 
                 elif isinstance(delta, str):
                     accumulated_content += delta
+                    # Log first 100 chars of content to see what model outputs
+                    if len(accumulated_content) <= 100 or len(accumulated_content) % 200 == 0:
+                        preview = delta[:50].replace('\n', ' ') if len(delta) > 50 else delta.replace('\n', ' ')
+                        logger.debug(f"[TOOL_TRACE] Content chunk: {preview}...")
                     yield json.dumps({
                         "type": "content",
                         "content": delta,
@@ -181,6 +203,13 @@ class Executor:
             # Final synthesis step
             duration_ms = round((time.time() - start_time) * 1000, 2)
             trace.add_synthesis_step(accumulated_content[:200] + "...", int(duration_ms))
+
+            # Log summary
+            logger.info(f"[TOOL_TRACE] Execution complete: tools_called={len(tool_calls_made)}, content_length={len(accumulated_content)}, sources={len(sources)}")
+            if tool_calls_made:
+                logger.info(f"[TOOL_TRACE] Tools used: {[t.tool_name for t in tool_calls_made]}")
+            else:
+                logger.info(f"[TOOL_TRACE] No tools were invoked. Content preview: {accumulated_content[:200]}...")
 
             # Store messages in ChromaDB memory
             if chroma_memory and session_id:

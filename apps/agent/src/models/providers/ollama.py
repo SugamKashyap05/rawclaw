@@ -1,9 +1,12 @@
 import httpx
 import json
+import logging
 import re
 from typing import AsyncIterator, List, Dict, Any, Optional
 from src.models.base import ModelProvider, ModelInfo, ProviderHealth
 from src.config import settings
+
+logger = logging.getLogger("rawclaw.ollama")
 
 
 def _extract_textual_tool_calls(content: str) -> tuple[str, List[Dict[str, Any]]]:
@@ -199,7 +202,7 @@ class OllamaProvider(ModelProvider):
             "stream": True,
             "options": {}
         }
-        
+
         if options.get("temperature") is not None:
             payload["options"]["temperature"] = options["temperature"]
         if options.get("top_p") is not None:
@@ -209,6 +212,10 @@ class OllamaProvider(ModelProvider):
             # Ollama /api/chat supports tools in newer versions (0.2.8+)
             # Pass tools to the model for native function calling support
             payload["tools"] = tools
+            logger.info(f"[TOOL_TRACE] Ollama sending {len(tools)} tools to model {model}")
+            logger.info(f"[TOOL_TRACE] Tool names: {[t.get('function', {}).get('name', 'unknown') for t in tools]}")
+        else:
+            logger.info(f"[TOOL_TRACE] Ollama: NO tools provided to model {model}")
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             try:
@@ -234,11 +241,22 @@ class OllamaProvider(ModelProvider):
                         return
 
                     content_buffer = ""
+                    tool_call_detected = False
                     async for line in response.aiter_lines():
                         if not line:
                             continue
                         try:
                             chunk = json.loads(line)
+
+                            # Debug: Log what we received
+                            if "message" in chunk:
+                                msg = chunk["message"]
+                                if "tool_calls" in msg and msg["tool_calls"]:
+                                    tool_call_detected = True
+                                    logger.info(f"[TOOL_TRACE] Model returned native tool_calls: {msg['tool_calls']}")
+                                if msg.get("content"):
+                                    content_preview = msg['content'][:100].replace('\n', ' ')
+                                    logger.debug(f"[TOOL_TRACE] Model content: {content_preview}...")
 
                             # Handle tool calls from Ollama
                             # Ollama returns tool calls in message.tool_calls
@@ -251,6 +269,7 @@ class OllamaProvider(ModelProvider):
                                         tool_name = func.get("name", "")
                                         arguments = func.get("arguments", {})
                                         if tool_name:
+                                            logger.info(f"Yielding tool_call: {tool_name}")
                                             yield {
                                                 "type": "tool_call",
                                                 "tool_call": {
@@ -279,8 +298,11 @@ class OllamaProvider(ModelProvider):
                                     cleaned_buffer, textual_tool_calls = _extract_textual_tool_calls(content_buffer)
 
                                     # Yield any complete tool calls found
+                                    if textual_tool_calls:
+                                        logger.info(f"[TOOL_TRACE] Extracted {len(textual_tool_calls)} textual tool_calls from content")
                                     for tc in textual_tool_calls:
                                         if tc.get("name"):
+                                            logger.info(f"[TOOL_TRACE] Yielding textual tool_call: {tc['name']}")
                                             yield {
                                                 "type": "tool_call",
                                                 "tool_call": {

@@ -46,7 +46,7 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     model: Optional[str] = None
     complexity: Optional[str] = None
-    tools: Optional[List[str]] = None
+    tools: Optional[List[Dict[str, Any]]] = None  # Full tool schemas from orchestrator
     stream: Optional[bool] = False
     workspace_id: Optional[str] = "default"
     sender_identifier: Optional[str] = "local"

@@ -84,9 +84,21 @@ export class ChatOrchestratorService {
       const toolsRes = await firstValueFrom(
         this.httpService.get(`${agentUrl}/api/tools`)
       );
-      toolsSchema = toolsRes.data.schemas || [];
+      // Agent returns { tools: [...], count: N }
+      const tools = toolsRes.data.tools || [];
+      this.logger.log(`[TOOL_TRACE] Fetched ${tools.length} tools from agent: ${tools.map((t: any) => t.name || 'unnamed').join(', ')}`);
+      // Convert ToolSchema[] to OpenAI function format
+      toolsSchema = tools.map((t: any) => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        }
+      }));
+      this.logger.log(`[TOOL_TRACE] Converted to OpenAI format, passing ${tools?.length || 0} tools to agent`);
     } catch (e: any) {
-      this.logger.warn('Could not fetch tools from agent:', e?.message || String(e));
+      this.logger.warn('[TOOL_TRACE] Could not fetch tools from agent:', e?.message || String(e));
       toolsSchema = undefined;
     }
 
@@ -256,6 +268,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       ...request,
       tools: toolsSchema,
     };
+    this.logger.log(`[TOOL_TRACE] Sending request to agent with model=${agentRequest.model}, complexity=${agentRequest.complexity}, toolsCount=${toolsSchema?.length || 0}`);
 
     const attemptRequest = async (): Promise<any> => {
       try {
@@ -380,8 +393,10 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           if (data.type === 'content') {
             fullAssistantResponse += data.content || '';
           } else if (data.type === 'tool_call') {
+            this.logger.log(`[TOOL_TRACE] Received tool_call from agent: ${JSON.stringify(data.tool_call || data)}`);
             toolCalls.push(data.tool_call || data);
           } else if (data.type === 'tool_result') {
+            this.logger.log(`[TOOL_TRACE] Received tool_result from agent: ${data.tool_result?.tool_name || 'unknown'}`);
             toolResults.push(data.tool_result || data);
           } else if (data.type === 'provenance') {
             const rawTrace = data.provenance_trace || data.provenance || data;
@@ -407,6 +422,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           }
 
           if (data.type === 'done') {
+            this.logger.log(`[TOOL_TRACE] Stream complete: toolCalls=${toolCalls.length}, toolResults=${toolResults.length}, contentLength=${fullAssistantResponse.length}`);
             await finalize({ type: 'done' });
             return;
           }
