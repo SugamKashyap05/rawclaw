@@ -197,9 +197,14 @@ async def lifespan(app: FastAPI):
             logger.error(f"Failed to connect to MCP servers during startup: {e}")
 
         # Wrap and register MCP tools (AFTER connection attempt)
+        # MCP tools override built-in tools with the same name
         mcp_wrappers = wrap_mcp_tools(mcp_gateway)
         for w in mcp_wrappers:
             try:
+                # Unregister any existing tool with the same name first (MCP takes precedence)
+                if w.name in TOOL_REGISTRY.tool_names:
+                    logger.info(f"MCP tool '{w.name}' overriding existing built-in tool")
+                    del TOOL_REGISTRY._tools[w.name]
                 TOOL_REGISTRY.register(w)
             except ValueError as e:
                 logger.warning(f"MCP tool registration skipped: {e}")

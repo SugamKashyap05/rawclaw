@@ -11,6 +11,7 @@ import { firstValueFrom } from 'rxjs';
 import { DocumentProcessorService } from './document-processor.service';
 import { PrismaService } from './prisma.service';
 import { ProvenanceSanitizer } from './common/provenance-sanitizer';
+import { SettingsService } from './settings.service';
 
 @Injectable()
 export class ChatOrchestratorService {
@@ -25,6 +26,7 @@ export class ChatOrchestratorService {
     private readonly modelsService: ModelsService,
     private readonly documentProcessor: DocumentProcessorService,
     private readonly prisma: PrismaService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   private readonly MAX_TOTAL_PROMPT_CHARS = 180000;
@@ -53,9 +55,44 @@ export class ChatOrchestratorService {
       { role: 'system', content: systemContext }
     ];
 
+    // Inject workspace context (SOUL, USER, MEMORY) from SettingsService
+    const { workspaceFiles } = await this.settingsService.getPayload();
+    if (workspaceFiles.soul || workspaceFiles.user) {
+      let identityBlock = '\n\n### IDENTITY & SOUL\n';
+      if (workspaceFiles.user) identityBlock += `User Context: ${workspaceFiles.user}\n`;
+      if (workspaceFiles.soul) identityBlock += `Soul/Guidelines: ${workspaceFiles.soul}\n`;
+      systemMessages.push({ role: 'system', content: identityBlock });
+    }
+
+    if (workspaceFiles.memory) {
+      systemMessages.push({
+        role: 'system',
+        content: `\n\n### PERSISTENT MEMORY\n${workspaceFiles.memory}`
+      });
+    }
+
+    if (workspaceFiles.tools) {
+      systemMessages.push({
+        role: 'system',
+        content: `\n\n### TOOL GUIDELINES\n${workspaceFiles.tools}`
+      });
+    }
+
+    // Fetch available tools from agent and pass them to the model
+    let toolsSchema: any[] | undefined;
+    try {
+      const toolsRes = await firstValueFrom(
+        this.httpService.get(`${agentUrl}/api/tools`)
+      );
+      toolsSchema = toolsRes.data.schemas || [];
+    } catch (e: any) {
+      this.logger.warn('Could not fetch tools from agent:', e?.message || String(e));
+      toolsSchema = undefined;
+    }
+
     // Add tool-selection guidance when tools are available
     // This helps the model understand when to invoke tools vs answer directly
-    const toolGuidance = this.buildToolGuidance();
+    const toolGuidance = this.buildToolGuidance(toolsSchema);
     if (toolGuidance) {
       systemMessages.push({
         role: 'system',
@@ -214,10 +251,16 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     const MAX_RETRIES = 2;
     const RETRY_DELAY = 1000;
 
+    // Include tools in the request to the agent
+    const agentRequest = {
+      ...request,
+      tools: toolsSchema,
+    };
+
     const attemptRequest = async (): Promise<any> => {
       try {
         return await firstValueFrom(
-          this.httpService.post(`${agentUrl}/execute`, request, {
+          this.httpService.post(`${agentUrl}/execute`, agentRequest, {
             responseType: 'stream',
             timeout: 30000,
             signal: abortController.signal,
@@ -577,24 +620,75 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
    * This helps the model understand when to invoke tools vs answer directly.
    * Returns null if no tools are configured.
    */
-  private buildToolGuidance(): string | null {
+  private buildToolGuidance(toolsSchema?: any[]): string | null {
+    if (!toolsSchema || toolsSchema.length === 0) {
+      return null;
+    }
+
+    // Build tool descriptions from actual schemas
+    const toolDescriptions = toolsSchema
+      .filter(t => t?.function?.name)
+      .map(t => {
+        const name = t.function.name;
+        const desc = t.function.description || '';
+        return `- \`${name}\`: ${desc}`;
+      })
+      .join('\n');
+
+    // Build parameter details for each tool
+    const toolParameterDetails = toolsSchema
+      .filter(t => t?.function?.name)
+      .map(t => {
+        const name = t.function.name;
+        const params = t.function.parameters?.properties || {};
+        const required = t.function.parameters?.required || [];
+        const paramDesc = Object.entries(params)
+          .map(([key, val]: [string, any]) => {
+            const isRequired = required.includes(key) ? ' (required)' : '';
+            return `    - ${key}: ${val.description || 'No description'}${isRequired}`;
+          })
+          .join('\n');
+        return `\`${name}\` parameters:\n${paramDesc || '    (no parameters)'}`;
+      })
+      .join('\n\n');
+
     // Tool capability hints - guide the model on when to use tools
-    const toolGuidance = `You have access to tools that can extend your capabilities. Follow these rules:
+    const toolGuidance = `=== AVAILABLE TOOLS ===
+You have access to the following tools that can fetch real-time data and perform actions:
 
-**When to use tools:**
-- Use \`web_search\` when the user asks to "search", "look up", "find latest", "check online", "what's the news", or when current information beyond your training data is needed
-- Use \`web_fetch\` when the user asks to "browse", "open site", "get page", "summarize URL", or when specific webpage content is needed
-- Use \`read_file\` when the user asks about local files or documents
+${toolDescriptions}
 
-**When NOT to use tools:**
+${toolParameterDetails}
+
+=== WHEN TO USE TOOLS (CRITICAL) ===
+You MUST use a tool when the user explicitly asks for:
+- "Search" / "look up" / "find" / "check" + any topic → Use \`web_search\`
+- "Browse" / "open site" / "get page" / "summarize URL" / "visit" → Use \`web_fetch\`
+- "What's the weather" / "current weather" → Use \`web_search\` or \`web_fetch\`
+- "Latest news" / "recent updates" / "what happened" + time period → Use \`web_search\`
+- Reading local files or documents → Use \`read_file\`
+- Current date/time questions → Use \`datetime\`
+
+=== WHEN NOT TO USE TOOLS ===
 - General conversation, explanations, or reasoning tasks
-- Questions answerable from your training knowledge (e.g., historical facts, established concepts)
+- Historical facts or established knowledge (e.g., "Who was the first president?")
 - Coding help, math problems, or creative writing
 
-**Tool calling behavior:**
-- If a tool is available for the task, prefer using it over hallucinating an answer
-- If no tools are available for web/network tasks, truthfully state that you cannot browse or search
-- Do not claim to have performed an action if the tool was not actually invoked`;
+=== TOOL CALLING FORMAT ===
+When you need to use a tool, you MUST output ONLY a tool call in one of these formats:
+
+Format 1 (Native tool_call):
+{"name": "web_search", "arguments": {"query": "your search query"}}
+
+Format 2 (XML-style):
+<tool_code>{ tool => "web_search", args => "{ 'query' => 'your search query' }" }</tool_code>
+
+DO NOT provide explanatory text before or after a tool call. Output ONLY the tool call, then wait for the result.
+
+=== IMPORTANT RULES ===
+- If a tool is available for the task, use it instead of making up an answer
+- If no tools are available for web/network tasks, truthfully state "I don't have access to browse the web"
+- Never claim to have performed an action if the tool was not actually invoked`;
 
     return toolGuidance;
   }

@@ -77,10 +77,15 @@ class SearchWebTool(BaseTool):
                 source = "duckduckgo"
 
         if results is None:
+            error_msg = "Search failed. "
+            if self._brave_api_key:
+                error_msg += "Brave Search API failed (check API key validity). "
+            error_msg += "DuckDuckGo fallback also failed (may be rate limited or network issue)."
+            logger.error(f"web_search failed for query '{query}': {error_msg}")
             return ToolResult(
                 tool_name=self.name,
                 input=input,
-                error="Both Brave Search and DuckDuckGo failed. Check API keys and network connectivity.",
+                error=error_msg,
                 duration_ms=round((time.time() - start) * 1000, 2),
                 sandboxed=False,
             )
@@ -148,6 +153,7 @@ class SearchWebTool(BaseTool):
                 )
                 resp.raise_for_status()
                 data = resp.json()
+                logger.info(f"DuckDuckGo response keys: {data.keys()}")
                 results = []
                 # Abstract
                 if data.get("Abstract"):
@@ -164,6 +170,7 @@ class SearchWebTool(BaseTool):
                             "url": topic.get("FirstURL", ""),
                             "snippet": topic.get("Text", ""),
                         })
+                logger.info(f"DuckDuckGo found {len(results)} results")
                 return results if results else None
         except Exception as e:
             logger.error(f"DuckDuckGo error: {e}")

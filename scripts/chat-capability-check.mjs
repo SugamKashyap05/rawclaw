@@ -195,7 +195,17 @@ async function main() {
     content: editCheck.content,
   };
 
-  // E. Post-Document API Health
+  // E. Tool Calling Test
+  const toolSessionId = `verify-tool-${Date.now()}`;
+  const toolCheck = await runChatWithTools({
+    sessionId: toolSessionId,
+    model,
+    message: 'Search the web for "IPL 2026 latest news" and also tell me what is the weather like?',
+    headers: authHeaders,
+  });
+  summary.checks.toolCalling = toolCheck;
+
+  // F. Post-Document API Health
   const postHealth = await preflightApi();
   const postPlain = await runChat({
     sessionId: `verify-post-${Date.now()}`,
@@ -222,6 +232,9 @@ async function main() {
   const img = summary.checks.imageDocument;
   if (!img.skipped && !img.ok) failures.push('image document OCR check failed');
   if (!summary.checks.editIntent.ok) failures.push('document edit intent check failed');
+  // Tool calling check - not a failure if tools aren't available, but report the status
+  const tool = summary.checks.toolCalling;
+  if (!tool.ok) failures.push(`tool calling check failed: ${tool.diagnosis || 'unknown error'}`);
 
   summary.failures = failures;
   summary.finishedAt = new Date().toISOString();
@@ -440,6 +453,160 @@ async function runChat({ sessionId, model, message, agentId, attachments, editRe
     content: content.trim(),
     errors,
     events,
+  };
+}
+
+async function runChatWithTools({ sessionId, model, message, headers }) {
+  const response = await fetchWithTimeout(`${API_BASE}/chat/send`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      session_id: sessionId,
+      messages: [{ role: 'user', content: message }],
+      model,
+      stream: true,
+    }),
+  }, CHAT_REQUEST_TIMEOUT_MS);
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      httpBody: await response.text(),
+      content: '',
+      toolCalls: [],
+      toolResults: [],
+      diagnosis: `HTTP ${response.status}`,
+    };
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return { ok: false, content: '', toolCalls: [], toolResults: [], diagnosis: 'missing stream body' };
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  const toolCalls = [];
+  const toolResults = [];
+  const events = [];
+  let streamFinished = false;
+  let idleTimer = null;
+
+  const resetIdleTimer = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(async () => {
+      try {
+        await reader.cancel('tool test stream idle timeout');
+      } catch {
+        // ignore
+      }
+    }, STREAM_IDLE_TIMEOUT_MS);
+  };
+
+  const handlePayload = (payload) => {
+    if (!payload) return;
+    try {
+      const data = JSON.parse(payload);
+      events.push(data.type || 'unknown');
+
+      if (data.type === 'content' && typeof data.content === 'string') {
+        content += data.content;
+      }
+
+      if (data.type === 'tool_call' && data.tool_call) {
+        toolCalls.push({
+          name: data.tool_call.name,
+          arguments: data.tool_call.arguments,
+        });
+      }
+
+      if (data.type === 'tool_result' && data.tool_result) {
+        toolResults.push({
+          name: data.tool_result.name,
+          result: data.tool_result.result,
+        });
+      }
+
+      if (data.type === 'error') {
+        streamFinished = true;
+      }
+      if (data.type === 'done') {
+        streamFinished = true;
+      }
+    } catch (error) {
+      streamFinished = true;
+    }
+  };
+
+  try {
+    resetIdleTimer();
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      resetIdleTimer();
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
+        const payload = line.startsWith('data:') ? line.slice(5).trim() : line;
+        if (!payload) continue;
+        handlePayload(payload);
+        if (streamFinished) {
+          try {
+            await reader.cancel('tool test stream finished');
+          } catch {
+            // ignore
+          }
+          break;
+        }
+      }
+      if (streamFinished) break;
+    }
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer);
+  }
+
+  if (buffer.trim() && !streamFinished) {
+    const payload = buffer.startsWith('data:') ? buffer.slice(5).trim() : buffer.trim();
+    if (payload) {
+      handlePayload(payload);
+    }
+  }
+
+  // Diagnose what happened
+  let diagnosis = '';
+  const hasToolCallEvents = toolCalls.length > 0;
+  const hasToolResults = toolResults.length > 0;
+  const hasToolCodeMarkup = content.includes('<tool_code>') || content.includes('</tool_code>');
+  const hasMinimaxMarkup = content.includes('<minimax:tool_call>');
+  const hasGenericToolMarkup = content.includes('<tool>') || content.includes('<invoke');
+  const hasWebSearchReference = content.toLowerCase().includes('ipl') || content.toLowerCase().includes('2026');
+
+  if (hasToolCallEvents && hasToolResults) {
+    diagnosis = 'success: tools invoked and returned results';
+  } else if (hasToolCallEvents && !hasToolResults) {
+    diagnosis = 'partial: tool calls sent but no results received';
+  } else if (hasToolCodeMarkup || hasMinimaxMarkup || hasGenericToolMarkup) {
+    diagnosis = 'leakage: tool markup appeared in content instead of being executed';
+  } else if (hasWebSearchReference) {
+    diagnosis = 'direct_answer: model answered with knowledge instead of using tools';
+  } else {
+    diagnosis = 'no_tools: no tool invocation detected';
+  }
+
+  return {
+    ok: hasToolCallEvents && hasToolResults,
+    content: content.trim(),
+    toolCalls,
+    toolResults,
+    events,
+    diagnosis,
+    hasMarkupLeakage: hasToolCodeMarkup || hasMinimaxMarkup || hasGenericToolMarkup,
   };
 }
 

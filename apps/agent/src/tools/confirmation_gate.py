@@ -59,7 +59,7 @@ class ConfirmationGate:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.post(
-                    f"{self.api_url}/api/tools/confirm",
+                    f"{self.api_url}/api/tools/confirm/request",
                     json={
                         "sessionId": session_id,
                         "toolName": tool_name,

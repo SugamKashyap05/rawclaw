@@ -24,15 +24,23 @@ class MCPToolWrapper(BaseTool):
         server_name: str,
         gateway: MCPGateway,
     ) -> None:
-        self.name = f"mcp_{server_name}_{mcp_tool['name']}"
+        # Use the original MCP tool name directly (no prefix)
+        # This allows MCP tools to replace built-in tools with the same name
+        self.name = mcp_tool['name']
         self.description = mcp_tool.get("description", f"MCP tool from {server_name}")
         self.parameters = mcp_tool.get("inputSchema", {})
         self.capability_tags = ["mcp", server_name]
         self.requires_sandbox = False
-        self.requires_confirmation = True  # MCP tools always require confirmation
+        # MCP tools require confirmation by default, but web-search tools can run without
+        self.requires_confirmation = not self._is_web_search_tool(mcp_tool['name'])
         self._mcp_tool_name = mcp_tool["name"]
         self._server_name = server_name
         self._gateway = gateway
+
+    def _is_web_search_tool(self, name: str) -> bool:
+        """Check if this is a web search tool that can run without confirmation."""
+        search_keywords = ['search', 'fetch', 'browse', 'web']
+        return any(kw in name.lower() for kw in search_keywords)
 
     async def execute(self, input: Dict[str, Any]) -> ToolResult:
         """Execute the MCP tool via the gateway."""

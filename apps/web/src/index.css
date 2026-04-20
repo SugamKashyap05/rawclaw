@@ -59,6 +59,11 @@ body {
   height: 100vh;
   max-height: 100vh;
   overflow: hidden;
+  position: fixed; /* Lock to viewport */
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 code, pre, .mono {
@@ -143,10 +148,12 @@ code, pre, .mono {
 
 .content {
   flex: 1;
-  padding: 2.5rem 3rem;
+  padding: 1rem 1.5rem;
   width: 100%;
-  max-width: 1400px;
+  max-width: 1600px; /* Slightly wider for modern screens */
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Reusable Components */

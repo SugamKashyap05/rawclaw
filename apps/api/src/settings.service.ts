@@ -199,6 +199,19 @@ export class SettingsService {
     if (!existsSync(this.rawclawDir)) {
       mkdirSync(this.rawclawDir, { recursive: true });
     }
+
+    // Seed default files if they don't exist to provide a baseline "soul" and context
+    this.seedDefaultFile('SOUL.md', '# RawClaw Soul\nYou are a senior AI agent architect. You are precise, secure, and helpful.');
+    this.seedDefaultFile('USER.md', '# User Profile\nUser context not yet provided.');
+    this.seedDefaultFile('MEMORY.md', '# Persistent Memory\nNo long-term memories stored yet.');
+    this.seedDefaultFile('TOOLS.md', '# Tool Guidelines\nPrefer local tools. Always verify security before execution.');
+  }
+
+  private seedDefaultFile(name: string, content: string): void {
+    const filePath = join(this.rawclawDir, name);
+    if (!existsSync(filePath)) {
+      writeFileSync(filePath, content, 'utf8');
+    }
   }
 
   private readWorkspaceFile(name: string): string {

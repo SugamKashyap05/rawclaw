@@ -10,6 +10,7 @@ export function WebSearchResult({ result }: { result: ToolResult }) {
   const payload = asObject(result.output);
   const query = asString(payload.query) || asString(result.input?.query) || 'Unknown query';
   const results = Array.isArray(payload.results) ? payload.results.map(asObject) : [];
+  const error = result.error || (payload.error as string);
 
   return (
     <div className="glass-card" style={{ padding: '1rem' }}>
@@ -18,7 +19,18 @@ export function WebSearchResult({ result }: { result: ToolResult }) {
       </div>
       <div style={{ marginBottom: '0.85rem', color: 'var(--text-secondary)' }}>Query: {query}</div>
       <div style={{ display: 'grid', gap: '0.75rem' }}>
-        {results.length === 0 ? (
+        {error ? (
+          <div style={{
+            color: 'var(--error)',
+            padding: '0.75rem',
+            background: 'rgba(255, 77, 77, 0.08)',
+            borderRadius: '8px',
+            border: '1px solid rgba(255, 77, 77, 0.2)'
+          }}>
+            <strong style={{ fontSize: '0.75rem' }}>SEARCH FAILED</strong>
+            <div style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{error}</div>
+          </div>
+        ) : results.length === 0 ? (
           <div style={{ color: 'var(--text-muted)' }}>No search results were captured for this tool run.</div>
         ) : (
           results.map((entry, index) => {
