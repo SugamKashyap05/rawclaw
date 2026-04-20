@@ -1176,14 +1176,14 @@ function MessageCard({
   };
 
   return (
-    <div style={{ display: 'grid', gap: '0.65rem', justifyItems: isUser ? 'end' : 'start', position: 'relative' }}>
+    <div className="message-bubble" style={{ display: 'grid', gap: '0.65rem', justifyItems: isUser ? 'end' : 'start', position: 'relative' }}>
       <div
+        className={isUser ? 'user-bubble' : 'assistant-bubble'}
         style={{
           maxWidth: '84%',
           borderRadius: '16px',
-          padding: '1rem',
-          background: isUser ? 'rgba(0,240,255,0.08)' : 'rgba(255,255,255,0.03)',
-          border: `1px solid ${isUser ? 'rgba(0,240,255,0.18)' : 'var(--border-glass)'}`,
+          padding: '1.25rem',
+          border: '1px solid transparent',
           position: 'relative'
         }}
       >

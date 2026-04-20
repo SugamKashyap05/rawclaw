@@ -31,6 +31,7 @@ from src.tools.registry import TOOL_REGISTRY
 from src.tools.mcp_gateway import MCPGateway
 from src.tools.mcp_tool_wrapper import wrap_mcp_tools
 from src.tools.skill_loader import SkillLoader
+from src.tools.mcp_discovery import MCPDiscovery
 from src.executor import EXECUTOR
 
 async def verify_docker_available():
@@ -127,7 +128,8 @@ async def lifespan(app: FastAPI):
     app.state.chroma_memory = chroma_memory
     app.state.knowledge_brain = KnowledgeBrain(chroma_memory) if cfg.ENABLE_WIKIPEDIA_RAG else None
     app.state.use_langgraph = cfg.USE_LANGGRAPH
-    logger.info("ChromaDB memory initialized")
+    app.state.mcp_discovery = MCPDiscovery(chroma_memory)
+    logger.info("ChromaDB memory and MCP discovery initialized")
 
     # 3. Import built-in tools (already auto-registered via __init__.py)
     from src.tools.builtin import register_builtin_tools
@@ -208,6 +210,13 @@ async def lifespan(app: FastAPI):
                 TOOL_REGISTRY.register(w)
             except ValueError as e:
                 logger.warning(f"MCP tool registration skipped: {e}")
+
+        # Index tools for semantic discovery
+        mcp_discovery = getattr(app.state, "mcp_discovery", None)
+        if mcp_discovery:
+            for name, server in mcp_gateway._servers.items():
+                if server.connected and server.tools:
+                    await mcp_discovery.index_tools(name, server.tools)
     else:
         logger.info("No MCP servers configured")
 
@@ -318,6 +327,7 @@ async def execute_chat(request: Request, chat_request: ChatRequest):
     from src.config import settings as cfg
     chroma_memory = getattr(request.app.state, "chroma_memory", None)
     knowledge_brain = getattr(request.app.state, "knowledge_brain", None)
+    mcp_discovery = getattr(request.app.state, "mcp_discovery", None)
     use_langgraph = getattr(request.app.state, "use_langgraph", cfg.USE_LANGGRAPH)
 
     if use_langgraph:
@@ -340,7 +350,7 @@ async def execute_chat(request: Request, chat_request: ChatRequest):
             ):
                 yield chunk
         else:
-            async for chunk in executor.execute(chat_request, chroma_memory, knowledge_brain):
+            async for chunk in executor.execute(chat_request, chroma_memory, knowledge_brain, mcp_discovery):
                 yield chunk
 
     return StreamingResponse(

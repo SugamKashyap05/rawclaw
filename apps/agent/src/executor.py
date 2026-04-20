@@ -38,6 +38,7 @@ class Executor:
         request: ChatRequest,
         chroma_memory=None,
         knowledge_brain=None,
+        mcp_discovery=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute a chat request with planning, tool calling, and synthesis.
@@ -91,6 +92,20 @@ class Executor:
                         },
                     )
 
+            # 2.1 TOOL DISCOVERY: Suggest tools if none are registered or if relevant
+            if mcp_discovery and latest_user_query:
+                discovery_hints = await mcp_discovery.discover_relevant_tools(latest_user_query)
+                if discovery_hints:
+                    hint_text = "\n".join([f"- {h['name']} ({h['server']}): {h['description']}" for h in discovery_hints])
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            "Information: Some relevant tools are currently not loaded but available via MCP. "
+                            "If the user task requires them, explain that you can connect to the relevant server.\n"
+                            f"Available tools discovered:\n{hint_text}"
+                        )
+                    })
+
             # Use tools from request if provided, otherwise fall back to registry
             if request.tools:
                 tools_schema = request.tools
@@ -133,6 +148,7 @@ class Executor:
                         request.session_id,
                         tool_call,
                         trace,
+                        knowledge_brain=knowledge_brain,
                     )
                     logger.info(f"[TOOL_TRACE] Tool {tool_name} executed: success={tool_result.error is None}, error={tool_result.error}")
 
@@ -311,6 +327,7 @@ class Executor:
                             f"task_{request.run_id}",
                             tool_call,
                             trace,
+                            knowledge_brain=None, # Task execution doesn't currently support injected brain
                         )
                         
                         trace.add_tool_result(tool_result, int(tool_result.duration_ms))
@@ -353,6 +370,7 @@ class Executor:
         session_id: str,
         tool_call: ToolCall,
         trace: ProvenanceTrace,
+        knowledge_brain: Optional[Any] = None,
     ) -> ToolResult:
         """
         Execute a tool, handling confirmation gate if needed.
@@ -371,12 +389,12 @@ class Executor:
                     session_id,
                     tool_name,
                     tool_input,
-                    lambda: tool.execute(tool_input),
+                    lambda: TOOL_REGISTRY.execute_tool(tool_name, tool_input, knowledge_brain=knowledge_brain),
                 )
                 return result
 
             # Execute directly
-            return await tool.execute(tool_input)
+            return await TOOL_REGISTRY.execute_tool(tool_name, tool_input, knowledge_brain=knowledge_brain)
 
         except ToolNotFoundError:
             return ToolResult(

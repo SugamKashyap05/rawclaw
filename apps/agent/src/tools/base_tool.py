@@ -12,6 +12,11 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from src.contracts.tool import ToolResult, ToolSchema
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.memory.knowledge_brain import KnowledgeBrain
+
 
 
 class BaseTool(ABC):
@@ -27,7 +32,15 @@ class BaseTool(ABC):
     requires_sandbox: bool = False
     requires_confirmation: bool = False
 
+    # Runtime-injected components
+    _knowledge_brain: Optional["KnowledgeBrain"] = None
+
+    def set_knowledge_brain(self, brain: "KnowledgeBrain") -> None:
+        """Injects the KnowledgeBrain instance into the tool."""
+        self._knowledge_brain = brain
+
     @abstractmethod
+
     async def execute(self, input: Dict[str, Any]) -> ToolResult:
         """Execute the tool with the given input. Must return a ToolResult."""
         ...

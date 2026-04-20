@@ -14,16 +14,17 @@
   --neon-red-glow: rgba(255, 61, 0, 0.4);
   --neon-purple: #9d00ff;
   
-  /* Text */
-  --text-primary: #ffffff;
+  --text-primary: #f2f2f7;
   --text-secondary: #a0a0b8;
-  --text-muted: #62627a;
+  --text-muted: #6e6e80;
   
   /* Borders & Glass */
-  --border-glass: rgba(255, 255, 255, 0.05);
-  --border-neon: rgba(0, 240, 255, 0.2);
-  --shadow-neon: 0 0 15px rgba(0, 240, 255, 0.1);
-  --glass-blur: blur(12px);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-neon: rgba(0, 240, 255, 0.25);
+  --shadow-neon: 0 0 20px rgba(0, 240, 255, 0.12);
+  --glass-blur: blur(16px);
+  --glass-bg: rgba(15, 15, 24, 0.4);
+  --glass-bg-accent: rgba(0, 240, 255, 0.04);
 
   /* Functional */
   --success: #00ff88;
@@ -397,12 +398,41 @@ a {
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--border-glass);
-  background: rgba(8, 8, 14, 0.8);
-  backdrop-filter: blur(20px);
+  background: rgba(5, 5, 10, 0.85);
+  backdrop-filter: blur(32px);
   height: 100%;
   max-height: 100%;
   z-index: 10;
   overflow: hidden;
+  box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+}
+
+/* --- Message Bubble Enhancements --- */
+.message-bubble {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.message-bubble:hover {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+}
+
+.assistant-bubble {
+  background: var(--glass-bg) !important;
+  backdrop-filter: var(--glass-blur);
+}
+
+.user-bubble {
+  background: var(--glass-bg-accent) !important;
+  backdrop-filter: var(--glass-blur);
+  border-color: rgba(0, 240, 255, 0.12) !important;
+}
+
+.user-bubble:hover {
+  border-color: rgba(0, 240, 255, 0.3) !important;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.1) !important;
 }
 
 /* Chat page container - ensures proper flex behavior within shell */

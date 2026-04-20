@@ -1,11 +1,4 @@
-"""
-SearchWebTool — Web search via Brave Search API with DuckDuckGo fallback.
-
-Security: No sandbox needed (outbound HTTP only, no local state).
-Tags: search, read, network
-"""
 import logging
-import os
 import time
 from typing import Any, Dict, List, Optional
 
@@ -16,14 +9,13 @@ from src.contracts.tool import ToolResult
 
 logger = logging.getLogger("rawclaw.tools.search")
 
-BRAVE_API_URL = "https://api.search.brave.com/res/v1/web/search"
 DUCKDUCKGO_API_URL = "https://api.duckduckgo.com/"
 SEARCH_TIMEOUT = 10
 
 
-class SearchWebTool(BaseTool):
-    name = "web_search"
-    description = "Searches the web using Brave Search (primary) or DuckDuckGo (fallback) and returns a list of results with titles, URLs, and snippets."
+class DuckDuckGoSearchTool(BaseTool):
+    name = "duckduckgo_search"
+    description = "Searches the web using DuckDuckGo directly. Use this if the main 'web_search' tool is unavailable."
     parameters = {
         "type": "object",
         "properties": {
@@ -44,7 +36,7 @@ class SearchWebTool(BaseTool):
     requires_confirmation = False
 
     def __init__(self) -> None:
-        self._brave_api_key: Optional[str] = os.getenv("BRAVE_API_KEY")
+        pass
 
     async def execute(self, input: Dict[str, Any]) -> ToolResult:
         start = time.time()
@@ -60,27 +52,11 @@ class SearchWebTool(BaseTool):
                 sandboxed=False,
             )
 
-        # Try Brave first, then DuckDuckGo
-        results: Optional[List[Dict]] = None
-        source: str = ""
-
-        if self._brave_api_key:
-            results = await self.brave_search(query, max_results)
-            if results is not None:
-                source = "brave"
-            else:
-                logger.warning("Brave Search failed, falling back to DuckDuckGo")
+        results = await self.duckduckgo_search(query)
+        source = "duckduckgo"
 
         if results is None:
-            results = await self.duckduckgo_search(query)
-            if results is not None:
-                source = "duckduckgo"
-
-        if results is None:
-            error_msg = "Search failed. "
-            if self._brave_api_key:
-                error_msg += "Brave Search API failed (check API key validity). "
-            error_msg += "DuckDuckGo fallback also failed (may be rate limited or network issue)."
+            error_msg = "DuckDuckGo search failed (may be rate limited or network issue)."
             logger.error(f"web_search failed for query '{query}': {error_msg}")
             return ToolResult(
                 tool_name=self.name,
@@ -116,33 +92,6 @@ class SearchWebTool(BaseTool):
             provenance_hint={"source": source, "result_count": len(output_results)},
         )
 
-    async def brave_search(self, query: str, count: int) -> Optional[List[Dict]]:
-        """Search using Brave Search API."""
-        try:
-            async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT) as client:
-                resp = await client.get(
-                    BRAVE_API_URL,
-                    params={"q": query, "count": count},
-                    headers={
-                        "Accept": "application/json",
-                        "Accept-Encoding": "gzip",
-                        "X-Subscription-Token": self._brave_api_key,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                results = []
-                for item in data.get("web", {}).get("results", []):
-                    results.append({
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "snippet": item.get("description", ""),
-                    })
-                return results
-        except Exception as e:
-            logger.error(f"Brave Search error: {e}")
-            return None
-
     async def duckduckgo_search(self, query: str) -> Optional[List[Dict]]:
         """Search using DuckDuckGo Instant Answer API."""
         try:
@@ -153,7 +102,6 @@ class SearchWebTool(BaseTool):
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                logger.info(f"DuckDuckGo response keys: {data.keys()}")
                 results = []
                 # Abstract
                 if data.get("Abstract"):
@@ -163,20 +111,25 @@ class SearchWebTool(BaseTool):
                         "snippet": data.get("Abstract", ""),
                     })
                 # Related topics
-                for topic in data.get("RelatedTopics", [])[:5]:
+                for topic in data.get("RelatedTopics", [])[:10]:
                     if "Text" in topic:
                         results.append({
                             "title": topic.get("Text", "")[:100],
                             "url": topic.get("FirstURL", ""),
                             "snippet": topic.get("Text", ""),
                         })
-                logger.info(f"DuckDuckGo found {len(results)} results")
+                    elif "Topics" in topic:
+                        for sub_topic in topic.get("Topics", [])[:3]:
+                            results.append({
+                                "title": sub_topic.get("Text", "")[:100],
+                                "url": sub_topic.get("FirstURL", ""),
+                                "snippet": sub_topic.get("Text", ""),
+                            })
+                
                 return results if results else None
         except Exception as e:
             logger.error(f"DuckDuckGo error: {e}")
             return None
 
     async def health_check(self) -> str:
-        if self._brave_api_key:
-            return "ok"
-        return "degraded"  # DuckDuckGo-only mode
+        return "ok"

@@ -179,7 +179,7 @@ def _extract_textual_tool_calls(content: str) -> tuple[str, List[Dict[str, Any]]
             logging.getLogger("rawclaw.ollama").debug(f"Failed to parse tool_code: {e}")
             pass
 
-    return cleaned.strip(), tool_calls
+    return cleaned, tool_calls
 
 
 class OllamaProvider(ModelProvider):

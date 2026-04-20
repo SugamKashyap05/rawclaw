@@ -15,6 +15,10 @@ from typing import Any, Dict, List, Optional
 
 from src.tools.base_tool import BaseTool
 from src.contracts.tool import ToolSchema, ToolHealthStatus, ToolInfo
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.memory.knowledge_brain import KnowledgeBrain
 
 logger = logging.getLogger("rawclaw.registry")
 
@@ -129,6 +133,7 @@ class ToolRegistry:
         self,
         name: str,
         input: Dict[str, Any],
+        knowledge_brain: Optional["KnowledgeBrain"] = None,
     ) -> "ToolResult":
         """
         Execute a tool by name. Returns ToolResult.
@@ -140,6 +145,8 @@ class ToolRegistry:
         start = time.time()
         try:
             tool = self.get(name)
+            if knowledge_brain:
+                tool.set_knowledge_brain(knowledge_brain)
             result = await tool.execute(input)
             return result
         except ToolNotFoundError as e:
