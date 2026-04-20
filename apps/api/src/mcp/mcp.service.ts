@@ -27,7 +27,7 @@ export class MCPService {
   ) {}
 
   private get agentUrl(): string {
-    return this.configService.get<string>('agentUrl') || 'http://localhost:8000';
+    return this.configService.get<string>('agentUrl') || 'http://localhost:8001';
   }
 
   private get dockerMcpUrl(): string | null {

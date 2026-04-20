@@ -24,7 +24,7 @@ export class MemoryService {
   ) {}
 
   private get agentUrl(): string {
-    return this.configService.get<string>('agentUrl') || 'http://localhost:8000';
+    return this.configService.get<string>('agentUrl') || 'http://localhost:8001';
   }
 
   async getStats(): Promise<MemoryStats> {

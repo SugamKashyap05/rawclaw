@@ -26,6 +26,8 @@ import { FileBrowserPanel } from '../components/chat/FileBrowserPanel';
 import { ChatAttachment, DocumentSelection, DocumentEditRequest, DocumentEditAction } from '@rawclaw/shared';
 import { DocumentCanvas } from '../components/chat/DocumentCanvas';
 import { ErrorCard } from '../components/chat/ErrorCard';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 /** Max file content size to inline into prompt (2MB). Larger files are stored but truncated in prompt. */
 const MAX_ATTACHMENT_PROMPT_CHARS = 2 * 1024 * 1024;
@@ -716,7 +718,17 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
         <div style={{ paddingBottom: '1rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-glass)', display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
-              <h1 style={{ fontSize: '1.6rem', margin: 0 }}>Chat</h1>
+              <h1 style={{ 
+                fontSize: '1.8rem', 
+                margin: 0, 
+                fontWeight: 800, 
+                letterSpacing: '-0.02em',
+                background: 'linear-gradient(to right, #fff, var(--neon-cyan))',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent'
+              }}>
+                RawClaw <span style={{ fontWeight: 300, opacity: 0.8 }}>Chat</span>
+              </h1>
               {routeSessionId && (
                 <span className="mono" style={{ 
                   fontSize: '0.65rem', 
@@ -1260,7 +1272,11 @@ function MessageCard({
               if (suggestion) {
                 return (
                   <>
-                    {textContent}
+                    <div className="markdown-content">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {textContent}
+                      </ReactMarkdown>
+                    </div>
                     <div style={{ 
                       marginTop: '0.5rem', 
                       padding: '8px 12px', 
@@ -1279,11 +1295,20 @@ function MessageCard({
                   </>
                 );
               }
-              return message.content;
+              return (
+                <div className="markdown-content">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
+              );
             })()}
           </div>
         ) : !message.error ? (
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, opacity: 0.5 }}>...</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--neon-cyan)', opacity: 0.8 }}>
+            <span className="pulse-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', boxShadow: '0 0 10px currentColor' }} />
+            <span style={{ fontSize: '0.9rem', fontStyle: 'italic' }}>RawClaw is thinking...</span>
+          </div>
         ) : null}
 
         {!editing && message.attachments && message.attachments.length > 0 && (

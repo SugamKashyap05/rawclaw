@@ -91,23 +91,30 @@ class KnowledgeBrain:
         tags: Optional[list[str]] = None,
         source: Optional[str] = None,
     ) -> str:
-        retrieval = self.retrieve(
-            query=query,
-            session_id=session_id,
-            collection=collection,
-            tags=tags,
-            source=source,
-        )
+        logger.info(f"Building context for query: {query[:50]}...")
+        try:
+            retrieval = self.retrieve(
+                query=query,
+                session_id=session_id,
+                collection=collection,
+                tags=tags,
+                source=source,
+            )
+        except Exception as e:
+            logger.error(f"Context retrieval failed globally: {e}")
+            return ""
 
         blocks: list[str] = []
-        if retrieval["internal"]:
+        if retrieval.get("internal"):
             blocks.append("Internal memory:")
             for item in retrieval["internal"][:4]:
                 blocks.append(f"- [{item.get('collection', 'memory')}] {item.get('preview', item.get('content', ''))}")
 
-        if retrieval["external"]:
+        if retrieval.get("external"):
             blocks.append("Wikipedia knowledge:")
             for item in retrieval["external"][:2]:
                 blocks.append(f"- [{item.get('source', 'Wikipedia')}] {item.get('preview', item.get('content', ''))}")
 
-        return "\n".join(blocks).strip()
+        context = "\n".join(blocks).strip()
+        logger.info(f"Context built: {len(blocks)} blocks found.")
+        return context

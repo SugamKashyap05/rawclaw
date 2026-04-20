@@ -1,0 +1,109 @@
+{
+  "session_id": "test-aeaf4721",
+  "timestamp": "2026-04-20T17:44:48",
+  "api_base": "http://localhost:3000/api",
+  "agent_base": "http://localhost:8001",
+  "available_tools": [
+    "get_datetime",
+    "web_search",
+    "web_fetch",
+    "read_file",
+    "browser_click",
+    "browser_close",
+    "browser_console_messages",
+    "browser_drag",
+    "browser_evaluate",
+    "browser_file_upload",
+    "browser_fill_form",
+    "browser_handle_dialog",
+    "browser_hover",
+    "browser_navigate",
+    "browser_navigate_back",
+    "browser_network_requests",
+    "browser_press_key",
+    "browser_resize",
+    "browser_run_code",
+    "browser_select_option",
+    "browser_snapshot",
+    "browser_tabs",
+    "browser_take_screenshot",
+    "browser_type",
+    "browser_wait_for",
+    "convert_time",
+    "fetch",
+    "fetch_content",
+    "get_current_time",
+    "puppeteer_click",
+    "puppeteer_evaluate",
+    "puppeteer_fill",
+    "puppeteer_hover",
+    "puppeteer_navigate",
+    "puppeteer_screenshot",
+    "puppeteer_select",
+    "search",
+    "sequentialthinking"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "name": "greeting",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": "HTTP 201: data: {\"type\":\"content\",\"content\":\"Hello\"}\n\ndata: {\"type\":\"content\",\"content\":\"!\"}\n\ndata: {\"type\":\"content\",\"content\":\"I\"}\n\ndata: {\"type\":\"content\",\"content\":\"'m\"}\n\ndata: {\"type\":\"content\",\"content\":\"sorry\"}\n\ndata: {\"type\":\"content\",\"content\":\",\"}\n\ndata: {\"type\":\"content\",\"content\":\"but\"}\n\ndata: {\"type\":\"content\",\"content\":\"I\"}\n\ndata: {\"type\":\"content\",\"content\":\"can\"}\n\ndata: {\"type\":\"content\",\"content\":\"'t\"}\n\ndata: {\"type\":\"content\",\"content\":\"assist\"}\n\ndata: {\"type\":\"content\",\"content\":\"with\"}\n\ndata: {\"type\":\"content\",\"content\":\"that\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"metadata\",\"metadata\":{\"modelId\":\"ollama/qwen2.5:1.5b\",\"isLocal\":true,\"fallbacks\":[],\"durationMs\":3210,\"memoryRecall\":true}}\n\ndata: {\"type\":\"provenance\",\"provenanceTrace\":{\"runId\":\"0b499168-d4d4-4e1e-a1b4-bcda75bd08c9\",\"steps\":[{\"stepIndex\":0,\"stepType\":\"plan\",\"toolName\":null,\"inputSummary\":\"Processing request with 5 messages\",\"outputSummary\":null,\"sourceUrl\":null,\"durationMs\":0,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:01.143676Z\"},{\"stepIndex\":1,\"stepType\":\"synthesis\",\"toolName\":null,\"inputSummary\":null,\"outputSummary\":\"Hello!I'msorry,butIcan'tassistwiththat....\",\"sourceUrl\":null,\"durationMs\":10047,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:04.353960Z\"}],\"stepCount\":2,\"createdAt\":\"2026-04-20T12:14:04.832239Z\",\"runIds\":[],\"summary\":{\"hasTools\":false,\"hasDocuments\":false,\"hasTaskRun\":false,\"mainSource\":\"model\",\"brief\":\"Answered directly from model knowledge. No tools were invoked.\",\"lastAction\":\"Answered directly from model knowledge. No tools were invoked.\"}}}\n\ndata: {\"type\":\"done\"}\n\n",
+        "events": []
+      }
+    },
+    {
+      "step": 2,
+      "name": "tool_awareness",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": "HTTP 201: data: {\"type\":\"content\",\"content\":\"I\"}\n\ndata: {\"type\":\"content\",\"content\":\"'m\"}\n\ndata: {\"type\":\"content\",\"content\":\"capable\"}\n\ndata: {\"type\":\"content\",\"content\":\"of\"}\n\ndata: {\"type\":\"content\",\"content\":\"several\"}\n\ndata: {\"type\":\"content\",\"content\":\"tasks\"}\n\ndata: {\"type\":\"content\",\"content\":\"including\"}\n\ndata: {\"type\":\"content\",\"content\":\":\"}\n\ndata: {\"type\":\"content\",\"content\":\"1\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"P\"}\n\ndata: {\"type\":\"content\",\"content\":\"uppet\"}\n\ndata: {\"type\":\"content\",\"content\":\"eer\"}\n\ndata: {\"type\":\"content\",\"content\":\"Click\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"-\"}\n\ndata: {\"type\":\"content\",\"content\":\"This\"}\n\ndata: {\"type\":\"content\",\"content\":\"is\"}\n\ndata: {\"type\":\"content\",\"content\":\"a\"}\n\ndata: {\"type\":\"content\",\"content\":\"function\"}\n\ndata: {\"type\":\"content\",\"content\":\"that\"}\n\ndata: {\"type\":\"content\",\"content\":\"clicks\"}\n\ndata: {\"type\":\"content\",\"content\":\"an\"}\n\ndata: {\"type\":\"content\",\"content\":\"element\"}\n\ndata: {\"type\":\"content\",\"content\":\"on\"}\n\ndata: {\"type\":\"content\",\"content\":\"the\"}\n\ndata: {\"type\":\"content\",\"content\":\"page\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"2\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"P\"}\n\ndata: {\"type\":\"content\",\"content\":\"uppet\"}\n\ndata: {\"type\":\"content\",\"content\":\"eer\"}\n\ndata: {\"type\":\"content\",\"content\":\"Evaluate\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"-\"}\n\ndata: {\"type\":\"content\",\"content\":\"This\"}\n\ndata: {\"type\":\"content\",\"content\":\"tool\"}\n\ndata: {\"type\":\"content\",\"content\":\"lets\"}\n\ndata: {\"type\":\"content\",\"content\":\"you\"}\n\ndata: {\"type\":\"content\",\"content\":\"execute\"}\n\ndata: {\"type\":\"content\",\"content\":\"JavaScript\"}\n\ndata: {\"type\":\"content\",\"content\":\"in\"}\n\ndata: {\"type\":\"content\",\"content\":\"the\"}\n\ndata: {\"type\":\"content\",\"content\":\"browser\"}\n\ndata: {\"type\":\"content\",\"content\":\"console\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"3\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"P\"}\n\ndata: {\"type\":\"content\",\"content\":\"uppet\"}\n\ndata: {\"type\":\"content\",\"content\":\"eer\"}\n\ndata: {\"type\":\"content\",\"content\":\"Fill\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"-\"}\n\ndata: {\"type\":\"content\",\"content\":\"A\"}\n\ndata: {\"type\":\"content\",\"content\":\"method\"}\n\ndata: {\"type\":\"content\",\"content\":\"for\"}\n\ndata: {\"type\":\"content\",\"content\":\"filling\"}\n\ndata: {\"type\":\"content\",\"content\":\"out\"}\n\ndata: {\"type\":\"content\",\"content\":\"an\"}\n\ndata: {\"type\":\"content\",\"content\":\"input\"}\n\ndata: {\"type\":\"content\",\"content\":\"field\"}\n\ndata: {\"type\":\"content\",\"content\":\"with\"}\n\ndata: {\"type\":\"content\",\"content\":\"specific\"}\n\ndata: {\"type\":\"content\",\"content\":\"values\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"4\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"P\"}\n\ndata: {\"type\":\"content\",\"content\":\"uppet\"}\n\ndata: {\"type\":\"content\",\"content\":\"eer\"}\n\ndata: {\"type\":\"content\",\"content\":\"Navigate\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"-\"}\n\ndata: {\"type\":\"content\",\"content\":\"N\"}\n\ndata: {\"type\":\"content\",\"content\":\"avig\"}\n\ndata: {\"type\":\"content\",\"content\":\"ates\"}\n\ndata: {\"type\":\"content\",\"content\":\"to\"}\n\ndata: {\"type\":\"content\",\"content\":\"a\"}\n\ndata: {\"type\":\"content\",\"content\":\"URL\"}\n\ndata: {\"type\":\"content\",\"content\":\"provided\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"5\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"P\"}\n\ndata: {\"type\":\"content\",\"content\":\"uppet\"}\n\ndata: {\"type\":\"content\",\"content\":\"eer\"}\n\ndata: {\"type\":\"content\",\"content\":\"S\"}\n\ndata: {\"type\":\"content\",\"content\":\"creenshot\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"-\"}\n\ndata: {\"type\":\"content\",\"content\":\"It\"}\n\ndata: {\"type\":\"content\",\"content\":\"takes\"}\n\ndata: {\"type\":\"content\",\"content\":\"a\"}\n\ndata: {\"type\":\"content\",\"content\":\"screenshot\"}\n\ndata: {\"type\":\"content\",\"content\":\"of\"}\n\ndata: {\"type\":\"content\",\"content\":\"the\"}\n\ndata: {\"type\":\"content\",\"content\":\"current\"}\n\ndata: {\"type\":\"content\",\"content\":\"page\"}\n\ndata: {\"type\":\"content\",\"content\":\"or\"}\n\ndata: {\"type\":\"content\",\"content\":\"a\"}\n\ndata: {\"type\":\"content\",\"content\":\"specific\"}\n\ndata: {\"type\":\"content\",\"content\":\"element\"}\n\ndata: {\"type\":\"content\",\"content\":\"on\"}\n\ndata: {\"type\":\"content\",\"content\":\"the\"}\n\ndata: {\"type\":\"content\",\"content\":\"page\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"6\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"Sequential\"}\n\ndata: {\"type\":\"content\",\"content\":\"Thinking\"}\n\ndata: {\"type\":\"content\",\"content\":\"**\"}\n\ndata: {\"type\":\"content\",\"content\":\"-\"}\n\ndata: {\"type\":\"content\",\"content\":\"This\"}\n\ndata: {\"type\":\"content\",\"content\":\"is\"}\n\ndata: {\"type\":\"content\",\"content\":\"detailed\"}\n\ndata: {\"type\":\"content\",\"content\":\"tool\"}\n\ndata: {\"type\":\"content\",\"content\":\"for\"}\n\ndata: {\"type\":\"content\",\"content\":\"dynamic\"}\n\ndata: {\"type\":\"content\",\"content\":\"and\"}\n\ndata: {\"type\":\"content\",\"content\":\"reflective\"}\n\ndata: {\"type\":\"content\",\"content\":\"problem\"}\n\ndata: {\"type\":\"content\",\"content\":\"-solving\"}\n\ndata: {\"type\":\"content\",\"content\":\",\"}\n\ndata: {\"type\":\"content\",\"content\":\"helping\"}\n\ndata: {\"type\":\"content\",\"content\":\"analyze\"}\n\ndata: {\"type\":\"content\",\"content\":\"problems\"}\n\ndata: {\"type\":\"content\",\"content\":\"through\"}\n\ndata: {\"type\":\"content\",\"content\":\"flexible\"}\n\ndata: {\"type\":\"content\",\"content\":\"thinking\"}\n\ndata: {\"type\":\"content\",\"content\":\"steps\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"content\",\"content\":\"All\"}\n\ndata: {\"type\":\"content\",\"content\":\"these\"}\n\ndata: {\"type\":\"content\",\"content\":\"tools\"}\n\ndata: {\"type\":\"content\",\"content\":\"are\"}\n\ndata: {\"type\":\"content\",\"content\":\"related\"}\n\ndata: {\"type\":\"content\",\"content\":\"to\"}\n\ndata: {\"type\":\"content\",\"content\":\"web\"}\n\ndata: {\"type\":\"content\",\"content\":\"browsers\"}\n\ndata: {\"type\":\"content\",\"content\":\"and\"}\n\ndata: {\"type\":\"content\",\"content\":\"JavaScript\"}\n\ndata: {\"type\":\"content\",\"content\":\"manipulation\"}\n\ndata: {\"type\":\"content\",\"content\":\".\"}\n\ndata: {\"type\":\"metadata\",\"metadata\":{\"modelId\":\"ollama/qwen2.5:1.5b\",\"isLocal\":true,\"fallbacks\":[],\"durationMs\":3354,\"memoryRecall\":true}}\n\ndata: {\"type\":\"provenance\",\"provenanceTrace\":{\"runId\":\"b409aa51-a993-4589-b083-a76077b33840\",\"steps\":[{\"stepIndex\":0,\"stepType\":\"plan\",\"toolName\":null,\"inputSummary\":\"Processing request with 7 messages\",\"outputSummary\":null,\"sourceUrl\":null,\"durationMs\":0,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:12.695007Z\"},{\"stepIndex\":1,\"stepType\":\"synthesis\",\"toolName\":null,\"inputSummary\":null,\"outputSummary\":\"I'mcapableofseveraltasksincluding:1.**PuppeteerClick**-Thisisafunctionthatclicksanelementonthepage.2.**PuppeteerEvaluate**-ThistoolletsyouexecuteJavaScriptinthebrowserconsole.3.**PuppeteerFill**-Ameth...\",\"sourceUrl\":null,\"durationMs\":9701,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:16.049538Z\"}],\"stepCount\":2,\"createdAt\":\"2026-04-20T12:14:16.725482Z\",\"runIds\":[],\"summary\":{\"hasTools\":false,\"hasDocuments\":false,\"hasTaskRun\":false,\"mainSource\":\"model\",\"brief\":\"Answered directly from model knowledge. No tools were invoked.\",\"lastAction\":\"Answered directly from model knowledge. No tools were invoked.\"}}}\n\ndata: {\"type\":\"done\"}\n\n",
+        "events": []
+      }
+    },
+    {
+      "step": 3,
+      "name": "tool_invocation",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": "HTTP 201: data: {\"type\":\"tool_result\",\"tool_call\":{\"tool_name\":\"search\",\"input\":{\"region\":\"\",\"query\":\"latest cricket news 2025\",\"max_results\":1}},\"tool_result\":{\"tool_name\":\"search\",\"input\":{\"region\":\"\",\"query\":\"latest cricket news 2025\",\"max_results\":1},\"output\":{\"content\":[{\"type\":\"text\",\"text\":\"Found 1 search results:\\n\\n1. Cricbuzz | Live Cricket Streaming, Live Scores, Ball-by-Ball Commentary ...\\n   URL: https://m.cricbuzz.com/\\n   Summary: Get livecricketscores, schedules,latestnews, ICC rankings, and videos of IPL2025, international and domestic matches on Cricbuzz.\\n\"}],\"structuredContent\":{\"result\":\"Found 1 search results:\\n\\n1. Cricbuzz | Live Cricket Streaming, Live Scores, Ball-by-Ball Commentary ...\\n   URL: https://m.cricbuzz.com/\\n   Summary: Get livecricketscores, schedules,latestnews, ICC rankings, and videos of IPL2025, international and domestic matches on Cricbuzz.\\n\"}},\"error\":null,\"duration_ms\":3106.72,\"sandboxed\":false,\"source_url\":null,\"provenance_hint\":null}}\n\ndata: {\"type\":\"metadata\",\"metadata\":{\"modelId\":\"ollama/qwen2.5:1.5b\",\"isLocal\":true,\"fallbacks\":[],\"durationMs\":6189,\"memoryRecall\":true}}\n\ndata: {\"type\":\"provenance\",\"provenanceTrace\":{\"runId\":\"dc510697-f63c-4a53-be58-a82b96274e88\",\"steps\":[{\"stepIndex\":0,\"stepType\":\"plan\",\"toolName\":null,\"inputSummary\":\"Processing request with 9 messages\",\"outputSummary\":null,\"sourceUrl\":null,\"durationMs\":0,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:26.012384Z\"},{\"stepIndex\":1,\"stepType\":\"tool_call\",\"toolName\":\"search\",\"inputSummary\":\"region=, query=latest cricket news 2025, max_results=1\",\"outputSummary\":null,\"sourceUrl\":null,\"durationMs\":0,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:28.918860Z\"},{\"stepIndex\":2,\"stepType\":\"tool_result\",\"toolName\":\"search\",\"inputSummary\":\"region=, query=latest cricket news 2025, max_results=1\",\"outputSummary\":\"content=[{'type': 'text', 'text': 'Found 1 search results:\\\\n\\\\n1. Cricbuzz | Live Cricket Streaming, Live Sco, structuredContent={'result': 'Found 1 search results:\\\\n\\\\n1. Cricbuzz | Live Cricket Streaming, Live Scores, Ball-by-Ba\",\"sourceUrl\":null,\"durationMs\":3106,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:32.025705Z\"},{\"stepIndex\":3,\"stepType\":\"synthesis\",\"toolName\":null,\"inputSummary\":null,\"outputSummary\":\"...\",\"sourceUrl\":null,\"durationMs\":14002,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:32.202205Z\"}],\"stepCount\":4,\"createdAt\":\"2026-04-20T12:14:33.091623Z\",\"runIds\":[],\"summary\":{\"hasTools\":true,\"hasDocuments\":false,\"hasTaskRun\":false,\"mainSource\":\"tool\",\"brief\":\"Executed 1 tool(s): search.\",\"lastAction\":\"Completed search\"}}}\n\ndata: {\"type\":\"done\"}\n\n",
+        "events": []
+      }
+    },
+    {
+      "step": 4,
+      "name": "browser_invocation",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": "HTTP 201: data: {\"type\":\"tool_result\",\"tool_call\":{\"tool_name\":\"fetch\",\"input\":{\"url\":\"https://example.com\"}},\"tool_result\":{\"tool_name\":\"fetch\",\"input\":{\"url\":\"https://example.com\"},\"output\":{\"content\":[{\"type\":\"text\",\"text\":\"Contents of https://example.com/:\\n<p>Example Domain</p>\\n# Example Domain\\n\\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\\n\\nLearn more\\n\\n\"}]},\"error\":null,\"duration_ms\":2109.19,\"sandboxed\":false,\"source_url\":null,\"provenance_hint\":null}}\n\ndata: {\"type\":\"metadata\",\"metadata\":{\"modelId\":\"ollama/qwen2.5:1.5b\",\"isLocal\":true,\"fallbacks\":[],\"durationMs\":5202,\"memoryRecall\":true}}\n\ndata: {\"type\":\"provenance\",\"provenanceTrace\":{\"runId\":\"1eeedb4f-4cd9-4d37-81d7-6e1d94f4c35d\",\"steps\":[{\"stepIndex\":0,\"stepType\":\"plan\",\"toolName\":null,\"inputSummary\":\"Processing request with 11 messages\",\"outputSummary\":null,\"sourceUrl\":null,\"durationMs\":0,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:42.067520Z\"},{\"stepIndex\":1,\"stepType\":\"tool_call\",\"toolName\":\"fetch\",\"inputSummary\":\"url=https://example.com\",\"outputSummary\":null,\"sourceUrl\":null,\"durationMs\":0,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:45.018591Z\"},{\"stepIndex\":2,\"stepType\":\"tool_result\",\"toolName\":\"fetch\",\"inputSummary\":\"url=https://example.com\",\"outputSummary\":\"content=[{'type': 'text', 'text': 'Contents of https://example.com/:\\\\n<p>Example Domain</p>\\\\n# Example Domai\",\"sourceUrl\":null,\"durationMs\":2109,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:47.127888Z\"},{\"stepIndex\":3,\"stepType\":\"synthesis\",\"toolName\":null,\"inputSummary\":null,\"outputSummary\":\"...\",\"sourceUrl\":null,\"durationMs\":12538,\"sandboxed\":false,\"timestamp\":\"2026-04-20T12:14:47.270241Z\"}],\"stepCount\":4,\"createdAt\":\"2026-04-20T12:14:48.125117Z\",\"runIds\":[],\"summary\":{\"hasTools\":true,\"hasDocuments\":false,\"hasTaskRun\":false,\"mainSource\":\"tool\",\"brief\":\"Executed 1 tool(s): fetch.\",\"lastAction\":\"Completed fetch\"}}}\n\ndata: {\"type\":\"done\"}\n\n",
+        "events": []
+      }
+    }
+  ],
+  "summary": {
+    "passed": 0,
+    "failed": 4,
+    "total": 4
+  }
+}

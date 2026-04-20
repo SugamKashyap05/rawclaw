@@ -1,0 +1,109 @@
+{
+  "session_id": "test-73b2fbd8",
+  "timestamp": "2026-04-20T17:47:49",
+  "api_base": "http://localhost:3000/api",
+  "agent_base": "http://localhost:8001",
+  "available_tools": [
+    "get_datetime",
+    "web_search",
+    "web_fetch",
+    "read_file",
+    "browser_click",
+    "browser_close",
+    "browser_console_messages",
+    "browser_drag",
+    "browser_evaluate",
+    "browser_file_upload",
+    "browser_fill_form",
+    "browser_handle_dialog",
+    "browser_hover",
+    "browser_navigate",
+    "browser_navigate_back",
+    "browser_network_requests",
+    "browser_press_key",
+    "browser_resize",
+    "browser_run_code",
+    "browser_select_option",
+    "browser_snapshot",
+    "browser_tabs",
+    "browser_take_screenshot",
+    "browser_type",
+    "browser_wait_for",
+    "convert_time",
+    "fetch",
+    "fetch_content",
+    "get_current_time",
+    "puppeteer_click",
+    "puppeteer_evaluate",
+    "puppeteer_fill",
+    "puppeteer_hover",
+    "puppeteer_navigate",
+    "puppeteer_screenshot",
+    "puppeteer_select",
+    "search",
+    "sequentialthinking"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "name": "greeting",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": "'Response' object has no attribute 'aitext'",
+        "events": []
+      }
+    },
+    {
+      "step": 2,
+      "name": "tool_awareness",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": "'Response' object has no attribute 'aitext'",
+        "events": []
+      }
+    },
+    {
+      "step": 3,
+      "name": "tool_invocation",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": "'Response' object has no attribute 'aitext'",
+        "events": []
+      }
+    },
+    {
+      "step": 4,
+      "name": "browser_invocation",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": "'Response' object has no attribute 'aitext'",
+        "events": []
+      }
+    }
+  ],
+  "summary": {
+    "passed": 0,
+    "failed": 4,
+    "total": 4
+  }
+}

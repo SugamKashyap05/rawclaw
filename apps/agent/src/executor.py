@@ -61,12 +61,21 @@ class Executor:
         logger.info(f"[TOOL_TRACE] Executor received request: session={session_id}, model={request.model}, tools_in_request={len(request.tools) if request.tools else 0}, registry_tools={len(tools_schema)}")
 
         try:
+            # 1. IMMEDIATE YIELD: Ensure the client knows we've started
+            trace.add_plan_step(f"Initializing execution for session {session_id}")
+            yield json.dumps({
+                "type": "provenance",
+                "provenance_trace": trace.to_dict(),
+            }) + "\n"
+
             latest_user_query = next(
                 (message.content for message in reversed(request.messages) if getattr(message, "role", "") == "user" and getattr(message, "content", "").strip()),
                 "",
             )
 
+            # 2. CONTEXT RETRIEVAL: Robust and logged
             if knowledge_brain and latest_user_query:
+                # build_context now has its own internal try-except
                 retrieved_context = knowledge_brain.build_context(latest_user_query, session_id=session_id)
                 if retrieved_context:
                     memory_recall_occurred = True
@@ -82,12 +91,6 @@ class Executor:
                         },
                     )
 
-            # History is already provided by the API orchestrator in request.messages
-            # We only keep the knowledge brain / memory recall insertion here
-
-            # Initial planning step
-            trace.add_plan_step(f"Processing request with {len(messages)} messages")
-
             # Use tools from request if provided, otherwise fall back to registry
             if request.tools:
                 tools_schema = request.tools
@@ -100,7 +103,8 @@ class Executor:
             if not tools_schema:
                 logger.warning("[TOOL_TRACE] No tools available!")
 
-            # Stream from model
+            # 3. STREAM FROM MODEL
+            logger.info(f"Starting model completion for {request.model}...")
             async_it = self.model_router.complete(
                 messages,
                 model=request.model,

@@ -65,14 +65,14 @@ class SearchWebTool(BaseTool):
         source: str = ""
 
         if self._brave_api_key:
-            results = await self._brave_search(query, max_results)
+            results = await self.brave_search(query, max_results)
             if results is not None:
                 source = "brave"
             else:
                 logger.warning("Brave Search failed, falling back to DuckDuckGo")
 
         if results is None:
-            results = await self._duckduckgo_search(query)
+            results = await self.duckduckgo_search(query)
             if results is not None:
                 source = "duckduckgo"
 
@@ -116,7 +116,7 @@ class SearchWebTool(BaseTool):
             provenance_hint={"source": source, "result_count": len(output_results)},
         )
 
-    async def _brave_search(self, query: str, count: int) -> Optional[List[Dict]]:
+    async def brave_search(self, query: str, count: int) -> Optional[List[Dict]]:
         """Search using Brave Search API."""
         try:
             async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT) as client:
@@ -143,7 +143,7 @@ class SearchWebTool(BaseTool):
             logger.error(f"Brave Search error: {e}")
             return None
 
-    async def _duckduckgo_search(self, query: str) -> Optional[List[Dict]]:
+    async def duckduckgo_search(self, query: str) -> Optional[List[Dict]]:
         """Search using DuckDuckGo Instant Answer API."""
         try:
             async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT) as client:

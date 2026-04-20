@@ -1,5 +1,6 @@
 import logging
 import time
+import asyncio
 from typing import AsyncIterator, List, Dict, Any, Optional
 from src.models.base import ModelProvider, ModelInfo, ProviderHealth
 from src.models.providers.ollama import OllamaProvider
@@ -26,15 +27,20 @@ class ModelRouter:
         self._cached_ollama_tags: Optional[List[str]] = None
 
     async def _get_ollama_tags(self) -> List[str]:
-        """Fetch and cache available Ollama tags."""
+        """Fetch and cache available Ollama tags with a strict timeout."""
         if self._cached_ollama_tags is not None:
             return self._cached_ollama_tags
         
         try:
-            models = await self.providers["ollama"].list_models()
+            # Added a stricter timeout for the initial tag check
+            models = await asyncio.wait_for(
+                self.providers["ollama"].list_models(),
+                timeout=3.0
+            )
             self._cached_ollama_tags = [m.name for m in models]
             return self._cached_ollama_tags
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to fetch Ollama tags: {e}")
             return []
 
     async def _normalize_model_id(self, model_id: str) -> str:
@@ -45,6 +51,13 @@ class ModelRouter:
         provider_name, inner_name = self._parse_model_id(model_id)
         
         if provider_name != "ollama":
+            return model_id
+
+        # FAST TRACK: If it's already a full tag (ollama/name:version), return immediately.
+        # This prevents blocking the start of the request on a network call.
+        if ":" in inner_name:
+            if not model_id.startswith("ollama/"):
+                return f"ollama/{inner_name}"
             return model_id
             
         tags = await self._get_ollama_tags()

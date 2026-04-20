@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     # LangGraph Config
     USE_LANGGRAPH: bool = False
     SQLITE_CHECKPOINTER_PATH: str = "./data/checkpoints.db"
-    ENABLE_WIKIPEDIA_RAG: bool = True
+    ENABLE_WIKIPEDIA_RAG: bool = False
     AGENT_RELOAD: bool = False
 
     def is_anthropic_usable(self) -> bool:
