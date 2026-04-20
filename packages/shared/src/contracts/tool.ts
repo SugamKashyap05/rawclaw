@@ -10,7 +10,7 @@ export interface ToolCall {
   /** The unique identifier or name of the tool to be executed */
   tool_name: string;
   /** The JSON or dictionary payload passed to the tool */
-  input: Record<string, unknown>;
+  input: any;
 }
 
 /**
@@ -20,7 +20,7 @@ export interface ToolResult {
   /** The name of the tool that was executed */
   tool_name: string;
   /** The input provided to the tool */
-  input: Record<string, unknown>;
+  input: any;
   /** The output result from the tool execution */
   output?: unknown;
   /** Any error encountered during tool execution */

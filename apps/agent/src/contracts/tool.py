@@ -11,13 +11,13 @@ from typing import Any, Dict, List, Literal, Optional
 class ToolCall(BaseModel):
     """Represents a tool call requested by the model."""
     tool_name: str
-    input: Dict[str, Any]
+    input: Any
 
 
 class ToolResult(BaseModel):
     """Represents the result of a tool execution."""
     tool_name: str
-    input: Dict[str, Any]
+    input: Any
     output: Optional[Any] = None
     error: Optional[str] = None
     duration_ms: float
