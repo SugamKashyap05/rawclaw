@@ -98,6 +98,7 @@ class ProvenanceTrace:
         self.run_id: str = str(uuid.uuid4())
         self._steps: List[ProvenanceStep] = []
         self._step_counter: int = 0
+        self.metadata: Dict[str, Any] = {}
 
     def add_step(
         self,
@@ -207,6 +208,7 @@ class ProvenanceTrace:
             "run_id": self.run_id,
             "steps": [step.model_dump() for step in self._steps],
             "step_count": len(self._steps),
+            "metadata": self.metadata,
             "created_at": datetime.utcnow().isoformat() + "Z",
         }
 

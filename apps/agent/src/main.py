@@ -171,29 +171,37 @@ async def lifespan(app: FastAPI):
     # Load from file first so explicit config wins over defaults
     mcp_gateway.load_config()
 
-    if "docker-toolkit" not in mcp_gateway.server_names:
+    docker_mcp_auto_register = os.getenv("DOCKER_MCP_AUTO_REGISTER", "false").lower() == "true"
+    if docker_mcp_auto_register:
         from src.tools.mcp_gateway import MCPServer
-
-        if docker_mcp_transport == "sse" and docker_mcp_url:
-            logger.info(f"Registering docker-toolkit over SSE: {docker_mcp_url}")
-            env = {"MCP_GATEWAY_AUTH_TOKEN": mcp_gateway_auth_token} if mcp_gateway_auth_token else {}
-            mcp_gateway.add_server(MCPServer(
-                name="docker-toolkit",
-                transport="sse",
-                url=docker_mcp_url,
-                env=env,
-            ))
+        
+        # If already exists, just update the timeout
+        if "docker-toolkit" in mcp_gateway.server_names:
+            mcp_gateway._servers["docker-toolkit"].timeout = 300.0
+            logger.info("Updated existing docker-toolkit timeout to 300.0s")
         else:
-            args = ["mcp", "gateway", "run"]
-            if docker_mcp_profile:
-                args.extend(["--profile", docker_mcp_profile])
-            logger.info(f"Registering docker-toolkit over stdio: docker {' '.join(args)}")
-            mcp_gateway.add_server(MCPServer(
-                name="docker-toolkit",
-                transport="stdio",
-                command="docker",
-                args=args,
-            ))
+            if docker_mcp_transport == "sse" and docker_mcp_url:
+                logger.info(f"Registering docker-toolkit over SSE: {docker_mcp_url}")
+                env = {"MCP_GATEWAY_AUTH_TOKEN": mcp_gateway_auth_token} if mcp_gateway_auth_token else {}
+                mcp_gateway.add_server(MCPServer(
+                    name="docker-toolkit",
+                    transport="sse",
+                    url=docker_mcp_url,
+                    env=env,
+                    timeout=300.0,
+                ))
+            else:
+                args = ["mcp", "gateway", "run"]
+                if docker_mcp_profile:
+                    args.extend(["--profile", docker_mcp_profile])
+                logger.info(f"Registering docker-toolkit over stdio: docker {' '.join(args)}")
+                mcp_gateway.add_server(MCPServer(
+                    name="docker-toolkit",
+                    transport="stdio",
+                    command="docker",
+                    args=args,
+                    timeout=300.0,
+                ))
 
     if mcp_gateway.server_names:
         logger.info(f"Connecting to MCP servers: {mcp_gateway.server_names}")

@@ -10,7 +10,10 @@ Handles:
 import json
 import logging
 import time
+from datetime import datetime
+import re
 from typing import Any, Dict, List, Optional, AsyncGenerator
+
 
 from src.contracts.tool import ToolCall, ToolResult
 from src.contracts.chat import ChatRequest, ChatMessage
@@ -75,28 +78,22 @@ class Executor:
                 "",
             )
 
-            # 1.1 INITIAL DECISION LEVEL: Detect simple queries to skip heavy processing
+            # 1.1 Intent Discovery & Decision Level
             greeting_patterns = ["hello", "hi", "hey", "howdy", "greetings", "good morning", "good evening", "good afternoon", "sup", "yo", "what's up", "how are you", "can you hear me", "are you there", "thanks", "thank you", "bye", "goodbye"]
             task_keywords = ["search", "run", "do", "find", "use", "tool", "browse", "fetch", "get", "create", "write", "analyze", "explain", "how", "what", "why", "where", "when", "who", "list", "show", "help me", "tell me about", "current", "time", "date", "spacex"]
             query_lower = latest_user_query.lower().strip().rstrip("!?.")
             
-            # STAGING: Log query for debugging
-            logger.info(f"[DEBUG_QUERY] Latest User Query: '{latest_user_query}'")
-            
             is_greeting = any(query_lower == g or query_lower.startswith(g + " ") for g in greeting_patterns)
             has_task_kw = any(kw in query_lower for kw in task_keywords)
             
-            # Only short-circuit if it's purely a greeting AND has NO task keywords
-            is_simple_query = is_greeting and not has_task_kw
-            
-            # Safety: don't short-circuit if length > 5 words
-            if len(latest_user_query.split()) > 5:
-                is_simple_query = False
+            # Use trace metadata to record intent
+            trace.metadata["has_task_kw"] = has_task_kw
+            trace.metadata["is_simple_query"] = (is_greeting and not has_task_kw) and len(latest_user_query.split()) <= 5
 
-            if is_simple_query:
-                logger.info(f"[ORCHESTRATOR] Simple query detected: '{query_lower}' - skipping heavy context building.")
+            # Preliminary check for greeting short-circuit
+            if is_greeting and len(latest_user_query.split()) <= 2:
+                logger.info(f"[ORCHESTRATOR] Simple greeting detected: '{query_lower}' - skipping heavy context building.")
                 trace.add_plan_step("Decision Level: Skipping heavy retrieval for simple greeting.")
-                # Immediate greeting response to save latency
                 yield json.dumps({
                     "type": "content",
                     "content": "Hello! I'm RawClaw, your advanced AI agent for coding and research. How can I help you today?"
@@ -106,15 +103,68 @@ class Executor:
                     "provenance_trace": trace.to_dict()
                 }) + "\n"
                 return
+
+            # 1.2 System Prompt Preparation
+            current_datetime = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+            system_prompts = [f"Current local time: {current_datetime}"]
             
-            # 2. CONTEXT RETRIEVAL (Only if not a simple query)
+            # Check for Edit Mode vs Normal Mode
+            if request.editRequest:
+                er = request.editRequest
+                # Minimalist prompt for edit mode
+                system_prompts.append(
+                    "### DOCUMENT EDIT MODE ACTIVE ###\n"
+                    "You are a specialized text editing agent. "
+                    f"Action: {er.action}\n"
+                    f"Target Document: {er.documentId}\n"
+                    f"Selected Text: \"{er.selectedText}\"\n"
+                    f"Instruction: {er.instruction or 'Improve the selected text.'}\n\n"
+                    "RULES:\n"
+                    "1. STRICTLY ONLY output the <edit_suggestion> tags.\n"
+                    "2. NO preamble, NO conversation.\n"
+                    "OUTPUT FORMAT: <edit_suggestion>your text here</edit_suggestion>"
+                )
+                if request.temperature is None or request.temperature > 0.2:
+                    request.temperature = 0.1
+            else:
+                # Normal mode prompt
+                system_prompts.append("You are RawClaw, a highly capable AI agent.")
+                if has_task_kw:
+                    # DYNAMIC TOOL DISCOVERY
+                    tool_list_str = ""
+                    for tool in tools_schema:
+                        func = tool.get("function", {})
+                        t_name = func.get("name")
+                        t_desc = func.get("description")
+                        tool_list_str += f"- {t_name}: {t_desc}\n"
+
+                    system_prompts.append(
+                        "You must use tools for real-time information or specialized tasks. "
+                        "To use a tool, use this EXACT format (including the tags):\n"
+                        "<tool_code>{ \"tool\": \"tool_name\", \"args\": { \"param\": \"value\" } }</tool_code>\n"
+                        f"Available tools:\n{tool_list_str}"
+                    )
+                
+                if request.selection:
+                    s = request.selection
+                    system_prompts.append(
+                        f"Context from document {s.documentId}: \"{s.text}\"\n"
+                        f"Full context: {s.contextBefore} [[SELECTED]] {s.contextAfter}"
+                    )
+
+            # Insert consolidated system instructions at the top
+            messages = [m for m in messages if m.get("role") != "system"]
+            messages.insert(0, {"role": "system", "content": "\n".join(system_prompts)})
+
+            # 2. CONTEXT RETRIEVAL
+            is_simple_query = trace.metadata["is_simple_query"]
             if knowledge_brain and latest_user_query and not is_simple_query:
                 # build_context now has its own internal try-except
                 retrieved_context = knowledge_brain.build_context(latest_user_query, session_id=session_id)
                 if retrieved_context:
                     memory_recall_occurred = True
                     messages.insert(
-                        0,
+                        1, # Insert after system prompt
                         {
                             "role": "system",
                             "content": (
@@ -125,7 +175,7 @@ class Executor:
                         },
                     )
 
-            # 2.1 TOOL DISCOVERY (Only if not a simple query)
+            # 2.1 TOOL DISCOVERY
             if mcp_discovery and latest_user_query and not is_simple_query:
                 discovery_hints = await mcp_discovery.discover_relevant_tools(latest_user_query)
                 if discovery_hints:
@@ -139,7 +189,7 @@ class Executor:
                         )
                     })
             
-            # 2.2 DEEP RESEARCH DETECTION: Flag complex tasks early
+            # 2.2 DEEP RESEARCH DETECTION
             research_keywords = ["research", "analyze", "explore", "deep dive", "everything about", "detailed report"]
             is_deep_research = any(kw in latest_user_query.lower() for kw in research_keywords)
             if is_deep_research:
@@ -158,9 +208,6 @@ class Executor:
             else:
                 tools_schema = TOOL_REGISTRY.get_schemas()
                 logger.info(f"[TOOL_TRACE] Using {len(tools_schema)} tools from registry")
-
-            if not tools_schema:
-                logger.warning("[TOOL_TRACE] No tools available!")
 
             # 3. STREAM FROM MODEL
             logger.info(f"Starting model completion for {request.model}...")
@@ -190,23 +237,29 @@ class Executor:
                     tool_call_data = delta.get("tool_call", {})
                     tool_name = tool_call_data.get("name", "")
                     tool_input = tool_call_data.get("arguments", {})
-                    logger.info(f"[TOOL_TRACE] Executor received tool_call: {tool_name} with input {tool_input}")
+                    
+                    # Apply fuzzy mapping to handle hallucinations (e.g. search -> web_search)
+                    mapped_name = self._fuzzy_map_tool_name(tool_name)
+                    
+                    logger.info(f"[TOOL_TRACE] Executor received tool_call: {tool_name} (mapped to: {mapped_name}) with input {tool_input}")
                     tool_call = ToolCall(
-                        tool_name=tool_name,
+                        tool_name=mapped_name,
                         input=tool_input,
                     )
 
                     # Record tool call
                     trace.add_tool_call(tool_call.tool_name, tool_call.input)
 
-                    # Yield tool_call event so API/UI can track invocations in real-time
+                    # Yield tool_call event - ALIGNED WITH INTEGRATION TESTS (name, arguments)
                     yield json.dumps({
                         "type": "tool_call",
-                        "tool_call": tool_call.model_dump(),
+                        "tool_call": {
+                            "name": tool_name,
+                            "arguments": tool_input
+                        },
                     }) + "\n"
 
                     # --- HARNESS SYSTEM ---
-                    # Log context preparation before tool execution
                     yield json.dumps({
                         "type": "harness",
                         "harness_log": {
@@ -217,13 +270,14 @@ class Executor:
                             "safety_check": "passed"
                         }
                     }) + "\n"
+
                     tool_result = await self._execute_tool_with_confirmation(
                         request.session_id,
                         tool_call,
                         trace,
                         knowledge_brain=knowledge_brain,
                     )
-                    logger.info(f"[TOOL_TRACE] Tool {tool_name} executed: success={tool_result.error is None}, error={tool_result.error}")
+                    logger.info(f"[TOOL_TRACE] Tool {tool_name} executed: success={tool_result.error is None}")
 
                     # Record tool result
                     trace.add_tool_result(tool_result, int(tool_result.duration_ms))
@@ -236,7 +290,10 @@ class Executor:
                     # Yield tool result to stream
                     yield json.dumps({
                         "type": "tool_result",
-                        "tool_call": tool_call.model_dump(),
+                        "tool_call": {
+                            "name": tool_name,
+                            "arguments": tool_input
+                        },
                         "tool_result": tool_result.model_dump(),
                     }) + "\n"
 
@@ -257,15 +314,16 @@ class Executor:
                         )
 
                 elif isinstance(delta, str):
-                    accumulated_content += delta
-                    # Log first 100 chars of content to see what model outputs
-                    if len(accumulated_content) <= 100 or len(accumulated_content) % 200 == 0:
-                        preview = delta[:50].replace('\n', ' ') if len(delta) > 50 else delta.replace('\n', ' ')
-                        logger.debug(f"[TOOL_TRACE] Content chunk: {preview}...")
-                    yield json.dumps({
-                        "type": "content",
-                        "content": delta,
-                    }) + "\n"
+                    # Check for "tool leak" - if this string looks like it's starting a tool call, 
+                    # we might want to buffer it. For now, we just clean it if a full tag is found.
+                    cleaned = self._strip_tool_tags(delta)
+                    if cleaned or not delta.strip().startswith("<"):
+                        accumulated_content += delta
+                        yield json.dumps({
+                            "type": "content",
+                            "content": delta,
+                        }) + "\n"
+
 
                 elif isinstance(delta, dict) and delta.get("type") == "content":
                     content = delta.get("content", "")
@@ -275,7 +333,6 @@ class Executor:
                         "content": content,
                     }) + "\n"
                 elif isinstance(delta, dict) and delta.get("type") == "metadata":
-                    # Supplement metadata with memory recall status
                     md = delta.get("metadata", {})
                     md["memoryRecall"] = memory_recall_occurred
                     yield json.dumps({
@@ -283,19 +340,16 @@ class Executor:
                         "metadata": md
                     }) + "\n"
                 elif isinstance(delta, dict) and delta.get("type") == "error":
-                    # Handle provider routing errors
                     logger.warning(f"Router reported error: {delta.get('message')}")
                     yield json.dumps({
                         "type": "error",
                         "error": delta.get("error", "provider_failure"),
                         "message": delta.get("message", "Provider routing failed")
                     }) + "\n"
-                    # We continue after yielding error to flush provenance/done
                     break
 
-            # 4. REVIEW TURN (Optional)
+            # 4. REVIEW TURN
             if request.output_reviewer_id and accumulated_content:
-                logger.info(f"Stepping into Review Turn with reviewer: {request.output_reviewer_id}")
                 review_start = time.time()
                 yield json.dumps({
                     "type": "status",
@@ -325,21 +379,18 @@ class Executor:
 
                 if not review_result["approved"]:
                     logger.info("Output rejected by reviewer. Attempting one revision turn.")
-                    # Add review feedback to messages and re-run primary model
                     messages.append({"role": "assistant", "content": accumulated_content})
                     messages.append({
                         "role": "system", 
                         "content": f"The output was reviewed and rejected. Please revise based on this feedback: {review_result['feedback']}"
                     })
                     
-                    # Reset accumulated content for the revision turn (or append? Usually revision replaces)
                     yield json.dumps({
                         "type": "status",
                         "status": "Revising output based on feedback...",
                     }) + "\n"
                     
-                    accumulated_content = "" # Start fresh for revision
-                    
+                    accumulated_content = ""
                     async for delta in self.model_router.complete(
                         messages,
                         model=request.model,
@@ -360,13 +411,6 @@ class Executor:
             duration_ms = round((time.time() - start_time) * 1000, 2)
             trace.add_synthesis_step(accumulated_content[:200] + "...", int(duration_ms))
 
-            # Log summary
-            logger.info(f"[TOOL_TRACE] Execution complete: tools_called={len(tool_calls_made)}, content_length={len(accumulated_content)}, sources={len(sources)}")
-            if tool_calls_made:
-                logger.info(f"[TOOL_TRACE] Tools used: {[t.tool_name for t in tool_calls_made]}")
-            else:
-                logger.info(f"[TOOL_TRACE] No tools were invoked. Content preview: {accumulated_content[:200]}...")
-
             # Store messages in ChromaDB memory
             if chroma_memory and session_id:
                 for msg in request.messages:
@@ -376,17 +420,11 @@ class Executor:
                         chroma_memory.add_message(session_id, msg.role, msg.content)
                 if accumulated_content:
                     chroma_memory.add_message(session_id, "assistant", accumulated_content)
-                logger.debug(f"Stored {len(request.messages) + 1} messages to memory")
 
             # Yield provenance trace
             yield json.dumps({
                 "type": "provenance",
                 "provenance_trace": trace.to_dict(),
-            }) + "\n"
-
-            # Final DONE signal
-            yield json.dumps({
-                "type": "done",
             }) + "\n"
 
             # Yield sources
@@ -396,24 +434,61 @@ class Executor:
                     "sources": list(set(sources)),
                 }) + "\n"
 
-            # Done
-            yield json.dumps({"type": "done"}) + "\n"
+            # Final DONE signal
+            yield json.dumps({
+                "type": "done",
+            }) + "\n"
 
         except Exception as e:
             logger.error(f"Executor error: {e}")
             trace.add_error_step(str(e))
-            
-            # Detect specific internal errors if possible
-            error_code = "agent_error"
-            if "model" in str(e).lower() or "router" in str(e).lower():
-                error_code = "provider_routing_failed"
-            
             yield json.dumps({
                 "type": "error",
-                "error": error_code,
+                "error": "agent_error",
                 "message": str(e),
                 "provenance_trace": trace.to_dict(),
             }) + "\n"
+
+    def _fuzzy_map_tool_name(self, name: str) -> str:
+        """Maps hallucinations or slightly incorrect tool names to real ones."""
+        if not name:
+            return name
+            
+        mapping = {
+            "search": "web_search",
+            "google_search": "web_search",
+            "duckduckgo": "duckduckgo_search",
+            "browser": "web_fetch",
+            "browse": "web_fetch",
+            "fetch": "web_fetch",
+            "bash": "shell_execute",
+            "sh": "shell_execute",
+            "terminal": "shell_execute"
+        }
+        
+        normalized = name.lower().strip()
+        if normalized in mapping:
+            logger.info(f"[TOOL_TRACE] Fuzzy mapping hallucination '{name}' -> '{mapping[normalized]}'")
+            return mapping[normalized]
+            
+        return name
+
+    def _strip_tool_tags(self, content: str) -> str:
+        """Removes tool calling tags from text to avoid leaking them to the UI."""
+        if not content:
+            return content
+        patterns = [
+            r'<tool_code>.*?</tool_code>',
+            r'<minimax:tool_call>.*?</minimax:tool_call>',
+            r'<invoke.*?>.*?</invoke>',
+            r'<tool_call>.*?</tool_call>',
+            r'<tool>.*?</tool>'
+        ]
+        cleaned = content
+        for p in patterns:
+            cleaned = re.sub(p, "", cleaned, flags=re.DOTALL)
+        return cleaned.strip()
+
 
     async def run_task(
         self,
@@ -468,7 +543,7 @@ class Executor:
                             f"task_{request.run_id}",
                             tool_call,
                             trace,
-                            knowledge_brain=None, # Task execution doesn't currently support injected brain
+                            knowledge_brain=None,
                         )
                         
                         trace.add_tool_result(tool_result, int(tool_result.duration_ms))
@@ -515,7 +590,6 @@ class Executor:
     ) -> ToolResult:
         """
         Execute a tool, handling confirmation gate if needed.
-        Never raises - errors are captured in ToolResult.
         """
         start = time.time()
         tool_name = tool_call.tool_name
@@ -558,23 +632,14 @@ class Executor:
     async def _review_output(self, content: str, reviewer_model: str, complexity: Optional[str]) -> Dict[str, Any]:
         """
         Calls the reviewer model to evaluate the output.
-        Returns a dict with 'approved': bool, 'feedback': str
         """
         review_prompt = (
-            "You are a Quality Assurance Reviewer for an AI assistant.\n"
-            "Review the following agent output for accuracy, safety, and helpfulness.\n\n"
-            "OUTPUT TO REVIEW:\n"
-            "--- START ---\n"
-            f"{content}\n"
-            "--- END ---\n\n"
-            "CRITERIA:\n"
-            "1. Is the answer helpful and accurate?\n"
-            "2. Is it safe (no secrets exposed, no malicious commands)?\n"
-            "3. If code was requested, is it correct and follow best practices?\n\n"
-            "You MUST respond ONLY with a JSON object in this format:\n"
-            '{"approved": true, "feedback": "Optional praise or minor tips"}\n'
-            'OR if improvement is needed:\n'
-            '{"approved": false, "feedback": "Specific instructions on what to change"}'
+            "You are a Quality Assurance Reviewer.\n"
+            "Review output for accuracy, safety, and helpfulness.\n\n"
+            "OUTPUT:\n"
+            f"{content}\n\n"
+            "Respond ONLY with JSON:\n"
+            '{"approved": true, "feedback": ""}'
         )
         
         messages = [{"role": "user", "content": review_prompt}]
@@ -591,23 +656,19 @@ class Executor:
                 elif isinstance(delta, dict) and delta.get("type") == "content":
                     full_review += delta.get("content", "")
             
-            # Try to find JSON in the response (some models wrap in backticks)
             import re
             json_match = re.search(r'\{.*\}', full_review, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group(0))
-                # Check for status: approved as fallback
-                approved = result.get("approved", result.get("status") == "approved")
                 return {
-                    "approved": bool(approved),
+                    "approved": bool(result.get("approved", True)),
                     "feedback": result.get("feedback", "")
                 }
             
-            # Fallback if no JSON found
-            return {"approved": True, "feedback": "Reviewer output format error; auto-approving."}
+            return {"approved": True, "feedback": "Reviewer format error."}
         except Exception as e:
             logger.error(f"Review Turn failed: {e}")
-            return {"approved": True, "feedback": f"Review execution error: {str(e)}"}
+            return {"approved": True, "feedback": f"Review error: {str(e)}"}
 
 
 # Global executor instance

@@ -97,76 +97,92 @@ def _extract_textual_tool_calls(content: str) -> tuple[str, List[Dict[str, Any]]
         except AttributeError:
             pass
 
-    # Pattern 6: <tool_code> { tool => '...', args => '...' } </tool_code>
-    # This handles formats seen in models like Qwen or Claude-lite that use hash syntax inside tags.
-    # Handles multi-line args with nested XML tags like <query>
+    # Pattern 6: <tool_code> structured output
+    # This handles formats seen in models like Qwen or Claude-lite.
+    # We now attempt standard JSON parsing first, with a fallback to fuzzy regex.
     tool_code_pattern = r'<tool_code>(.*?)</tool_code>'
     for match in re.finditer(tool_code_pattern, content, re.DOTALL):
         try:
-            inner = match.group(1)
+            inner = match.group(1).strip()
+            
+            # 1. ATTEMPT PURE JSON PARSING
+            try:
+                # Replace Ruby-style => with JSON-style : for models that mix them
+                json_friendly = inner.replace("=>", ":")
+                data = json.loads(json_friendly)
+                
+                # Support both {tool: "name", args: {...}} and {name: "name", arguments: {...}}
+                tool_name = data.get("tool") or data.get("name")
+                args = data.get("args") or data.get("arguments") or {}
+                
+                if tool_name and isinstance(tool_name, str):
+                    final_args = {}
+                    if isinstance(args, dict):
+                        final_args = args
+                    elif isinstance(args, str):
+                        # Try to find XML tags inside the string argument
+                        xml_inner_pattern = r'<(\w+)>(.*?)</\1>'
+                        xml_matches = re.findall(xml_inner_pattern, args, re.DOTALL)
+                        if xml_matches:
+                            for tag_name, tag_value in xml_matches:
+                                final_args[tag_name] = tag_value.strip()
+                        else:
+                            final_args["input"] = args
+                    else:
+                        final_args["input"] = str(args)
 
-            # Extract tool/name field - support both 'tool' and 'name' keys
+                    tool_calls.append({
+                        "name": tool_name.strip(),
+                        "arguments": final_args
+                    })
+                    cleaned = cleaned.replace(match.group(0), "")
+                    continue # Successfully parsed as JSON
+            except json.JSONDecodeError:
+                pass
+
+            # 2. FALLBACK TO FUZZY REGEX (for partial JSON or hash syntax)
+            # Extract tool/name field
             tn_match = re.search(r"['\"]?(?:tool|name)['\"]?\s*(?:=>|:)\s*['\"]([^'\"]+)['\"]", inner)
             if not tn_match:
-                # Try without quotes: tool => web_search
-                tn_match = re.search(r"(?:tool|name)\s*=>\s*(\w+)", inner)
+                tn_match = re.search(r"(?:tool|name)\s*(?:=>|:)\s*(\w+)", inner)
 
             if tn_match:
                 tool_name = tn_match.group(1).strip()
-
                 args = {}
 
-                # First, check for nested XML tags in the entire inner content
-                # Look for <query>, <url>, <content>, <input> etc.
+                # Look for nested tags like <query>, <url>
                 xml_param_pattern = r'<(\w+)>(.*?)</\1>'
                 for xml_match in re.finditer(xml_param_pattern, inner, re.DOTALL):
                     tag_name = xml_match.group(1)
                     tag_value = xml_match.group(2).strip()
-                    # Map common tag names to argument keys
-                    if tag_name in ['query', 'q']:
-                        args['query'] = tag_value
-                    elif tag_name in ['url', 'link', 'href']:
-                        args['url'] = tag_value
-                    elif tag_name in ['content', 'text', 'input']:
-                        args['content'] = tag_value
-                    elif tag_name in ['path', 'file']:
-                        args['path'] = tag_value
-                    else:
-                        args[tag_name] = tag_value
+                    args[tag_name] = tag_value
 
-                # If no XML params found, try to extract from args/arguments field
+                # If no XML params, try to extract from args/arguments field
                 if not args:
-                    # Try to capture everything after args => until the next top-level field or closing brace
-                    # This handles multi-line values
                     arg_match = re.search(
-                        r"['\"]?(?:args|arguments)['\"]?\s*=>\s*(.+?)(?=,\s*['\"]?\w+['\"]?\s*=>|\}$)",
+                        r"['\"]?(?:args|arguments)['\"]?\s*(?:=>|:)\s*(.+?)(?=,\s*['\"]?\w+['\"]?\s*(?:=>|:)|\}$)",
                         inner, re.DOTALL
                     )
                     if arg_match:
                         val = arg_match.group(1).strip()
-                        # Remove surrounding quotes if present
                         if val.startswith(("'", '"')) and val.endswith(("'", '"')):
                             val = val[1:-1]
-
-                        # Check for nested tags inside the value
-                        q_match = re.search(r"<query>(.*?)</query>", val, re.DOTALL)
-                        if q_match:
-                            args["query"] = q_match.group(1).strip()
-                        elif tool_name == "web_search":
-                            args["query"] = val
+                        
+                        # Try parsing val as JSON if it looks like an object
+                        if val.startswith("{") and val.endswith("}"):
+                            try:
+                                args.update(json.loads(val.replace("=>", ":")))
+                            except: pass
                         else:
-                            args["content"] = val
+                            # Map to a default 'input' or 'query' based on tool
+                            args["input"] = val
 
-                # Try direct 'query' field if still no args
                 if not args:
-                    q_direct = re.search(r"['\"]?query['\"]?\s*(?:=>|:)\s*['\"]([^'\"]+)['\"]", inner)
-                    if q_direct:
-                        args["query"] = q_direct.group(1).strip()
-                    else:
-                        # Try unquoted: query => value
-                        q_unquoted = re.search(r"query\s*=>\s*(\w+)", inner)
-                        if q_unquoted:
-                            args["query"] = q_unquoted.group(1).strip()
+                    # Final attempt: search for any key: value pairs
+                    pairs = re.findall(r"['\"]?(\w+)['\"]?\s*(?:=>|:)\s*['\"]?([^'\",\s\}]+)['\"]?", inner)
+                    for k, v in pairs:
+                        if k not in ('tool', 'name', 'args', 'arguments'):
+                            args[k] = v
 
                 tool_calls.append({
                     "name": tool_name,
@@ -174,12 +190,115 @@ def _extract_textual_tool_calls(content: str) -> tuple[str, List[Dict[str, Any]]
                 })
                 cleaned = cleaned.replace(match.group(0), "")
         except Exception as e:
-            # Log error for debugging but don't crash
-            import logging
-            logging.getLogger("rawclaw.ollama").debug(f"Failed to parse tool_code: {e}")
+            logger.debug(f"Failed to parse tool_code: {e}")
             pass
 
     return cleaned, tool_calls
+
+
+class _TextualToolParser:
+    """
+    Stateful parser for streaming textual tool calls.
+    Buffers potential tags and extracts tool calls once complete blocks are found.
+    """
+
+    def __init__(self):
+        self._buffer = ""
+        # Tags we actively look for start markers
+        self._start_tags = ["<tool_code>", "<minimax:tool_call>", "<invoke", "<tool>", "<tool_call>"]
+        # Maps start markers to expected end tags
+        self._tag_pairs = {
+            "<tool_code>": "</tool_code>",
+            "<minimax:tool_call>": "</minimax:tool_call>",
+            "<invoke": "</invoke>",
+            "<tool>": "</tool>",
+            "<tool_call>": "</tool_call>"
+        }
+        self._active_start_tag = None
+
+    def ingest(self, chunk: str) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Processes a chunk of text and yields either 'content' or 'tool_call' events.
+        """
+        self._buffer += chunk
+        
+        while self._buffer:
+            if not self._active_start_tag:
+                # Find the first occurrence of any start tag
+                first_pos = -1
+                found_tag = None
+                
+                for tag in self._start_tags:
+                    pos = self._buffer.find(tag)
+                    if pos != -1 and (first_pos == -1 or pos < first_pos):
+                        first_pos = pos
+                        found_tag = tag
+                
+                if found_tag is not None:
+                    # Yield content before the tag
+                    if first_pos > 0:
+                        yield {"type": "content", "content": self._buffer[:first_pos]}
+                        self._buffer = self._buffer[first_pos:]
+                    
+                    # Check if we have the FULL start tag (some tags like <invoke are partial)
+                    # For simple tags like <tool_code>, we just set it as active
+                    if found_tag.endswith(">") or " " in found_tag:
+                         self._active_start_tag = found_tag
+                    else:
+                        # Wait for more data if it's a partial match that might be a longer tag
+                        # But for our tags, they are either complete or have a space
+                        self._active_start_tag = found_tag
+                else:
+                    # No start tags found. 
+                    # BUT wait if the buffer ends with something that looks like a tag start!
+                    last_bracket = self._buffer.rfind("<")
+                    if last_bracket != -1:
+                        potential = self._buffer[last_bracket:]
+                        # If potential could become one of our tags, keep it in buffer
+                        if any(tag.startswith(potential) for tag in self._start_tags):
+                            if last_bracket > 0:
+                                yield {"type": "content", "content": self._buffer[:last_bracket]}
+                                self._buffer = self._buffer[last_bracket:]
+                            return # Wait for more chunks
+                    
+                    # Safe to yield everything
+                    yield {"type": "content", "content": self._buffer}
+                    self._buffer = ""
+                    return
+            else:
+                # We are inside an active tag. Look for the end tag.
+                end_tag = self._tag_pairs[self._active_start_tag]
+                end_pos = self._buffer.find(end_tag)
+                
+                if end_pos != -1:
+                    full_block_end = end_pos + len(end_tag)
+                    block_content = self._buffer[:full_block_end]
+                    
+                    # Extract tool call
+                    _, tool_calls = _extract_textual_tool_calls(block_content)
+                    for tc in tool_calls:
+                        yield {"type": "tool_call", "tool_call": tc}
+                    
+                    # Clear this block from buffer
+                    self._buffer = self._buffer[full_block_end:]
+                    self._active_start_tag = None
+                else:
+                    # Still waiting for end tag
+                    return
+
+    def flush(self) -> AsyncIterator[Dict[str, Any]]:
+        """Yields any remaining content in the buffer at the end of the stream."""
+        if self._buffer:
+            _, tool_calls = _extract_textual_tool_calls(self._buffer)
+            for tc in tool_calls:
+                yield {"type": "tool_call", "tool_call": tc}
+            
+            # If no tools found or after tools, just yield the raw buffer as content
+            # (In case it was an aborted tag or just normal text with a '<')
+            cleaned, _ = _extract_textual_tool_calls(self._buffer)
+            if cleaned:
+                yield {"type": "content", "content": cleaned}
+        self._buffer = ""
 
 
 class OllamaProvider(ModelProvider):
@@ -240,117 +359,44 @@ class OllamaProvider(ModelProvider):
                         }
                         return
 
-                    content_buffer = ""
-                    tool_call_detected = False
+                    parser = _TextualToolParser()
                     async for line in response.aiter_lines():
                         if not line:
                             continue
                         try:
                             chunk = json.loads(line)
 
-                            # Debug: Log what we received
-                            if "message" in chunk:
-                                msg = chunk["message"]
-                                if "tool_calls" in msg and msg["tool_calls"]:
-                                    tool_call_detected = True
-                                    logger.info(f"[TOOL_TRACE] Model returned native tool_calls: {msg['tool_calls']}")
-                                if msg.get("content"):
-                                    content_preview = msg['content'][:100].replace('\n', ' ')
-                                    logger.debug(f"[TOOL_TRACE] Model content: {content_preview}...")
-
-                            # Handle tool calls from Ollama
-                            # Ollama returns tool calls in message.tool_calls
+                            # Handle native tool calls from Ollama (message.tool_calls)
                             if "message" in chunk and "tool_calls" in chunk["message"]:
                                 tool_calls = chunk["message"]["tool_calls"]
-                                if tool_calls:
-                                    for tc in tool_calls:
-                                        # Ollama format: {"function": {"name": "...", "arguments": {...}}}
-                                        func = tc.get("function", {})
-                                        tool_name = func.get("name", "")
-                                        arguments = func.get("arguments", {})
-                                        if tool_name:
-                                            logger.info(f"Yielding tool_call: {tool_name}")
-                                            yield {
-                                                "type": "tool_call",
-                                                "tool_call": {
-                                                    "name": tool_name,
-                                                    "arguments": arguments,
-                                                }
+                                for tc in tool_calls:
+                                    func = tc.get("function", {})
+                                    tool_name = func.get("name", "")
+                                    if tool_name:
+                                        yield {
+                                            "type": "tool_call",
+                                            "tool_call": {
+                                                "name": tool_name,
+                                                "arguments": func.get("arguments", {}),
                                             }
+                                        }
 
-                            # Handle content - use a buffer to avoid yielding partial tool-call tags
+                            # Handle mixed content/textual tool calls via the parser
                             if "message" in chunk and "content" in chunk["message"]:
                                 content = chunk["message"]["content"]
                                 if content:
-                                    content_buffer += content
-
-                                    # Check if we have a complete tool_code block before processing
-                                    # tool_code blocks are multi-line, so we need special handling
-                                    has_complete_tool_code = '</tool_code>' in content_buffer
-                                    has_opening_tool_code = '<tool_code>' in content_buffer
-
-                                    # If we have an opening but no closing, wait for more content
-                                    if has_opening_tool_code and not has_complete_tool_code:
-                                        # Don't yield anything yet, wait for complete block
-                                        continue
-
-                                    # Extract any COMPLETE tags from the current buffer
-                                    cleaned_buffer, textual_tool_calls = _extract_textual_tool_calls(content_buffer)
-
-                                    # Yield any complete tool calls found
-                                    if textual_tool_calls:
-                                        logger.info(f"[TOOL_TRACE] Extracted {len(textual_tool_calls)} textual tool_calls from content")
-                                    for tc in textual_tool_calls:
-                                        if tc.get("name"):
-                                            logger.info(f"[TOOL_TRACE] Yielding textual tool_call: {tc['name']}")
-                                            yield {
-                                                "type": "tool_call",
-                                                "tool_call": {
-                                                    "name": tc["name"],
-                                                    "arguments": tc.get("arguments", {}),
-                                                }
-                                            }
-
-                                    # The cleaned_buffer may still contain a trailing partial tag (e.g., "Hello <tool_")
-                                    # We wait to yield anything that looks like it's part of an opening tag.
-                                    # But be smart about it: if we see <tool_code> or similar, don't yield it
-                                    last_bracket = cleaned_buffer.rfind('<')
-                                    if last_bracket != -1:
-                                        # Check if what's after the bracket looks like a tag start
-                                        after_bracket = cleaned_buffer[last_bracket:]
-                                        if after_bracket.startswith(('<tool', '<invoke', '<mini', '</too')):
-                                            # This is likely a partial tag, keep it in buffer
-                                            to_yield = cleaned_buffer[:last_bracket]
-                                            content_buffer = cleaned_buffer[last_bracket:]
-                                            if to_yield:
-                                                yield to_yield
+                                    async for event in parser.ingest(content):
+                                        if event["type"] == "content":
+                                            yield event["content"]
                                         else:
-                                            # Not a recognized tag start, yield everything
-                                            if cleaned_buffer:
-                                                yield cleaned_buffer
-                                            content_buffer = ""
-                                    else:
-                                        # No potential tag start, yield everything and clear buffer
-                                        if cleaned_buffer:
-                                            yield cleaned_buffer
-                                        content_buffer = ""
+                                            yield event
 
                             if chunk.get("done"):
-                                # Yield any remaining content in the buffer at the end
-                                # But first try to extract any tool calls from remaining buffer
-                                if content_buffer:
-                                    final_cleaned, final_tool_calls = _extract_textual_tool_calls(content_buffer)
-                                    for tc in final_tool_calls:
-                                        if tc.get("name"):
-                                            yield {
-                                                "type": "tool_call",
-                                                "tool_call": {
-                                                    "name": tc["name"],
-                                                    "arguments": tc.get("arguments", {}),
-                                                }
-                                            }
-                                    if final_cleaned:
-                                        yield final_cleaned
+                                async for event in parser.flush():
+                                    if event["type"] == "content":
+                                        yield event["content"]
+                                    else:
+                                        yield event
                                 break
                         except json.JSONDecodeError:
                             continue

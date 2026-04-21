@@ -93,38 +93,56 @@ class DuckDuckGoSearchTool(BaseTool):
         )
 
     async def duckduckgo_search(self, query: str) -> Optional[List[Dict]]:
-        """Search using DuckDuckGo Instant Answer API."""
+        """Search using DuckDuckGo Html directly and fallback to Wikipedia if needed."""
         try:
+            import bs4
+            import urllib.parse
             async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT) as client:
-                resp = await client.get(
-                    DUCKDUCKGO_API_URL,
-                    params={"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"},
-                )
+                data = {"q": query, "b": "", "kl": "wt-wt"}
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+                resp = await client.post("https://html.duckduckgo.com/html/", data=data, headers=headers)
                 resp.raise_for_status()
-                data = resp.json()
+                
+                soup = bs4.BeautifulSoup(resp.text, "html.parser")
                 results = []
-                # Abstract
-                if data.get("Abstract"):
-                    results.append({
-                        "title": data.get("Heading", ""),
-                        "url": data.get("AbstractURL", ""),
-                        "snippet": data.get("Abstract", ""),
-                    })
-                # Related topics
-                for topic in data.get("RelatedTopics", [])[:10]:
-                    if "Text" in topic:
+                for result in soup.find_all("div", class_="result"):
+                    title_elem = result.find("a", class_="result__url")
+                    snippet_elem = result.find("a", class_="result__snippet")
+                    
+                    if title_elem and snippet_elem:
+                        h2 = result.find("h2", class_="result__title")
+                        title = h2.text.strip() if h2 else title_elem.text.strip()
+                        url = title_elem.get("href", "")
+                        if "uddg=" in url:
+                            parsed = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+                            if "uddg" in parsed:
+                                url = parsed["uddg"][0]
+                        
+                        snippet = snippet_elem.text.strip()
                         results.append({
-                            "title": topic.get("Text", "")[:100],
-                            "url": topic.get("FirstURL", ""),
-                            "snippet": topic.get("Text", ""),
+                            "title": title,
+                            "url": url,
+                            "snippet": snippet,
                         })
-                    elif "Topics" in topic:
-                        for sub_topic in topic.get("Topics", [])[:3]:
-                            results.append({
-                                "title": sub_topic.get("Text", "")[:100],
-                                "url": sub_topic.get("FirstURL", ""),
-                                "snippet": sub_topic.get("Text", ""),
-                            })
+                
+                if not results:
+                    # Fallback to Wikipedia Opensearch if DuckDuckGo Html returns nothing
+                    try:
+                        wiki_resp = await client.get(
+                            "https://en.wikipedia.org/w/api.php",
+                            params={"action": "opensearch", "search": query, "limit": 10, "format": "json"}
+                        )
+                        wiki_resp.raise_for_status()
+                        wiki_data = wiki_resp.json()
+                        if len(wiki_data) == 4 and wiki_data[1]:
+                            for i in range(len(wiki_data[1])):
+                                results.append({
+                                    "title": wiki_data[1][i] + " (Wikipedia)",
+                                    "snippet": wiki_data[2][i] or f"Wikipedia article for {wiki_data[1][i]}",
+                                    "url": wiki_data[3][i]
+                                })
+                    except Exception as e:
+                        logger.warning(f"Wikipedia fallback failed: {e}")
                 
                 return results if results else None
         except Exception as e:

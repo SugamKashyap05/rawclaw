@@ -4,6 +4,7 @@ import asyncio
 from typing import AsyncIterator, List, Dict, Any, Optional
 from src.models.base import ModelProvider, ModelInfo, ProviderHealth
 from src.models.providers.ollama import OllamaProvider
+from src.models.providers.anthropic import AnthropicProvider
 from src.config import settings
 
 logger = logging.getLogger("rawclaw.router")
@@ -11,8 +12,10 @@ logger = logging.getLogger("rawclaw.router")
 class ModelRouter:
     def __init__(self):
         self.providers: Dict[str, ModelProvider] = {
-            "ollama": OllamaProvider()
+            "ollama": OllamaProvider(),
+            "anthropic": AnthropicProvider()
         }
+
         
         # Complexity to model ID mapping
         self.complexity_map = {
@@ -82,7 +85,18 @@ class ModelRouter:
         """Returns (provider_name, inner_model_name)"""
         if "/" in model_id:
             return model_id.split("/", 1)
+            
+        # Detect cloud labels
+        if ":cloud" in model_id:
+            # Special case: if it starts with 'minimax', 'gpt', or 'claude' but no provider,
+            # try to guess the provider or default to anthropic/openai logic.
+            # But per user request, we default to ollama if the cloud providers aren't usable.
+            if "claude" in model_id:
+                return "anthropic", model_id
+            return "unknown", model_id # Will trigger fallback to ollama in run_chain
+            
         return "ollama", model_id # Default to ollama if no prefix
+
 
     async def list_models(self) -> List[ModelInfo]:
         all_models = []
@@ -158,9 +172,18 @@ class ModelRouter:
                 provider_name, inner_name = self._parse_model_id(current_model_id)
                 provider = self.providers.get(provider_name)
                 
+                # Check provider availability
+                if provider:
+                    health = await provider.health()
+                    if health.status == "unconfigured":
+                        logger.warning(f"Provider {provider_name} is unconfigured. Skipping model {current_model_id}")
+                        provider = None
+                
                 if not provider:
-                    last_error = f"Provider {provider_name} not found"
+                    last_error = f"Provider {provider_name} not found or unconfigured"
+                    # If this was a cloud request, we continue to the next fallback (ollama)
                     continue
+
 
                 try:
                     success = False

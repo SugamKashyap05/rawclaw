@@ -5,7 +5,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-duckduckgo"
+        "@oevortex/ddg_search"
       ],
       "url": null,
       "env": {}
@@ -45,6 +45,30 @@
       ],
       "url": null,
       "env": {}
+    },
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:/Users"
+      ],
+      "url": null,
+      "env": {}
+    },
+    "google-search": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-google-search"
+      ],
+      "url": null,
+      "env": {
+        "GOOGLE_API_KEY": "",
+        "GOOGLE_SEARCH_ENGINE_ID": ""
+      }
     }
   }
 }

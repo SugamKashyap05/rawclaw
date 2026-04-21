@@ -181,7 +181,7 @@ async def send_chat_stream(session_id: str, message: str, model: str = "ollama/q
                 return result
 
             # Process SSE stream
-            async for line in resp.aiter_text():
+            async for line in resp.aiter_lines():
                 line = line.strip()
                 if not line:
                     continue

@@ -39,8 +39,12 @@ class Settings(BaseSettings):
     AGENT_RELOAD: bool = False
 
     def is_anthropic_usable(self) -> bool:
-        """Force-off for Ollama-only mode."""
-        return False
+        """Check if Anthropic is configured and usable."""
+        return bool(self.ANTHROPIC_API_KEY)
+
+    def is_openai_usable(self) -> bool:
+        """Check if OpenAI is configured and usable."""
+        return bool(self.OPENAI_API_KEY)
 
     class Config:
         env_file = [".env", "../../.env"]
@@ -73,7 +77,10 @@ except Exception:
         AGENT_RELOAD = os.environ.get("AGENT_RELOAD", "false").lower() == "true"
 
         def is_anthropic_usable(self) -> bool:
-            """Force-off for Ollama-only mode."""
-            return False
+            return bool(self.ANTHROPIC_API_KEY)
+
+        def is_openai_usable(self) -> bool:
+            return bool(self.OPENAI_API_KEY)
+
 
     settings = Settings()

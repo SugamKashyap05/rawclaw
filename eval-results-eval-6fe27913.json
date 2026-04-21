@@ -1,0 +1,92 @@
+{
+  "session_id": "eval-6fe27913",
+  "timestamp": "2026-04-21T22:59:29",
+  "model": "minimax-m2.7:cloud",
+  "results": [
+    {
+      "step": 1,
+      "title": "Greeting & Identity",
+      "passed": true,
+      "latency_total": 9.66826319694519,
+      "latency_ttft": 6.666529178619385,
+      "tool_calls": 0
+    },
+    {
+      "step": 2,
+      "title": "Personality",
+      "passed": false,
+      "latency_total": 9.861704349517822,
+      "latency_ttft": 3.5477564334869385,
+      "tool_calls": 0
+    },
+    {
+      "step": 3,
+      "title": "Abstract Reasoning",
+      "passed": true,
+      "latency_total": 20.31559920310974,
+      "latency_ttft": 5.983382701873779,
+      "tool_calls": 0
+    },
+    {
+      "step": 4,
+      "title": "Future/Platform",
+      "passed": false,
+      "latency_total": 31.393207788467407,
+      "latency_ttft": 12.696056842803955,
+      "tool_calls": 0
+    },
+    {
+      "step": 5,
+      "title": "Tech Stack Check",
+      "passed": false,
+      "latency_total": 16.158865451812744,
+      "latency_ttft": 7.596989870071411,
+      "tool_calls": 2
+    },
+    {
+      "step": 6,
+      "title": "Project Phase",
+      "passed": false,
+      "latency_total": 16.696964740753174,
+      "latency_ttft": 5.634493827819824,
+      "tool_calls": 2
+    },
+    {
+      "step": 7,
+      "title": "Component Logic",
+      "passed": false,
+      "latency_total": 8.318301439285278,
+      "latency_ttft": 0,
+      "tool_calls": 2
+    },
+    {
+      "step": 8,
+      "title": "Memory Check",
+      "passed": false,
+      "latency_total": 8.421591997146606,
+      "latency_ttft": 0,
+      "tool_calls": 1
+    },
+    {
+      "step": 9,
+      "title": "Sequential Thinking",
+      "passed": false,
+      "latency_total": 17.1072895526886,
+      "latency_ttft": 5.911259174346924,
+      "tool_calls": 2
+    },
+    {
+      "step": 10,
+      "title": "Web Search (Fresh Info)",
+      "passed": false,
+      "latency_total": 20.259697437286377,
+      "latency_ttft": 9.841361284255981,
+      "tool_calls": 0
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "passed": 2,
+    "avg_latency": 15.820148515701295
+  }
+}

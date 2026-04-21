@@ -63,7 +63,7 @@ class WebFetchTool(BaseTool):
     Implements strict SSRF protection to prevent access to internal services.
     """
     name = "web_fetch"
-    description = "Fetches the content of a public URL and returns readable text"
+    description = "Fetches the full text content and title of a specific public URL. Use this when you have a direct link."
     parameters = {
         "type": "object",
         "properties": {

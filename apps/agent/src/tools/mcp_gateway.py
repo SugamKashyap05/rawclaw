@@ -12,6 +12,8 @@ import json
 import logging
 import os
 import uuid
+import subprocess
+import platform
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -37,6 +39,7 @@ class MCPServer:
         args: Optional[List[str]] = None,
         url: Optional[str] = None,
         env: Optional[Dict[str, str]] = None,
+        timeout: float = 30.0,
     ) -> None:
         self.name = name
         self.transport = transport  # "stdio" | "sse"
@@ -44,6 +47,7 @@ class MCPServer:
         self.args = args or []
         self.url = url
         self.env = env or {}
+        self.timeout = timeout
         self._process: Optional[asyncio.subprocess.Process] = None
         self._tools: List[Dict[str, Any]] = []
         self._connected = False
@@ -67,12 +71,10 @@ class MCPServer:
             env = {**os.environ, **self.env}
             
             # Windows command resolution fix (for npx, npm, etc)
-            import platform
             cmd = self.command
             if platform.system() == "Windows" and not cmd.endswith((".exe", ".cmd", ".bat")):
                 # Check if it's a known non-executable and wrap it
-                shell = True
-                full_command = f"{cmd} {' '.join(self.args)}"
+                full_command = subprocess.list2cmdline([cmd] + self.args)
                 self._process = await asyncio.create_subprocess_shell(
                     full_command,
                     stdin=asyncio.subprocess.PIPE,
@@ -107,7 +109,7 @@ class MCPServer:
             try:
                 # We use wait_for because if the server crashes or hangs, 
                 # we don't want the agent startup to hang indefinitely.
-                response = await asyncio.wait_for(self._send_stdio(init_request), timeout=30.0)
+                response = await asyncio.wait_for(self._send_stdio(init_request), timeout=self.timeout)
                 
                 if response and "result" in response:
                     self._connected = True
@@ -227,7 +229,7 @@ class MCPServer:
             # Loop to find the response with the matching ID, skipping logs and notifications
             while True:
                 line = await asyncio.wait_for(
-                    self._process.stdout.readline(), timeout=30.0
+                    self._process.stdout.readline(), timeout=self.timeout
                 )
                 if not line:
                     break
@@ -264,7 +266,7 @@ class MCPServer:
                     continue
                     
         except asyncio.TimeoutError:
-            logger.error(f"MCP server [{self.name}] stdio read timeout after 30s for request {request_id}")
+            logger.error(f"MCP server [{self.name}] stdio read timeout after {self.timeout}s for request {request_id}")
         except Exception as e:
             logger.error(f"MCP server [{self.name}] stdio read error: {e}")
         return None
@@ -399,6 +401,7 @@ class MCPGateway:
                     "args": server.args,
                     "url": server.url,
                     "env": server.env,
+                    "timeout": server.timeout,
                 }
             
             with open(self.config_path, "w") as f:
@@ -425,6 +428,7 @@ class MCPGateway:
                     args=server_config.get("args", []),
                     url=server_config.get("url"),
                     env=server_config.get("env", {}),
+                    timeout=float(server_config.get("timeout", 30.0)),
                 )
                 self.add_server(server)
 
