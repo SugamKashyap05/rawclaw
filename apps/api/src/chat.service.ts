@@ -97,6 +97,7 @@ export class ChatService {
         errorMessage: metadata?.error?.message,
         attachments: metadata?.attachments ? JSON.stringify(metadata.attachments) : null,
         durationMs: metadata?.durationMs,
+        // @ts-ignore - runIds is present in generated client but TS server is stale
         runIds: metadata?.runIds ? JSON.stringify(metadata.runIds) : null,
       },
     });

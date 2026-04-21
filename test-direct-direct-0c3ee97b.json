@@ -1,0 +1,123 @@
+{
+  "session_id": "direct-0c3ee97b",
+  "results": {
+    "greeting": {
+      "content": "",
+      "tool_calls": [],
+      "tool_results": [
+        {
+          "tool_name": "duckduckgo_search",
+          "input": {
+            "query": "OpenAI"
+          },
+          "output": {
+            "source": "duckduckgo",
+            "results": [
+              {
+                "title": "OpenAI",
+                "url": "https://en.wikipedia.org/wiki/OpenAI",
+                "snippet": "OpenAI is an American artificial intelligence research organization consisting of a for-profit public benefit corporation and a nonprofit foundation, headquartered in San Francisco. OpenAI developed the GPT family of large language models, the DALL-E series of text-to-image models, and the Sora series of text-to-video models, which have influenced industry research and commercial applications. Its release of ChatGPT in November 2022 has been credited with catalyzing widespread interest in generative AI. OpenAI was founded in 2015 in Delaware as a nonprofit. A for-profit subsidiary of the nonprofit was created in 2019, and a 2025 restructuring converted the subsidiary into a PBC that is 26% owned by the nonprofit. Microsoft previously invested over $13 billion into OpenAI, and provides Azure cloud computing resources. In October 2025, OpenAI conducted a $6.6 billion share sale that valued the company at $500 billion.",
+                "source": "duckduckgo"
+              },
+              {
+                "title": "Artificial intelligence associations",
+                "url": "https://duckduckgo.com/c/Artificial_intelligence_associations",
+                "snippet": "Artificial intelligence associations",
+                "source": "duckduckgo"
+              },
+              {
+                "title": "Research institutes in the San Francisco Bay Area",
+                "url": "https://duckduckgo.com/c/Research_institutes_in_the_San_Francisco_Bay_Area",
+                "snippet": "Research institutes in the San Francisco Bay Area",
+                "source": "duckduckgo"
+              },
+              {
+                "title": "Artificial intelligence laboratories",
+                "url": "https://duckduckgo.com/c/Artificial_intelligence_laboratories",
+                "snippet": "Artificial intelligence laboratories",
+                "source": "duckduckgo"
+              },
+              {
+                "title": "Non-profit organizations based in San Francisco",
+                "url": "https://duckduckgo.com/c/Non-profit_organizations_based_in_San_Francisco",
+                "snippet": "Non-profit organizations based in San Francisco",
+                "source": "duckduckgo"
+              }
+            ]
+          },
+          "error": null,
+          "duration_ms": 875.09,
+          "sandboxed": false,
+          "is_truncated": false,
+          "source_url": "https://en.wikipedia.org/wiki/OpenAI",
+          "provenance_hint": {
+            "source": "duckduckgo",
+            "result_count": 5
+          }
+        }
+      ],
+      "provenance": {
+        "run_id": "b9387c52-b848-47d9-8127-21d0797b6f4d",
+        "steps": [
+          {
+            "step_index": 0,
+            "step_type": "plan",
+            "tool_name": null,
+            "input_summary": "Initializing execution for session direct-0c3ee97b",
+            "output_summary": null,
+            "source_url": null,
+            "duration_ms": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-20T18:07:45.099905Z"
+          },
+          {
+            "step_index": 1,
+            "step_type": "tool_call",
+            "tool_name": "duckduckgo_search",
+            "input_summary": "query=OpenAI",
+            "output_summary": null,
+            "source_url": null,
+            "duration_ms": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-20T18:07:46.443310Z"
+          },
+          {
+            "step_index": 2,
+            "step_type": "tool_result",
+            "tool_name": "duckduckgo_search",
+            "input_summary": "query=OpenAI",
+            "output_summary": "5 results found (first: OpenAI)",
+            "source_url": "https://en.wikipedia.org/wiki/OpenAI",
+            "duration_ms": 875,
+            "sandboxed": false,
+            "timestamp": "2026-04-20T18:07:47.318494Z"
+          },
+          {
+            "step_index": 3,
+            "step_type": "synthesis",
+            "tool_name": null,
+            "input_summary": null,
+            "output_summary": "...",
+            "source_url": null,
+            "duration_ms": 2340,
+            "sandboxed": false,
+            "timestamp": "2026-04-20T18:07:47.440108Z"
+          }
+        ],
+        "step_count": 4,
+        "created_at": "2026-04-20T18:07:47.489054Z"
+      },
+      "success": true,
+      "error": null,
+      "events": [
+        "provenance",
+        "tool_result",
+        "metadata",
+        "provenance",
+        "done",
+        "sources",
+        "done"
+      ]
+    }
+  }
+}

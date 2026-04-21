@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
-from src.contracts.tool import ToolCall
+from .tool import ToolCall
 
 
 class ChatAttachment(BaseModel):
@@ -51,6 +51,7 @@ class ChatRequest(BaseModel):
     workspace_id: Optional[str] = "default"
     sender_identifier: Optional[str] = "local"
     agent_id: Optional[str] = None
+    output_reviewer_id: Optional[str] = None
     # P2 Parameters
     temperature: Optional[float] = None
     top_p: Optional[float] = None

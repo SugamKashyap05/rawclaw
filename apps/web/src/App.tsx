@@ -8,6 +8,7 @@ import Memory from './pages/Memory';
 import MCPServers from './pages/MCPServers';
 import Agents from './pages/Agents';
 import Skills from './pages/Skills';
+import Provenance from './pages/Provenance';
 import Integrations from './pages/Integrations';
 import Sandbox from './pages/Sandbox';
 import Settings from './pages/Settings';
@@ -60,6 +61,7 @@ function App() {
     if (location.pathname.startsWith('/sandbox')) return 'Sandbox';
     if (location.pathname.startsWith('/settings')) return 'Settings';
     if (location.pathname.startsWith('/tasks')) return 'Tasks';
+    if (location.pathname.startsWith('/provenance')) return 'Provenance Explorer';
     return 'Dashboard';
   }, [location.pathname]);
 
@@ -213,6 +215,7 @@ function App() {
             <Route path="/models" element={<Models />} />
             <Route path="/integrations" element={<Integrations />} />
             <Route path="/tasks" element={<Tasks />} />
+            <Route path="/provenance" element={<Provenance />} />
             <Route path="/sandbox" element={<Sandbox />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>

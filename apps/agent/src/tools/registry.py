@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from src.memory.knowledge_brain import KnowledgeBrain
 
 logger = logging.getLogger("rawclaw.registry")
+MAX_TOOL_OUTPUT_CHARS = 50000 # 50k chars max for tool output
 
 
 class ToolNotFoundError(Exception):
@@ -148,6 +149,14 @@ class ToolRegistry:
             if knowledge_brain:
                 tool.set_knowledge_brain(knowledge_brain)
             result = await tool.execute(input)
+            
+            # Truncate large outputs
+            if result.output and isinstance(result.output, str) and len(result.output) > MAX_TOOL_OUTPUT_CHARS:
+                original_len = len(result.output)
+                result.output = result.output[:MAX_TOOL_OUTPUT_CHARS] + f"\n\n[... Output Truncated: {original_len - MAX_TOOL_OUTPUT_CHARS} characters omitted ...]"
+                result.is_truncated = True
+                logger.info(f"Truncated tool output for '{name}' from {original_len} to {MAX_TOOL_OUTPUT_CHARS}")
+            
             return result
         except ToolNotFoundError as e:
             return ToolResult(

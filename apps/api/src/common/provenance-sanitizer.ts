@@ -101,6 +101,12 @@ export class ProvenanceSanitizer {
       brief = `Executed ${toolNames.length} tool(s): ${toolNames.join(', ')}.`;
     } else if (hasDocuments) {
       brief = 'Synthesized answer from provided documents. No external tools needed.';
+    } else if (steps.some(s => s.stepType === 'review')) {
+      const reviewed = steps.filter(s => s.stepType === 'review');
+      const rejected = reviewed.some(s => s.outputSummary?.includes('REJECTED'));
+      brief = rejected 
+        ? 'Output was rejected by reviewer and subsequently revised.' 
+        : 'Output was verified and approved by secondary reviewer.';
     } else if (steps.some(s => s.stepType === 'error')) {
       brief = 'Encountered issues during processing; fallback logic applied.';
     }

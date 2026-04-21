@@ -161,6 +161,108 @@ export default function Models() {
         </div>
       </section>
 
+      <section className="glass-card" style={{ 
+        border: '1px solid var(--neon-cyan)',
+        boxShadow: '0 0 20px var(--neon-cyan-glow)',
+        background: 'linear-gradient(135deg, rgba(0, 240, 255, 0.05), rgba(157, 0, 255, 0.02))'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ fontSize: '1.25rem', marginBottom: '0.3rem', color: 'var(--neon-cyan)', textShadow: '0 0 8px var(--neon-cyan-glow)' }}>
+              Sub-specialists
+            </h2>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+              Assign dedicated agents to handle specific parts of the orchestration lifecycle.
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, minmax(0, 1fr))', gap: '1.2rem' }}>
+          <div style={{ 
+            background: 'rgba(0,0,0,0.2)', 
+            padding: '1.2rem', 
+            borderRadius: '12px', 
+            border: '1px solid var(--border-glass)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.8rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+              <div style={{ 
+                width: '10px', 
+                height: '10px', 
+                borderRadius: '50%', 
+                background: 'var(--neon-purple)', 
+                boxShadow: '0 0 10px var(--neon-purple)' 
+              }} />
+              <strong style={{ fontSize: '1rem', letterSpacing: '0.5px' }}>Ending Special Agent (Output Reviewer)</strong>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}>
+              This specialized agent performs a final verification turn. It reviews the assistant's response against the original query to ensure no instruction was missed before finalizing.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              <select
+                value={health?.routing.outputReviewer || ''}
+                onChange={(event) => void updateRouting({ outputReviewer: event.target.value })}
+                style={{ ...fieldStyle, maxWidth: '400px', borderColor: 'rgba(157, 0, 255, 0.3)' }}
+              >
+                <option value="">Disabled (Fastest)</option>
+                {availableModelIds.map((id) => (
+                  <option key={id} value={id}>
+                    {id}
+                  </option>
+                ))}
+              </select>
+              <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                {health?.routing.outputReviewer ? 'ENABLED (HIGHER QUALITY)' : 'INACTIVE'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ 
+            background: 'rgba(0,0,0,0.2)', 
+            padding: '1.2rem', 
+            borderRadius: '12px', 
+            border: '1px solid var(--border-glass)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.8rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+              <div style={{ 
+                width: '10px', 
+                height: '10px', 
+                borderRadius: '50%', 
+                background: 'var(--neon-cyan)', 
+                boxShadow: '0 0 10px var(--neon-cyan)' 
+              }} />
+              <strong style={{ fontSize: '1rem', letterSpacing: '0.5px' }}>Initial Analysis Specialist (Decision Level)</strong>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}>
+              Controls the agent's pre-screening gate. When active, the agent evaluates each incoming query to determine 
+              its complexity before engaging heavy retrieval, tool discovery, or deep research pipelines. 
+              Simple greetings skip all overhead for instant responses.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              <div style={{ 
+                padding: '0.5rem 1.2rem', 
+                borderRadius: '10px', 
+                background: 'rgba(0, 240, 255, 0.08)', 
+                border: '1px solid rgba(0, 240, 255, 0.2)',
+                fontSize: '0.85rem',
+                color: 'var(--neon-cyan)',
+                fontWeight: 600
+              }}>
+                ALWAYS ACTIVE
+              </div>
+              <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                Built-in heuristic — no model cost
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="glass-card">
         <h2 style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Available models</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1rem' }}>

@@ -14,7 +14,7 @@ import { useSystemPoller } from '../hooks/useSystemPoller';
 import { 
   FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, 
   FiCopy, FiFolder, FiFileText, FiX, FiPlus, 
-  FiMessageSquare, FiSquare, FiEye, FiAlertTriangle, FiActivity 
+  FiMessageSquare, FiSquare, FiEye, FiAlertTriangle, FiActivity, FiShield
 } from 'react-icons/fi';
 import { WebSearchResult } from '../components/chat/WebSearchResult';
 import { BrowserResult } from '../components/chat/BrowserResult';
@@ -22,6 +22,7 @@ import { FileResult } from '../components/chat/FileResult';
 import { CodeResult } from '../components/chat/CodeResult';
 import { TerminalResult } from '../components/chat/TerminalResult';
 import { ProvenanceTrace } from '../components/chat/ProvenanceTrace';
+import { InitialAnalysisCard } from '../components/chat/InitialAnalysisCard';
 import { FileBrowserPanel } from '../components/chat/FileBrowserPanel';
 import { ChatAttachment, DocumentSelection, DocumentEditRequest, DocumentEditAction } from '@rawclaw/shared';
 import { DocumentCanvas } from '../components/chat/DocumentCanvas';
@@ -100,6 +101,9 @@ interface SessionMessage {
   durationMs?: number;
   runIds?: string[];
   id?: string;
+  harnessLogs?: any[];
+  approvalRequired?: { reason: string; complexity?: string };
+  isDeepResearch?: boolean;
   error?: {
     type:
       | 'agent_unavailable'
@@ -405,27 +409,32 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
       const { value, done } = await reader.read();
       
       if (value) {
-        streamBuffer += decoder.decode(value, { stream: !done });
+        streamBuffer += decoder.decode(value, { stream: true });
         const lines = streamBuffer.split('\n');
+        // Keep the last, potentially incomplete line in the buffer
         streamBuffer = lines.pop() || '';
 
         for (const line of lines) {
           const raw = line.trim();
           if (!raw) continue;
           
-          const payload = raw.startsWith('data:') ? raw.slice(5).trim() : raw;
+          // SSE data: prefix check
+          const payload = raw.startsWith('data: ') ? raw.slice(6).trim() : 
+                         (raw.startsWith('data:') ? raw.slice(5).trim() : raw);
           if (!payload) continue;
 
           try {
             const data = JSON.parse(payload) as ChatStreamChunk;
-            if (data.type === 'content' && data.content) {
-              assistantText += data.content;
+            
+            if (data.type === 'content') {
+              assistantText += data.content || '';
               patchAssistant({ content: assistantText });
             } else if (data.type === 'tool_result' && data.tool_result) {
               toolResults.push(data.tool_result);
               patchAssistant({ toolResults: [...toolResults] });
             } else if (data.type === 'provenance') {
-              const trace = (data as any).provenance_trace || (data as any).provenance || data;
+              // The backend now sends provenanceTrace as a sanitized object
+              const trace = data.provenanceTrace || (data as any).provenance_trace || (data as any).provenance || data;
               patchAssistant({ provenanceTrace: trace });
             } else if (data.type === 'metadata' && data.metadata) {
               patchAssistant({ 
@@ -434,7 +443,20 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
                 memoryRecall: data.metadata.memoryRecall,
                 durationMs: data.metadata.durationMs,
                 runIds: data.metadata.runIds,
+                isDeepResearch: (data.metadata as any).isDeepResearch,
               });
+            } else if ((data.type as string) === 'harness') {
+              setMessages((current) => {
+                const next = [...current];
+                const index = next.map((item) => item.role).lastIndexOf('assistant');
+                if (index >= 0) {
+                  const logs = next[index].harnessLogs || [];
+                  next[index] = { ...next[index], harnessLogs: [...logs, (data as any).harness_log] };
+                }
+                return next;
+              });
+            } else if ((data.type as string) === 'approval_required') {
+              patchAssistant({ approvalRequired: { reason: (data as any).reason, complexity: (data as any).complexity } });
             } else if (data.type === 'error') {
               const err = data as any;
               patchAssistant({
@@ -444,14 +466,28 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
                   details: ''
                 }
               });
+              return; // Terminate on error
+            } else if (data.type === 'done') {
+              return; // Clean termination
             }
           } catch (e) {
-            console.warn('Malformed SSE frame:', payload, e);
+            console.warn('Malformed pipe frame:', payload, e);
           }
         }
       }
 
-      if (done) break;
+      if (done) {
+        // Process any remaining characters in the buffer if they form a valid line
+        if (streamBuffer.trim()) {
+           try {
+             const payload = streamBuffer.startsWith('data: ') ? streamBuffer.slice(6).trim() : 
+                            (streamBuffer.startsWith('data:') ? streamBuffer.slice(5).trim() : streamBuffer);
+             const data = JSON.parse(payload);
+             // ... handle final chunk if needed ...
+           } catch(e) {}
+        }
+        break;
+      }
     }
   };
 
@@ -861,6 +897,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
                 onEdit={handleEdit}
                 onRegenerate={handleRegenerate}
                 onViewDocument={setActiveDocumentId}
+                previousUserQuery={index > 0 && messages[index-1].role === 'user' ? messages[index-1].content : ''}
               />
             ))
           )}
@@ -1153,12 +1190,14 @@ function MessageCard({
   message, 
   onEdit, 
   onRegenerate,
-  onViewDocument
+  onViewDocument,
+  previousUserQuery
 }: { 
   message: SessionMessage; 
   onEdit: (id: string, content: string) => void;
   onRegenerate: (id: string) => void;
   onViewDocument: (id: string) => void;
+  previousUserQuery?: string;
 }) {
   const isUser = message.role === 'user';
   const [editing, setEditing] = useState(false);
@@ -1265,51 +1304,111 @@ function MessageCard({
               </button>
             </div>
           </div>
-        ) : message.content ? (
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-            {(() => {
-              const { suggestion, textContent } = parseEditSuggestion(message.content);
-              if (suggestion) {
-                return (
-                  <>
+        ) : !message.error ? (
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {message.provenanceTrace?.steps?.length ? (
+              <InitialAnalysisCard 
+                trace={message.provenanceTrace} 
+                query={previousUserQuery || 'Processing request...'} 
+              />
+            ) : null}
+            
+            {message.content ? (
+              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+                {(() => {
+                  const { suggestion, textContent } = parseEditSuggestion(message.content);
+                  if (suggestion) {
+                    return (
+                      <>
+                        <div className="markdown-content">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {textContent}
+                          </ReactMarkdown>
+                        </div>
+                        <div style={{ 
+                          marginTop: '0.5rem', 
+                          padding: '8px 12px', 
+                          background: 'rgba(0, 255, 150, 0.1)', 
+                          border: '1px solid rgba(0, 255, 150, 0.3)',
+                          borderRadius: '6px',
+                          color: '#00ff96',
+                          fontSize: '0.8rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          <FiEdit2 size={12} />
+                          Document Edit Suggested - Preview above
+                        </div>
+                      </>
+                    );
+                  }
+                  return (
                     <div className="markdown-content">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {textContent}
+                        {message.content}
                       </ReactMarkdown>
                     </div>
-                    <div style={{ 
-                      marginTop: '0.5rem', 
-                      padding: '8px 12px', 
-                      background: 'rgba(0, 255, 150, 0.1)', 
-                      border: '1px solid rgba(0, 255, 150, 0.3)',
-                      borderRadius: '6px',
-                      color: '#00ff96',
-                      fontSize: '0.8rem',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}>
-                      <FiEdit2 size={12} />
-                      Document Edit Suggested - Preview above
-                    </div>
-                  </>
-                );
-              }
-              return (
-                <div className="markdown-content">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {message.content}
-                  </ReactMarkdown>
-                </div>
-              );
-            })()}
-          </div>
-        ) : !message.error ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--neon-cyan)', opacity: 0.8 }}>
-            <span className="pulse-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', boxShadow: '0 0 10px currentColor' }} />
-            <span style={{ fontSize: '0.9rem', fontStyle: 'italic' }}>RawClaw is thinking...</span>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--neon-cyan)', opacity: 0.8 }}>
+                {!message.provenanceTrace?.steps?.length && (
+                  <span className="pulse-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', boxShadow: '0 0 10px currentColor' }} />
+                )}
+                <span style={{ fontSize: '0.9rem', fontStyle: 'italic' }}>
+                  {message.isDeepResearch ? 'Deep Researching...' : 'RawClaw is thinking...'}
+                </span>
+              </div>
+            )}
           </div>
         ) : null}
+
+        {message.harnessLogs && message.harnessLogs.length > 0 && !message.content && (
+          <div style={{ 
+            marginTop: '0.8rem', 
+            padding: '10px 14px', 
+            background: 'rgba(0, 240, 255, 0.05)', 
+            border: '1px solid rgba(0, 240, 255, 0.1)',
+            borderRadius: '8px',
+            fontSize: '0.8rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--neon-cyan)', marginBottom: '4px' }}>
+              <FiActivity className="spin" size={14} />
+              <span style={{ fontWeight: 600 }}>Orchestration Harness</span>
+            </div>
+            {message.harnessLogs.map((log, i) => (
+              <div key={i} style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginLeft: '22px' }}>
+                • {log.step === 'preparing' ? `Preparing ${log.tool}...` : `${log.tool}: ${log.message || log.step}`}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {message.approvalRequired && (
+          <div style={{ 
+            marginTop: '1rem', 
+            padding: '12px 16px', 
+            background: 'rgba(255, 165, 0, 0.1)', 
+            border: '1px solid var(--warning)',
+            borderRadius: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--warning)', fontWeight: 600 }}>
+              <FiShield size={16} />
+              <span>Authorization Required</span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+              {message.approvalRequired.reason}
+            </p>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Complexity: <span style={{ color: 'var(--warning)', fontWeight: 600 }}>{message.approvalRequired.complexity || 'High'}</span>
+            </div>
+          </div>
+        )}
 
         {!editing && message.attachments && message.attachments.length > 0 && (
           <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>

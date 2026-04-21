@@ -18,7 +18,7 @@ export interface ProvenanceTrace {
 
 export interface ProvenanceStep {
   stepIndex: number;
-  stepType: 'plan' | 'tool_call' | 'tool_result' | 'synthesis' | 'error';
+  stepType: 'plan' | 'tool_call' | 'tool_result' | 'synthesis' | 'error' | 'review';
   toolName?: string | null;
   inputSummary?: string | null;
   outputSummary?: string | null;

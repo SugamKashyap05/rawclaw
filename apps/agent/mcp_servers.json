@@ -1,3 +1,50 @@
 {
-  "servers": {}
+  "servers": {
+    "duckduckgo": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-duckduckgo"
+      ],
+      "url": null,
+      "env": {}
+    },
+    "fetch": {
+      "transport": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/fetch"
+      ],
+      "url": null,
+      "env": {}
+    },
+    "playwright": {
+      "transport": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/playwright"
+      ],
+      "url": null,
+      "env": {}
+    },
+    "sequentialthinking": {
+      "transport": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/sequentialthinking"
+      ],
+      "url": null,
+      "env": {}
+    }
+  }
 }

@@ -107,7 +107,7 @@ class MCPServer:
             try:
                 # We use wait_for because if the server crashes or hangs, 
                 # we don't want the agent startup to hang indefinitely.
-                response = await asyncio.wait_for(self._send_stdio(init_request), timeout=10.0)
+                response = await asyncio.wait_for(self._send_stdio(init_request), timeout=30.0)
                 
                 if response and "result" in response:
                     self._connected = True
@@ -214,23 +214,61 @@ class MCPServer:
             raise MCPError(f"MCP server {self.name} SSE connection failed: {e}")
 
     async def _send_stdio(self, request: Dict) -> Optional[Dict]:
-        """Send a JSON-RPC request via stdio and read the response."""
+        """Send a JSON-RPC request via stdio and read the response, matching the ID."""
         if not self._process or not self._process.stdin or not self._process.stdout:
             return None
 
+        request_id = request.get("id")
         msg = json.dumps(request) + "\n"
         self._process.stdin.write(msg.encode("utf-8"))
         await self._process.stdin.drain()
 
         try:
-            line = await asyncio.wait_for(
-                self._process.stdout.readline(), timeout=10
-            )
-            if line:
-                return json.loads(line.decode("utf-8"))
-        except (asyncio.TimeoutError, json.JSONDecodeError) as e:
-            logger.error(f"MCP stdio read error: {e}")
+            # Loop to find the response with the matching ID, skipping logs and notifications
+            while True:
+                line = await asyncio.wait_for(
+                    self._process.stdout.readline(), timeout=30.0
+                )
+                if not line:
+                    break
+                
+                decoded = line.decode("utf-8").strip()
+                if not decoded:
+                    continue
+                
+                try:
+                    data = json.loads(decoded)
+                    
+                    # 1. Match the ID
+                    if data.get("id") == request_id:
+                        return data
+                        
+                    # 2. Check if it's a notification (JSON-RPC 2.0 allows notifications with method but no ID)
+                    if "method" in data and "id" not in data:
+                        method = data.get("method")
+                        if method.startswith("notifications/"):
+                            params = data.get("params", {})
+                            logger.info(f"MCP server [{self.name}] notification [{method}]: {params.get('message') or params.get('progress') or params}")
+                        else:
+                            logger.debug(f"MCP server [{self.name}] received notification: {method}")
+                        continue
+                        
+                    # 3. If it's a JSON with a different ID, it might be out-of-order (rare in stdio) or stale
+                    if "id" in data:
+                        logger.debug(f"MCP server [{self.name}] ignored out-of-order ID {data.get('id')} (waiting for {request_id})")
+                        continue
+
+                except json.JSONDecodeError:
+                    # Likely a log line, ignore and keep reading
+                    logger.debug(f"MCP server [{self.name}] log: {decoded}")
+                    continue
+                    
+        except asyncio.TimeoutError:
+            logger.error(f"MCP server [{self.name}] stdio read timeout after 30s for request {request_id}")
+        except Exception as e:
+            logger.error(f"MCP server [{self.name}] stdio read error: {e}")
         return None
+
 
     async def _discover_tools_stdio(self) -> None:
         """Discover tools from a stdio MCP server."""
@@ -287,7 +325,23 @@ class MCPServer:
             raise MCPError(f"Unknown transport: {self.transport}")
 
         if response and "result" in response:
-            return response["result"]
+            result = response["result"]
+            # Flatten MCP content blocks: [{type: "text", text: "..."}, ...] -> plain text
+            if isinstance(result, dict) and "content" in result:
+                content_blocks = result["content"]
+                if isinstance(content_blocks, list):
+                    flattened_parts = []
+                    for block in content_blocks:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            flattened_parts.append(block.get("text", ""))
+                        elif isinstance(block, dict) and block.get("type") == "image":
+                            flattened_parts.append(f"[image: {block.get('mimeType', 'unknown')}]")
+                        elif isinstance(block, str):
+                            flattened_parts.append(block)
+                    if flattened_parts:
+                        result["content"] = "\n".join(flattened_parts)
+                        logger.debug(f"MCP {self.name}: flattened {len(content_blocks)} content blocks into text")
+            return result
         elif response and "error" in response:
             raise MCPError(f"MCP tool error: {response['error']}")
         else:
@@ -324,10 +378,34 @@ class MCPGateway:
         self.config_path = config_path
         self._servers: Dict[str, MCPServer] = {}
 
-    def add_server(self, server: MCPServer) -> None:
+    def add_server(self, server: MCPServer, persist: bool = False) -> None:
         """Register an MCP server programmatically."""
         self._servers[server.name] = server
         logger.info(f"MCP server registered: {server.name} ({server.transport})")
+        if persist:
+            self.save_config()
+
+    def save_config(self) -> None:
+        """Save current MCP server configurations to the JSON config file."""
+        try:
+            config = {"servers": {}}
+            for name, server in self._servers.items():
+                if name == "docker-toolkit":
+                    continue # Skip saving docker-toolkit to file, it should come from env
+                
+                config["servers"][name] = {
+                    "transport": server.transport,
+                    "command": server.command,
+                    "args": server.args,
+                    "url": server.url,
+                    "env": server.env,
+                }
+            
+            with open(self.config_path, "w") as f:
+                json.dump(config, f, indent=2)
+            logger.info(f"MCP config saved to {self.config_path}")
+        except Exception as e:
+            logger.error(f"Failed to save MCP config: {e}")
 
     def load_config(self) -> None:
         """Load MCP server configurations from the JSON config file."""
@@ -361,10 +439,12 @@ class MCPGateway:
         results: Dict[str, str] = {}
         for name, server in self._servers.items():
             try:
+                # Individual server connection should not block the agent if it takes a while
+                # but for startup we wait for it to finish or timeout
                 await server.connect()
                 results[name] = "connected"
-            except MCPError as e:
-                logger.error(f"MCP {name} failed: {e}")
+            except Exception as e:
+                logger.error(f"MCP server {name} connection failed: {e}")
                 results[name] = f"error: {e}"
         return results
 

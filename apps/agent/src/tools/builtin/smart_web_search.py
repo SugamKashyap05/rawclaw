@@ -59,8 +59,8 @@ class SmartWebSearchTool(BaseTool):
             )
 
         # 1. Source Discovery & Selection
-        # Prefer MCP google_search if available, otherwise use builtin duckduckgo_search
-        search_tool = TOOL_REGISTRY.get_optional("google_search")
+        # Favor the robust MCP 'search' tool (from DuckDuckGo server) over the minimal built-in search
+        search_tool = TOOL_REGISTRY.get_optional("search")
         if not search_tool:
             search_tool = TOOL_REGISTRY.get_optional("duckduckgo_search")
         
@@ -68,7 +68,7 @@ class SmartWebSearchTool(BaseTool):
             return ToolResult(
                 tool_name=self.name,
                 input=input,
-                error="No underlying search tools (google_search or duckduckgo_search) found in registry.",
+                error="No underlying search tools (mcp 'search' or 'duckduckgo_search') found in registry.",
                 duration_ms=round((time.time() - start) * 1000, 2),
                 sandboxed=False,
             )

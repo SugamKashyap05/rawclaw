@@ -40,7 +40,7 @@ npm run lint -- --filter=@rawclaw/desktop
 ## Ports
 
 - API: 3000
-- Agent: 8000
+- Agent: 8001
 - Web (Vite dev): 5173
 
 ## Architecture
@@ -59,7 +59,7 @@ packages/
 
 **Communication model:**
 - Web → API only (never talks to agent directly)
-- API ↔ Agent via internal REST (ports 3000 ↔ 8000)
+- API ↔ Agent via internal REST (ports 3000 ↔ 8001)
 - Both backends use Redis for pub/sub and queuing
 
 **Agent internals (apps/agent/src/):**
@@ -109,7 +109,7 @@ User works via Antigravity agent (step-by-step prompt execution). Provide prompt
 
 **Key development patterns:**
 - Changes to shared types require rebuilding the shared package first
-- API and Agent communicate via internal REST (ports 3000 ↔ 8000)
+- API and Agent communicate via internal REST (ports 3000 ↔ 8001)
 - Web app only communicates with API (never directly with Agent)
 - Use Redis for inter-process communication and state sharing
 

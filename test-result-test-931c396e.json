@@ -1,0 +1,81 @@
+{
+  "session_id": "test-931c396e",
+  "timestamp": "2026-04-20T23:20:17",
+  "api_base": "http://localhost:3000/api",
+  "agent_base": "http://localhost:8001",
+  "available_tools": [
+    "get_datetime",
+    "duckduckgo_search",
+    "web_search",
+    "web_fetch",
+    "read_file",
+    "smart_search",
+    "shell_execute",
+    "list_dir",
+    "search",
+    "fetch_content"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "name": "greeting",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": "HTTP 401: {\"error\":\"Unauthorized\",\"code\":401,\"details\":\"Unauthorized\",\"timestamp\":\"2026-04-20T17:50:05.476Z\",\"path\":\"/api/chat/send\"}",
+        "events": []
+      }
+    },
+    {
+      "step": 2,
+      "name": "tool_awareness",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": null,
+        "events": []
+      }
+    },
+    {
+      "step": 3,
+      "name": "tool_invocation",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": null,
+        "events": []
+      }
+    },
+    {
+      "step": 4,
+      "name": "browser_invocation",
+      "result": {
+        "content": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "provenance": null,
+        "model_id": null,
+        "success": false,
+        "error": null,
+        "events": []
+      }
+    }
+  ],
+  "summary": {
+    "passed": 0,
+    "failed": 4,
+    "total": 4
+  }
+}

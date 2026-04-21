@@ -13,11 +13,35 @@ async function main() {
     checks: {},
   };
 
+  const logPath = path.join(process.cwd(), 'backend.log');
+  const writeLogMarker = (msg) => {
+    try {
+      fs.appendFileSync(logPath, `\n\n=== TEST SESSION [${msg}] START: ${new Date().toISOString()} ===\n`);
+    } catch { /* ignore */ }
+  };
+
+  const getBackendLogs = (lines = 50) => {
+    try {
+      if (!fs.existsSync(logPath)) return '(backend.log not found)';
+      const content = fs.readFileSync(logPath, 'utf8');
+      const allLines = content.split('\n');
+      return allLines.slice(-lines).join('\n');
+    } catch (e) {
+      return `(failed to read backend.log: ${e.message})`;
+    }
+  };
+
+  writeLogMarker('CHAT_CAPABILITY_CHECK');
+
   summary.checks.apiHealth = await preflightApi();
   if (!summary.checks.apiHealth.ok) {
     summary.finishedAt = new Date().toISOString();
     summary.failures = ['api unavailable'];
     console.log(JSON.stringify(summary, null, 2));
+    
+    console.log('\n--- BACKEND LOGS (FAILURE) ---');
+    console.log(getBackendLogs(20));
+    
     process.exitCode = 1;
     return;
   }
@@ -240,6 +264,11 @@ async function main() {
   summary.finishedAt = new Date().toISOString();
 
   console.log(JSON.stringify(summary, null, 2));
+
+  if (failures.length) {
+    console.log('\n--- BACKEND LOGS (FAILURE) ---');
+    console.log(getBackendLogs(50));
+  }
 
   console.log('\n--- MANUAL VERIFICATION REQUIRED ---');
   console.log('Repeated-Text Anchored Editing Validation:');

@@ -22,6 +22,7 @@ class ToolResult(BaseModel):
     error: Optional[str] = None
     duration_ms: float
     sandboxed: bool = False
+    is_truncated: bool = False
     source_url: Optional[str] = None
     provenance_hint: Optional[Dict[str, Any]] = None
 

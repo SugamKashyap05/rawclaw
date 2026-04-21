@@ -91,7 +91,7 @@ async def check_health() -> bool:
         async with httpx.AsyncClient() as client:
             resp = await client.get(f"{AGENT_BASE}/health")
             if resp.status_code == 200:
-                log_info("Agent is healthy (port 8000)")
+                log_info(f"Agent is healthy (port {AGENT_BASE.split(':')[-1]})")
             else:
                 log_error(f"Agent health check failed: {resp.status_code}")
                 all_ok = False
@@ -264,7 +264,7 @@ async def test_agent_direct(session_id: str, message: str, model: str = "ollama/
 
             # Process NDJSON stream
             buffer = ""
-            async for chunk in resp.aitext():
+            async for chunk in resp.aiter_text():
                 buffer += chunk
                 while '\n' in buffer:
                     line, buffer = buffer.split('\n', 1)
@@ -273,6 +273,13 @@ async def test_agent_direct(session_id: str, message: str, model: str = "ollama/
                         continue
 
                     try:
+                        # Handle SSE prefix
+                        if line.startswith("data: "):
+                            line = line[6:].strip()
+                        
+                        if not line or line == "[DONE]":
+                            continue
+                            
                         data = json.loads(line)
                         event_type = data.get("type")
 
@@ -327,7 +334,7 @@ async def run_test():
     # Step 0: Health Check
     log_step(0, "Health Check")
     if not await check_health():
-        print(f"\n{Colors.RED}Health check failed. Make sure API (port 3000) and Agent (port 8000) are running.{Colors.ENDC}")
+        print(f"\n{Colors.RED}Health check failed. Make sure API (port 3000) and Agent (port {AGENT_BASE.split(':')[-1]}) are running.{Colors.ENDC}")
         sys.exit(1)
 
     # Check available tools

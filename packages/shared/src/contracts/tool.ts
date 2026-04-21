@@ -33,6 +33,8 @@ export interface ToolResult {
   source_url?: string | null;
   /** Additional provenance metadata */
   provenance_hint?: Record<string, unknown> | null;
+  /** Whether the tool output was truncated for safety or performance */
+  is_truncated?: boolean;
 }
 
 /**

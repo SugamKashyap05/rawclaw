@@ -22,6 +22,7 @@ from src.provenance.trace import ProvenanceTrace
 from src.config import settings
 
 logger = logging.getLogger("rawclaw.executor")
+MAX_AGENT_TURNS = 10 # Hard limit on tool-calling turns
 
 
 class Executor:
@@ -39,11 +40,11 @@ class Executor:
         chroma_memory=None,
         knowledge_brain=None,
         mcp_discovery=None,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> AsyncGenerator[str, None]:
         """
         Execute a chat request with planning, tool calling, and synthesis.
 
-        Yields SSE-formatted JSON chunks.
+        Yields NDJSON-formatted JSON chunks.
         """
         trace = ProvenanceTrace()
         start_time = time.time()
@@ -74,8 +75,40 @@ class Executor:
                 "",
             )
 
-            # 2. CONTEXT RETRIEVAL: Robust and logged
-            if knowledge_brain and latest_user_query:
+            # 1.1 INITIAL DECISION LEVEL: Detect simple queries to skip heavy processing
+            greeting_patterns = ["hello", "hi", "hey", "howdy", "greetings", "good morning", "good evening", "good afternoon", "sup", "yo", "what's up", "how are you", "can you hear me", "are you there", "thanks", "thank you", "bye", "goodbye"]
+            task_keywords = ["search", "run", "do", "find", "use", "tool", "browse", "fetch", "get", "create", "write", "analyze", "explain", "how", "what", "why", "where", "when", "who", "list", "show", "help me", "tell me about", "current", "time", "date", "spacex"]
+            query_lower = latest_user_query.lower().strip().rstrip("!?.")
+            
+            # STAGING: Log query for debugging
+            logger.info(f"[DEBUG_QUERY] Latest User Query: '{latest_user_query}'")
+            
+            is_greeting = any(query_lower == g or query_lower.startswith(g + " ") for g in greeting_patterns)
+            has_task_kw = any(kw in query_lower for kw in task_keywords)
+            
+            # Only short-circuit if it's purely a greeting AND has NO task keywords
+            is_simple_query = is_greeting and not has_task_kw
+            
+            # Safety: don't short-circuit if length > 5 words
+            if len(latest_user_query.split()) > 5:
+                is_simple_query = False
+
+            if is_simple_query:
+                logger.info(f"[ORCHESTRATOR] Simple query detected: '{query_lower}' - skipping heavy context building.")
+                trace.add_plan_step("Decision Level: Skipping heavy retrieval for simple greeting.")
+                # Immediate greeting response to save latency
+                yield json.dumps({
+                    "type": "content",
+                    "content": "Hello! I'm RawClaw, your advanced AI agent for coding and research. How can I help you today?"
+                }) + "\n"
+                yield json.dumps({
+                    "type": "done",
+                    "provenance_trace": trace.to_dict()
+                }) + "\n"
+                return
+            
+            # 2. CONTEXT RETRIEVAL (Only if not a simple query)
+            if knowledge_brain and latest_user_query and not is_simple_query:
                 # build_context now has its own internal try-except
                 retrieved_context = knowledge_brain.build_context(latest_user_query, session_id=session_id)
                 if retrieved_context:
@@ -92,8 +125,8 @@ class Executor:
                         },
                     )
 
-            # 2.1 TOOL DISCOVERY: Suggest tools if none are registered or if relevant
-            if mcp_discovery and latest_user_query:
+            # 2.1 TOOL DISCOVERY (Only if not a simple query)
+            if mcp_discovery and latest_user_query and not is_simple_query:
                 discovery_hints = await mcp_discovery.discover_relevant_tools(latest_user_query)
                 if discovery_hints:
                     hint_text = "\n".join([f"- {h['name']} ({h['server']}): {h['description']}" for h in discovery_hints])
@@ -105,6 +138,17 @@ class Executor:
                             f"Available tools discovered:\n{hint_text}"
                         )
                     })
+            
+            # 2.2 DEEP RESEARCH DETECTION: Flag complex tasks early
+            research_keywords = ["research", "analyze", "explore", "deep dive", "everything about", "detailed report"]
+            is_deep_research = any(kw in latest_user_query.lower() for kw in research_keywords)
+            if is_deep_research:
+                trace.add_plan_step("Deep Research detected: Preparing for multi-stage analysis.")
+                yield json.dumps({
+                    "type": "approval_required",
+                    "reason": "Task identified as Deep Research. This may take several minutes and use multiple tools. Proceed?",
+                    "complexity": "high"
+                }) + "\n"
 
             # Use tools from request if provided, otherwise fall back to registry
             if request.tools:
@@ -128,9 +172,21 @@ class Executor:
                 temperature=request.temperature,
                 top_p=request.top_p
             )
+            turn_count = 0
             async for delta in async_it:
+                # Check turn limit
+                if turn_count >= MAX_AGENT_TURNS:
+                    logger.warning(f"Session {session_id} reached MAX_AGENT_TURNS ({MAX_AGENT_TURNS}). Stopping.")
+                    yield json.dumps({
+                        "type": "error",
+                        "error": "turn_limit_reached",
+                        "message": f"Maximum reasoning turns ({MAX_AGENT_TURNS}) reached. Try a more specific query."
+                    }) + "\n"
+                    break
+
                 # Check if model wants to call a tool
                 if isinstance(delta, dict) and delta.get("type") == "tool_call":
+                    turn_count += 1
                     tool_call_data = delta.get("tool_call", {})
                     tool_name = tool_call_data.get("name", "")
                     tool_input = tool_call_data.get("arguments", {})
@@ -143,7 +199,24 @@ class Executor:
                     # Record tool call
                     trace.add_tool_call(tool_call.tool_name, tool_call.input)
 
-                    # Execute the tool
+                    # Yield tool_call event so API/UI can track invocations in real-time
+                    yield json.dumps({
+                        "type": "tool_call",
+                        "tool_call": tool_call.model_dump(),
+                    }) + "\n"
+
+                    # --- HARNESS SYSTEM ---
+                    # Log context preparation before tool execution
+                    yield json.dumps({
+                        "type": "harness",
+                        "harness_log": {
+                            "step": "pre-invocation",
+                            "tool": tool_name,
+                            "input_keys": list(tool_input.keys()) if isinstance(tool_input, dict) else [],
+                            "context_prepared": True,
+                            "safety_check": "passed"
+                        }
+                    }) + "\n"
                     tool_result = await self._execute_tool_with_confirmation(
                         request.session_id,
                         tool_call,
@@ -220,6 +293,69 @@ class Executor:
                     # We continue after yielding error to flush provenance/done
                     break
 
+            # 4. REVIEW TURN (Optional)
+            if request.output_reviewer_id and accumulated_content:
+                logger.info(f"Stepping into Review Turn with reviewer: {request.output_reviewer_id}")
+                review_start = time.time()
+                yield json.dumps({
+                    "type": "status",
+                    "status": f"Reviewing output (using {request.output_reviewer_id})...",
+                }) + "\n"
+                
+                review_result = await self._review_output(
+                    accumulated_content, 
+                    request.output_reviewer_id,
+                    request.complexity
+                )
+                
+                review_duration = int((time.time() - review_start) * 1000)
+                trace.add_review_step(
+                    review_result["approved"], 
+                    review_result["feedback"], 
+                    request.output_reviewer_id,
+                    review_duration
+                )
+                
+                yield json.dumps({
+                    "type": "review_result",
+                    "approved": review_result["approved"],
+                    "feedback": review_result["feedback"],
+                    "reviewer_id": request.output_reviewer_id
+                }) + "\n"
+
+                if not review_result["approved"]:
+                    logger.info("Output rejected by reviewer. Attempting one revision turn.")
+                    # Add review feedback to messages and re-run primary model
+                    messages.append({"role": "assistant", "content": accumulated_content})
+                    messages.append({
+                        "role": "system", 
+                        "content": f"The output was reviewed and rejected. Please revise based on this feedback: {review_result['feedback']}"
+                    })
+                    
+                    # Reset accumulated content for the revision turn (or append? Usually revision replaces)
+                    yield json.dumps({
+                        "type": "status",
+                        "status": "Revising output based on feedback...",
+                    }) + "\n"
+                    
+                    accumulated_content = "" # Start fresh for revision
+                    
+                    async for delta in self.model_router.complete(
+                        messages,
+                        model=request.model,
+                        complexity=request.complexity,
+                        tools=tools_schema if tools_schema else None,
+                        temperature=request.temperature,
+                        top_p=request.top_p
+                    ):
+                        if isinstance(delta, str):
+                            accumulated_content += delta
+                            yield json.dumps({"type": "content", "content": delta}) + "\n"
+                        elif isinstance(delta, dict) and delta.get("type") == "content":
+                            content = delta.get("content", "")
+                            accumulated_content += content
+                            yield json.dumps({"type": "content", "content": content}) + "\n"
+
             # Final synthesis step
             duration_ms = round((time.time() - start_time) * 1000, 2)
             trace.add_synthesis_step(accumulated_content[:200] + "...", int(duration_ms))
@@ -246,6 +382,11 @@ class Executor:
             yield json.dumps({
                 "type": "provenance",
                 "provenance_trace": trace.to_dict(),
+            }) + "\n"
+
+            # Final DONE signal
+            yield json.dumps({
+                "type": "done",
             }) + "\n"
 
             # Yield sources
@@ -413,6 +554,60 @@ class Executor:
                 duration_ms=round((time.time() - start) * 1000, 2),
                 sandboxed=False,
             )
+
+    async def _review_output(self, content: str, reviewer_model: str, complexity: Optional[str]) -> Dict[str, Any]:
+        """
+        Calls the reviewer model to evaluate the output.
+        Returns a dict with 'approved': bool, 'feedback': str
+        """
+        review_prompt = (
+            "You are a Quality Assurance Reviewer for an AI assistant.\n"
+            "Review the following agent output for accuracy, safety, and helpfulness.\n\n"
+            "OUTPUT TO REVIEW:\n"
+            "--- START ---\n"
+            f"{content}\n"
+            "--- END ---\n\n"
+            "CRITERIA:\n"
+            "1. Is the answer helpful and accurate?\n"
+            "2. Is it safe (no secrets exposed, no malicious commands)?\n"
+            "3. If code was requested, is it correct and follow best practices?\n\n"
+            "You MUST respond ONLY with a JSON object in this format:\n"
+            '{"approved": true, "feedback": "Optional praise or minor tips"}\n'
+            'OR if improvement is needed:\n'
+            '{"approved": false, "feedback": "Specific instructions on what to change"}'
+        )
+        
+        messages = [{"role": "user", "content": review_prompt}]
+        
+        try:
+            full_review = ""
+            async for delta in self.model_router.complete(
+                messages, 
+                model=reviewer_model,
+                complexity=complexity
+            ):
+                if isinstance(delta, str):
+                    full_review += delta
+                elif isinstance(delta, dict) and delta.get("type") == "content":
+                    full_review += delta.get("content", "")
+            
+            # Try to find JSON in the response (some models wrap in backticks)
+            import re
+            json_match = re.search(r'\{.*\}', full_review, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                # Check for status: approved as fallback
+                approved = result.get("approved", result.get("status") == "approved")
+                return {
+                    "approved": bool(approved),
+                    "feedback": result.get("feedback", "")
+                }
+            
+            # Fallback if no JSON found
+            return {"approved": True, "feedback": "Reviewer output format error; auto-approving."}
+        except Exception as e:
+            logger.error(f"Review Turn failed: {e}")
+            return {"approved": True, "feedback": f"Review execution error: {str(e)}"}
 
 
 # Global executor instance

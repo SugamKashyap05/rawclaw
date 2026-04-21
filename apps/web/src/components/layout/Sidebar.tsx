@@ -31,6 +31,7 @@ const ITEMS = [
   { to: '/memory', label: 'Memory (RAG)', icon: FiDatabase },
   { to: '/models', label: 'Models', icon: FiCpu },
   { to: '/integrations', label: 'Integrations', icon: FiShield },
+  { to: '/provenance', label: 'Provenance', icon: FiActivity },
   { to: '/tasks', label: 'Tasks', icon: FiBox, badge: 'pendingTasks' as const },
   { to: '/settings', label: 'Settings', icon: FiSettings },
 ];

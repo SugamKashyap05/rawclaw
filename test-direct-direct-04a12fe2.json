@@ -1,0 +1,94 @@
+{
+  "session_id": "direct-04a12fe2",
+  "results": {
+    "greeting": {
+      "content": "",
+      "tool_calls": [
+        {
+          "tool_name": "web_search",
+          "input": {
+            "query": "OpenAI"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "web_search",
+          "input": {
+            "query": "OpenAI"
+          },
+          "output": null,
+          "error": "Underlying search failed: MCP tool call returned no result: {'method': 'notifications/message', 'params': {'level': 'info', 'data': 'Searching DuckDuckGo for: OpenAI (SafeSearch: MODERATE, Region: default)'}, 'jsonrpc': '2.0'}",
+          "duration_ms": 70.69,
+          "sandboxed": false,
+          "is_truncated": false,
+          "source_url": null,
+          "provenance_hint": null
+        }
+      ],
+      "provenance": {
+        "run_id": "7e7daaee-7f87-4aef-bdb8-408ee10eb254",
+        "steps": [
+          {
+            "step_index": 0,
+            "step_type": "plan",
+            "tool_name": null,
+            "input_summary": "Initializing execution for session direct-04a12fe2",
+            "output_summary": null,
+            "source_url": null,
+            "duration_ms": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-20T18:56:55.636852Z"
+          },
+          {
+            "step_index": 1,
+            "step_type": "tool_call",
+            "tool_name": "web_search",
+            "input_summary": "query=OpenAI",
+            "output_summary": null,
+            "source_url": null,
+            "duration_ms": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-20T18:56:56.383384Z"
+          },
+          {
+            "step_index": 2,
+            "step_type": "error",
+            "tool_name": "web_search",
+            "input_summary": "query=OpenAI",
+            "output_summary": "Underlying search failed: MCP tool call returned no result: {'method': 'notifications/message', 'params': {'level': 'info', 'data': 'Searching DuckDuckGo for: OpenAI (SafeSearch: MODERATE, Region: default)'}, 'jsonrpc': '2.0'}",
+            "source_url": null,
+            "duration_ms": 70,
+            "sandboxed": false,
+            "timestamp": "2026-04-20T18:56:56.454301Z"
+          },
+          {
+            "step_index": 3,
+            "step_type": "synthesis",
+            "tool_name": null,
+            "input_summary": null,
+            "output_summary": "...",
+            "source_url": null,
+            "duration_ms": 938,
+            "sandboxed": false,
+            "timestamp": "2026-04-20T18:56:56.574885Z"
+          }
+        ],
+        "step_count": 4,
+        "created_at": "2026-04-20T18:56:56.636556Z"
+      },
+      "success": true,
+      "error": null,
+      "events": [
+        "provenance",
+        "tool_call",
+        "harness",
+        "tool_result",
+        "metadata",
+        "provenance",
+        "done",
+        "done"
+      ]
+    }
+  }
+}

@@ -106,6 +106,8 @@ export interface ChatRequest {
   sender_identifier?: string;
   /** Optional selected agent profile to apply additional system instructions */
   agent_id?: string;
+  /** Optional secondary agent to review output before finalizing */
+  output_reviewer_id?: string;
   // P2 Parameters
   temperature?: number;
   top_p?: number;
@@ -137,7 +139,7 @@ export interface ModelInfo {
   context_window?: number;
 }
 
-export type ChatStreamChunkType = 'content' | 'tool_call' | 'tool_result' | 'sources' | 'error' | 'done' | 'provenance' | 'metadata';
+export type ChatStreamChunkType = 'content' | 'tool_call' | 'tool_result' | 'sources' | 'error' | 'done' | 'provenance' | 'metadata' | 'review_result' | 'harness' | 'approval_required';
 
 export interface ChatStreamChunk {
   type: ChatStreamChunkType;
@@ -148,6 +150,12 @@ export interface ChatStreamChunk {
   provenance?: ProvenanceTrace | null;
   provenanceTrace?: ProvenanceTrace | null;
   error?: string;
+  harness_log?: {
+    tool: string;
+    step: 'preparing' | 'executing' | 'finalizing';
+    message?: string;
+  };
+  reason?: string;
   metadata?: {
     modelId: string;
     isLocal: boolean;
@@ -155,6 +163,7 @@ export interface ChatStreamChunk {
     memoryRecall: boolean;
     durationMs?: number;
     runIds?: string[];
+    isDeepResearch?: boolean;
   };
 }
 

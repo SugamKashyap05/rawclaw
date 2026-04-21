@@ -44,11 +44,15 @@ async def verify_docker_available():
     
     # 1. Path check
     docker_path = shutil.which("docker")
+    if not docker_path and is_windows:
+        # On some windows installs it might specifically resolve to .exe or not be in PATH correctly
+        docker_path = shutil.which("docker.exe")
+        
     if not docker_path:
-        logger.warning("Docker binary NOT found in environment PATH.")
+        logger.warning(f"Docker binary NOT found in environment PATH. (Checked docker and docker.exe)")
         return False
     
-    logger.info(f"Docker binary found at: {docker_path}")
+    logger.info(f"Docker binary successfully resolved at: {docker_path}")
     
     try:
         # 2. Execution check
@@ -94,11 +98,16 @@ from pythonjsonlogger import jsonlogger
 
 # Configure structured JSON logging
 logHandler = logging.StreamHandler()
+log_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend.log"))
+fileHandler = logging.FileHandler(log_file_path, mode='a', encoding='utf-8')
+
 formatter = jsonlogger.JsonFormatter(
     '%(asctime)s %(name)s %(levelname)s %(message)s %(module)s %(funcName)s'
 )
 logHandler.setFormatter(formatter)
-logging.basicConfig(handlers=[logHandler], level=logging.INFO)
+fileHandler.setFormatter(formatter)
+
+logging.basicConfig(handlers=[logHandler, fileHandler], level=logging.INFO)
 logger = logging.getLogger("rawclaw.main")
 
 # Global instances
@@ -189,12 +198,12 @@ async def lifespan(app: FastAPI):
     if mcp_gateway.server_names:
         logger.info(f"Connecting to MCP servers: {mcp_gateway.server_names}")
         try:
-            # We wait for MCP connection for up to 10s so tools are available for the first request
+            # We wait for MCP connection for up to 30s so tools are available for the first request
             # Local MCPs are usually very fast; remote ones might time out but server should still start
-            await asyncio.wait_for(mcp_gateway.connect_all(), timeout=10.0)
+            await asyncio.wait_for(mcp_gateway.connect_all(), timeout=35.0)
             logger.info("Successfully connected to all MCP servers")
         except asyncio.TimeoutError:
-            logger.warning("MCP connection timed out after 10.0s. Proceeding with partial/empty tool set.")
+            logger.warning("MCP connection overall timeout after 35.0s. Proceeding with partial/empty tool set.")
         except Exception as e:
             logger.error(f"Failed to connect to MCP servers during startup: {e}")
 
@@ -444,7 +453,7 @@ async def mcp_connect(request: Request):
             url=url,
             env=env,
         )
-        mcp_gateway.add_server(server)
+        mcp_gateway.add_server(server, persist=True)
         
         await server.connect()
         
@@ -483,6 +492,7 @@ async def mcp_disconnect(request: Request, name: str):
     try:
         await server.disconnect()
         del mcp_gateway._servers[name]
+        mcp_gateway.save_config()
     except Exception as e:
         logger.warning(f"Error disconnecting server: {e}")
     

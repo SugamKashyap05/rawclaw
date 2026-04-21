@@ -3,7 +3,7 @@ import { PrismaService } from './prisma.service';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
-import { ModelInfo, ModelsHealthResponse, ProviderConfigState, ProviderHealthInfo, UpdateModelsConfigRequest } from '@rawclaw/shared';
+import { ModelInfo, ModelRoutingConfig, ModelsHealthResponse, ProviderConfigState, ProviderHealthInfo, UpdateModelsConfigRequest } from '@rawclaw/shared';
 
 export interface ModelWithPreference extends ModelInfo {
   customName?: string;
@@ -149,7 +149,7 @@ export class ModelsService {
   }
 
   public async getConfig(): Promise<{
-    routing: { low: string; medium: string; high: string };
+    routing: ModelRoutingConfig;
     providerConfig: Record<string, ProviderConfigState>;
   }> {
     const saved = await this.prisma.appSetting.findUnique({ where: { key: this.settingsKey } });
@@ -161,6 +161,7 @@ export class ModelsService {
         low: this.configService.get<string>('DEFAULT_LOW_MODEL') || 'ollama/qwen2.5:1.5b',
         medium: this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (isUsable ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
         high: this.configService.get<string>('DEFAULT_HIGH_MODEL') || (isUsable ? 'anthropic/claude-3-5-sonnet' : 'ollama/llama3.2:3b'),
+        outputReviewer: this.configService.get<string>('DEFAULT_REVIEWER_MODEL') || 'ollama/llama3.2:3b',
       },
       providerConfig: {
         openai: { enabled: false },
@@ -183,14 +184,15 @@ export class ModelsService {
       }
       
       const parsed = JSON.parse(updatedValue) as {
-        routing?: { low?: string; medium?: string; high?: string };
+        routing?: Partial<ModelRoutingConfig>;
         providerConfig?: Record<string, ProviderConfigState>;
       };
 
-      const finalRouting = {
+      const finalRouting: ModelRoutingConfig = {
         low: parsed.routing?.low || fallback.routing.low,
         medium: parsed.routing?.medium || fallback.routing.medium,
         high: parsed.routing?.high || fallback.routing.high,
+        outputReviewer: parsed.routing?.outputReviewer || fallback.routing.outputReviewer,
       };
 
       // SANITIZATION: Force all routes to Ollama-only mode
@@ -202,6 +204,9 @@ export class ModelsService {
       }
       if (!finalRouting.high.startsWith('ollama/')) {
         finalRouting.high = fallback.routing.high;
+      }
+      if (!finalRouting.outputReviewer.startsWith('ollama/')) {
+        finalRouting.outputReviewer = fallback.routing.outputReviewer;
       }
 
       return {

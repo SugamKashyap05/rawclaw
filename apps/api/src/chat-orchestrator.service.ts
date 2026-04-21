@@ -48,6 +48,23 @@ export class ChatOrchestratorService {
       }
     }
 
+    // Resolve output reviewer from config if not explicitly provided
+    if (!request.output_reviewer_id) {
+      const config = await this.modelsService.getConfig();
+      if (config.routing.outputReviewer) {
+        request.output_reviewer_id = config.routing.outputReviewer;
+        this.logger.log(`Resolved output reviewer to '${request.output_reviewer_id}' from config`);
+      }
+    }
+
+    // Validate model parameters
+    if (request.temperature !== undefined) {
+      request.temperature = Math.max(0, Math.min(1, request.temperature));
+    }
+    if (request.top_p !== undefined) {
+      request.top_p = Math.max(0, Math.min(1, request.top_p));
+    }
+
     // 1. Get history for context if needed
     const history = await this.chatService.getMessages(request.session_id);
     // Build message stack with proper system context
@@ -136,8 +153,11 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     }
 
     // Filter out ANY previous system messages from history or request to prevent injection overrides
-    const cleanHistory = history.filter((m) => m.role !== 'system');
-    const cleanRequestMessages = request.messages.filter((m) => m.role !== 'system');
+    const safeHistory = (history || []);
+    const cleanHistory = safeHistory.filter((m) => m.role !== 'system');
+    
+    const requestMessages = request.messages || [];
+    const cleanRequestMessages = requestMessages.filter((m) => m.role !== 'system');
 
     let allMessages: ChatMessage[] = [
       ...systemMessages,
@@ -268,6 +288,8 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       ...request,
       tools: toolsSchema,
     };
+    
+    this.logger.log(`[AGENT_REQ] Forwarding prompt to agent at ${agentUrl}/execute (${allMessages.length} msgs, session=${request.session_id})`);
     this.logger.log(`[TOOL_TRACE] Sending request to agent with model=${agentRequest.model}, complexity=${agentRequest.complexity}, toolsCount=${toolsSchema?.length || 0}`);
 
     const attemptRequest = async (): Promise<any> => {
@@ -321,7 +343,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     let fullAssistantResponse = '';
     let toolCalls: any[] = [];
     let toolResults: any[] = [];
-    let provenance: any = null;
+    let provenanceTrace: any = null;
     let processedProvenance: any = null;
     let lastMetadata: any = null;
     const sources: string[] = [];
@@ -331,12 +353,17 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
 
     // Set headers for SSE streaming
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
 
     return new Promise<void>((resolve) => {
       const finalize = async (payload?: Record<string, unknown>) => {
-        if (streamClosed) return;
+        if (streamClosed) {
+          this.logger.debug(`[STREAM_FINAL] Finalize called but stream already closed.`);
+          return;
+        }
+        this.logger.log(`[STREAM_FINAL] Finalizing stream for session ${request.session_id} (payload type: ${payload?.type || 'none'})`);
         streamClosed = true;
 
         // Ensure we persist whatever we have
@@ -351,8 +378,8 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           }
 
           // Finalize provenance if we have it
-          if (provenance) {
-            processedProvenance = ProvenanceSanitizer.processTrace(provenance);
+          if (provenanceTrace && !processedProvenance) {
+            processedProvenance = ProvenanceSanitizer.processTrace(provenanceTrace);
           }
 
           await this.chatService.createMessage(
@@ -385,10 +412,24 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
 
       const processLine = async (line: string) => {
         const trimmed = line.trim();
-        if (!trimmed) return;
+        if (!trimmed) {
+          this.logger.log(`[STREAM_LOG] Skipping empty line`);
+          return;
+        }
+
+        this.logger.log(`[STREAM_LOG] Received raw line: ${trimmed.substring(0, 100)}${trimmed.length > 100 ? '...' : ''}`);
 
         try {
-          const data = JSON.parse(trimmed);
+          // Attempt to parse the line as JSON. 
+          // If it fails, it might be a log line or an incomplete chunk.
+          let data: any;
+          try {
+            data = JSON.parse(trimmed);
+          } catch (pe) {
+            // If it's not valid JSON, it might be a log line from the agent
+            this.logger.debug(`[STREAM_LOG] ${trimmed}`);
+            return;
+          }
 
           if (data.type === 'content') {
             fullAssistantResponse += data.content || '';
@@ -400,9 +441,11 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
             toolResults.push(data.tool_result || data);
           } else if (data.type === 'provenance') {
             const rawTrace = data.provenance_trace || data.provenance || data;
-            provenance = ProvenanceSanitizer.processTrace(rawTrace);
+            // Process once and store
+            provenanceTrace = rawTrace;
+            processedProvenance = ProvenanceSanitizer.processTrace(rawTrace);
             // Replace with sanitized version for client
-            data.provenanceTrace = provenance;
+            data.provenanceTrace = processedProvenance;
             delete (data as any).provenance_trace;
             delete (data as any).provenance;
           } else if (data.type === 'metadata') {
@@ -411,13 +454,19 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
             if (Array.isArray(data.sources)) {
               sources.push(...data.sources);
             }
+          } else if (data.type === 'harness') {
+            this.logger.log(`[HARNESS] Tool prep: ${data.harness_log?.tool} (${data.harness_log?.step})`);
+          } else if (data.type === 'approval_required') {
+            this.logger.warn(`[ORCHESTRATOR] Approval required: ${data.reason}`);
+          } else if (data.type === 'review_result') {
+            this.logger.log(`[REVIEW] Output review result: ${data.review?.status}`);
           }
 
           // Real-time runId synchronization: if we found new runIds in provenance, inject into metadata
-          if (provenance?.runIds?.length && (data as any).metadata) {
+          if (processedProvenance?.runIds?.length && (data as any).metadata) {
             (data as any).metadata.runIds = Array.from(new Set([
               ...((data as any).metadata.runIds || []),
-              ...provenance.runIds
+              ...processedProvenance.runIds
             ]));
           }
 
@@ -433,10 +482,11 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           }
 
           if (!res.writableEnded) {
+            this.logger.log(`[STREAM_EVENT] Sending '${data.type}' event to client`);
             res.write(`data: ${JSON.stringify(data)}\n\n`);
           }
         } catch (e) {
-          this.logger.error('SSE parse error:', e, trimmed);
+          this.logger.error('SSE processing error:', e);
         }
       };
 
@@ -603,9 +653,10 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     budgetMessages.forEach(m => {
       if (m.toolResults && totalChars > this.MAX_TOTAL_PROMPT_CHARS) {
         for (const tr of m.toolResults) {
-          if (typeof tr.output === 'string' && tr.output.length > this.MAX_TOOL_RESULT_CHARS) {
+          if (tr.output && typeof tr.output === 'string' && tr.output.length > this.MAX_TOOL_RESULT_CHARS) {
             const originalLen = tr.output.length;
             tr.output = tr.output.slice(0, this.MAX_TOOL_RESULT_CHARS) + '\n[... Tool Result Truncated for Prompt Budget ...]';
+            tr.is_truncated = true;
             totalChars -= (originalLen - (tr.output as string).length);
             if (totalChars <= this.MAX_TOTAL_PROMPT_CHARS) return;
           }

@@ -52,7 +52,7 @@ try:
 except Exception:
     # Fallback if pydantic-settings not installed
     class Settings:
-        AGENT_PORT = int(os.environ.get("AGENT_PORT", "8000"))
+        AGENT_PORT = int(os.environ.get("AGENT_PORT", "8001"))
         OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
         ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
         OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")

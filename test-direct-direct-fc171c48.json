@@ -1,0 +1,14 @@
+{
+  "session_id": "direct-fc171c48",
+  "results": {
+    "greeting": {
+      "content": "",
+      "tool_calls": [],
+      "tool_results": [],
+      "provenance": null,
+      "success": false,
+      "error": "'Response' object has no attribute 'aitext'",
+      "events": []
+    }
+  }
+}

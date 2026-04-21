@@ -31,7 +31,7 @@ MAX_SUMMARY_LENGTH = 500
 class ProvenanceStep(BaseModel):
     """A single step in a provenance trace."""
     step_index: int
-    step_type: Literal["plan", "tool_call", "tool_result", "synthesis", "error"]
+    step_type: Literal["plan", "tool_call", "tool_result", "synthesis", "error", "review"]
     tool_name: Optional[str] = None
     input_summary: Optional[str] = None
     output_summary: Optional[str] = None
@@ -46,19 +46,41 @@ def _summarize(data: Any, max_length: int = MAX_SUMMARY_LENGTH) -> str:
     try:
         if data is None:
             return "(none)"
+        
         if isinstance(data, str):
-            text = data
+            text = data.strip()
         elif isinstance(data, dict):
-            parts = []
-            for k, v in data.items():
-                v_str = str(v)[:100]
-                parts.append(f"{k}={v_str}")
-            text = ", ".join(parts)
+            # Special handling for common tool output patterns
+            if "results" in data and isinstance(data["results"], list):
+                count = len(data["results"])
+                text = f"{count} results found"
+                if count > 0:
+                    first = data["results"][0]
+                    if isinstance(first, dict):
+                        label = first.get("title") or first.get("url") or first.get("name")
+                        if label:
+                            text += f" (first: {label})"
+            elif "content" in data and isinstance(data["content"], str):
+                text = data["content"]
+            else:
+                parts = []
+                for k, v in list(data.items())[:8]: # Limit key count
+                    v_str = str(v)
+                    if len(v_str) > 60:
+                        v_str = v_str[:57] + "..."
+                    parts.append(f"{k}={v_str}")
+                text = ", ".join(parts)
+                if len(data) > 8:
+                    text += f", ... (+{len(data) - 8} more)"
         elif isinstance(data, list):
-            text = f"[{len(data)} items] " + str(data[:3])
+            text = f"[{len(data)} items]"
+            if len(data) > 0:
+                text += " " + str(data[:1])
         else:
             text = str(data)
 
+        # Final cleanup and truncation
+        text = text.replace("\n", " ").replace("\r", " ").strip()
         if len(text) > max_length:
             return text[: max_length - 3] + "..."
         return text
@@ -79,7 +101,7 @@ class ProvenanceTrace:
 
     def add_step(
         self,
-        step_type: Literal["plan", "tool_call", "tool_result", "synthesis", "error"],
+        step_type: Literal["plan", "tool_call", "tool_result", "synthesis", "error", "review"],
         tool_name: Optional[str] = None,
         input_summary: Optional[str] = None,
         output_summary: Optional[str] = None,
@@ -164,6 +186,15 @@ class ProvenanceTrace:
             step_type="error",
             tool_name=tool_name,
             output_summary=error,
+        )
+
+    def add_review_step(self, approved: bool, feedback: str, reviewer: str, duration_ms: int = 0) -> ProvenanceStep:
+        """Add a review step."""
+        return self.add_step(
+            step_type="review",
+            tool_name=reviewer,
+            output_summary=f"Result: {'APPROVED' if approved else 'REJECTED'}. Feedback: {feedback}",
+            duration_ms=duration_ms,
         )
 
     def get_steps(self) -> List[ProvenanceStep]:
