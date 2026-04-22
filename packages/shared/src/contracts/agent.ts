@@ -7,6 +7,8 @@ export interface AgentProfile {
   systemPrompt: string;
   status: AgentExecutionStatus;
   isDefault: boolean;
+  modelId?: string | null;
+  skills: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -15,6 +17,8 @@ export interface CreateAgentRequest {
   name: string;
   description?: string;
   systemPrompt: string;
+  modelId?: string;
+  skills?: string[];
   isDefault?: boolean;
 }
 
@@ -23,5 +27,7 @@ export interface UpdateAgentRequest {
   description?: string;
   systemPrompt?: string;
   status?: AgentExecutionStatus;
+  modelId?: string;
+  skills?: string[];
   isDefault?: boolean;
 }

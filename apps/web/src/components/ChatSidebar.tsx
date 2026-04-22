@@ -22,6 +22,16 @@ export function ChatSidebar() {
     if (saved) {
       setIsCollapsed(saved === 'true');
     }
+    
+    // Load cached sessions
+    const cachedSessions = localStorage.getItem('rawclaw_sessions_cache');
+    if (cachedSessions) {
+      try {
+        setSessions(JSON.parse(cachedSessions));
+      } catch (e) {
+        console.error('Failed to parse cached sessions', e);
+      }
+    }
   }, []);
 
   // Save collapsed state when it changes
@@ -37,6 +47,8 @@ export function ChatSidebar() {
     try {
       const res = await api.get<Session[]>('/chat/sessions');
       setSessions(res.data);
+      // Update cache
+      localStorage.setItem('rawclaw_sessions_cache', JSON.stringify(res.data));
     } catch (err) {
       console.error('Failed to fetch sessions', err);
     }

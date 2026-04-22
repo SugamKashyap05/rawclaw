@@ -1,0 +1,90 @@
+{
+  "session_id": "eval-220f09e3",
+  "timestamp": "2026-04-22T11:03:03",
+  "model": "gemma4:31b-cloud",
+  "results": [
+    {
+      "step": 1,
+      "title": "Identity Check",
+      "passed": false,
+      "error": "'async for' requires an object with __aiter__ method, got generator"
+    },
+    {
+      "step": 2,
+      "title": "Store Context",
+      "passed": false,
+      "error": "'async for' requires an object with __aiter__ method, got generator"
+    },
+    {
+      "step": 3,
+      "title": "Recall Context",
+      "passed": false,
+      "error": "'async for' requires an object with __aiter__ method, got generator"
+    },
+    {
+      "step": 4,
+      "title": "Time & Date",
+      "passed": false,
+      "error": "'async for' requires an object with __aiter__ method, got generator"
+    },
+    {
+      "step": 5,
+      "title": "Environment Check",
+      "passed": false,
+      "error": "Agent error: Request failed with status code 422"
+    },
+    {
+      "step": 6,
+      "title": "Web Search",
+      "passed": false,
+      "error": "Agent error: Request failed with status code 422"
+    },
+    {
+      "step": 7,
+      "title": "Web Scraping",
+      "passed": false,
+      "error": "Agent error: Request failed with status code 422"
+    },
+    {
+      "step": 8,
+      "title": "Deep Research",
+      "passed": false,
+      "error": "Agent error: Request failed with status code 422"
+    },
+    {
+      "step": 9,
+      "title": "Knowledge Retrieval",
+      "passed": false,
+      "error": "Agent error: Request failed with status code 422"
+    },
+    {
+      "step": 10,
+      "title": "Live Browser Automation",
+      "passed": false,
+      "error": "Agent error: Request failed with status code 422"
+    },
+    {
+      "step": 11,
+      "title": "Sequential Thinking",
+      "passed": false,
+      "error": "Agent error: Request failed with status code 422"
+    },
+    {
+      "step": 12,
+      "title": "Topic Continuity",
+      "passed": false,
+      "error": "Agent error: Request failed with status code 422"
+    },
+    {
+      "step": 13,
+      "title": "Final Summary",
+      "passed": false,
+      "error": "Agent error: Request failed with status code 422"
+    }
+  ],
+  "summary": {
+    "total": 13,
+    "passed": 0,
+    "avg_latency": 0.0
+  }
+}

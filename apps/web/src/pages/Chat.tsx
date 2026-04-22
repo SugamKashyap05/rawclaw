@@ -14,7 +14,8 @@ import { useSystemPoller } from '../hooks/useSystemPoller';
 import { 
   FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, 
   FiCopy, FiFolder, FiFileText, FiX, FiPlus, 
-  FiMessageSquare, FiSquare, FiEye, FiAlertTriangle, FiActivity, FiShield
+  FiMessageSquare, FiSquare, FiEye, FiAlertTriangle, FiActivity, FiShield,
+  FiChevronDown, FiChevronUp, FiCpu
 } from 'react-icons/fi';
 import { WebSearchResult } from '../components/chat/WebSearchResult';
 import { BrowserResult } from '../components/chat/BrowserResult';
@@ -101,6 +102,7 @@ interface SessionMessage {
   durationMs?: number;
   runIds?: string[];
   id?: string;
+  thinking?: string;
   harnessLogs?: any[];
   approvalRequired?: { reason: string; complexity?: string };
   isDeepResearch?: boolean;
@@ -429,6 +431,16 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
             if (data.type === 'content') {
               assistantText += data.content || '';
               patchAssistant({ content: assistantText });
+            } else if (data.type === 'thinking' && data.thinking) {
+              setMessages((current) => {
+                const next = [...current];
+                const index = next.map((item) => item.role).lastIndexOf('assistant');
+                if (index >= 0) {
+                  const currentThinking = next[index].thinking || '';
+                  next[index] = { ...next[index], thinking: currentThinking + data.thinking };
+                }
+                return next;
+              });
             } else if (data.type === 'tool_result' && data.tool_result) {
               toolResults.push(data.tool_result);
               patchAssistant({ toolResults: [...toolResults] });
@@ -482,8 +494,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
            try {
              const payload = streamBuffer.startsWith('data: ') ? streamBuffer.slice(6).trim() : 
                             (streamBuffer.startsWith('data:') ? streamBuffer.slice(5).trim() : streamBuffer);
-             const data = JSON.parse(payload);
-             // ... handle final chunk if needed ...
+             JSON.parse(payload);
            } catch(e) {}
         }
         break;
@@ -1202,6 +1213,7 @@ function MessageCard({
   const isUser = message.role === 'user';
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showThinking, setShowThinking] = useState(true);
   const [editContent, setEditContent] = useState(message.content);
 
   const handleCopy = async () => {
@@ -1306,6 +1318,52 @@ function MessageCard({
           </div>
         ) : !message.error ? (
           <div style={{ display: 'grid', gap: '1rem' }}>
+            {message.thinking && (
+              <div style={{ marginBottom: '0.8rem' }}>
+                <button
+                  onClick={() => setShowThinking(!showThinking)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    background: 'rgba(0, 240, 255, 0.05)',
+                    border: '1px solid rgba(0, 240, 255, 0.1)',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    color: 'var(--neon-cyan)',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    marginBottom: showThinking ? '0.5rem' : '0'
+                  }}
+                >
+                  <FiCpu size={14} className={message.content ? '' : 'spin'} />
+                  <span>{message.content ? 'Reasoning' : 'Thinking...'}</span>
+                  {showThinking ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
+                </button>
+                
+                {showThinking && (
+                  <div style={{
+                    background: 'rgba(0, 0, 0, 0.2)',
+                    borderRadius: '10px',
+                    padding: '1rem',
+                    fontSize: '0.9rem',
+                    color: 'var(--text-secondary)',
+                    borderLeft: '2px solid var(--neon-cyan)',
+                    maxHeight: '400px',
+                    overflowY: 'auto',
+                    fontStyle: 'italic',
+                    lineHeight: 1.6
+                  }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.thinking}
+                    </ReactMarkdown>
+                  </div>
+                )}
+              </div>
+            )}
+
             {message.provenanceTrace?.steps?.length ? (
               <InitialAnalysisCard 
                 trace={message.provenanceTrace} 
@@ -1615,5 +1673,8 @@ const fieldStyle = {
 };
 
 function cryptoRandom() {
-  return `session-${Math.random().toString(36).slice(2, 10)}`;
+  // Generate a premium-looking hex identifier instead of generic 'session-'
+  const array = new Uint32Array(2);
+  crypto.getRandomValues(array);
+  return `rc-${array[0].toString(16)}-${array[1].toString(16).slice(0, 4)}`;
 }

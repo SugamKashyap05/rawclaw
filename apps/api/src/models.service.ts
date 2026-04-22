@@ -123,29 +123,55 @@ export class ModelsService {
 
   private async fetchProviderHealth(): Promise<Record<string, ProviderHealthInfo>> {
     const agentUrl = this.configService.getOrThrow<string>('AGENT_URL');
+    const defaultProviders = {
+      ollama: { status: 'down', error: 'Agent unavailable' },
+      openai: { status: 'down' },
+      anthropic: { status: 'down' },
+      google: { status: 'down' },
+    };
+
     try {
       const res = await firstValueFrom(
-        this.httpService.get<{ providers?: Record<string, { status: string; error?: string | null }> }>(
-          `${agentUrl}/health`,
-          { timeout: 5000 },
-        ),
+        this.httpService.get<{ 
+          status: string;
+          providers?: Record<string, { status: string; error?: string | null }> 
+        }>(`${agentUrl}/health`, { timeout: 5000 }),
       );
+      
+      const health: Record<string, any> = {};
+      const agentProviders = res.data.providers || {};
+      
+      // Map all providers from agent
+      for (const [key, info] of Object.entries(agentProviders)) {
+        health[key] = {
+          status: info.status || 'down',
+          error: info.error || null,
+        };
+      }
+
+      // Ensure standard keys exist
       return {
-        ollama: {
-          status: (res.data.providers?.ollama?.status || 'down') as any,
-          error: res.data.providers?.ollama?.error ?? null,
-        },
-      };
+        ...defaultProviders,
+        ...health,
+      } as any;
     } catch {
-      return {
-        ollama: { status: 'down', error: 'Agent unavailable' },
-      };
+      return defaultProviders as any;
     }
   }
 
   private isAnthropicUsable(): boolean {
-    // FORCE-OFF: Ollama-only mode enabled
-    return false;
+    const key = this.configService.get<string>('ANTHROPIC_API_KEY');
+    return !!key && key !== 'your_anthropic_api_key_here';
+  }
+
+  private isOpenAIUsable(): boolean {
+    const key = this.configService.get<string>('OPENAI_API_KEY');
+    return !!key && key !== 'your_openai_api_key_here';
+  }
+
+  private isGoogleUsable(): boolean {
+    const key = this.configService.get<string>('GOOGLE_API_KEY');
+    return !!key && key !== 'your_google_api_key_here';
   }
 
   public async getConfig(): Promise<{
@@ -154,19 +180,22 @@ export class ModelsService {
   }> {
     const saved = await this.prisma.appSetting.findUnique({ where: { key: this.settingsKey } });
     
-    const isUsable = this.isAnthropicUsable();
+    const isAnthropic = this.isAnthropicUsable();
+    const isOpenAI = this.isOpenAIUsable();
+    const isGoogle = this.isGoogleUsable();
     
+    // Default model defaults synced with agent's settings.py
     const fallback = {
       routing: {
         low: this.configService.get<string>('DEFAULT_LOW_MODEL') || 'ollama/qwen2.5:1.5b',
-        medium: this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (isUsable ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
-        high: this.configService.get<string>('DEFAULT_HIGH_MODEL') || (isUsable ? 'anthropic/claude-3-5-sonnet' : 'ollama/llama3.2:3b'),
+        medium: this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (isAnthropic ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
+        high: this.configService.get<string>('DEFAULT_HIGH_MODEL') || (isAnthropic ? 'anthropic/claude-3-5-sonnet' : 'ollama/llama3:8b'),
         outputReviewer: this.configService.get<string>('DEFAULT_REVIEWER_MODEL') || 'ollama/llama3.2:3b',
       },
       providerConfig: {
-        openai: { enabled: false },
-        anthropic: { enabled: isUsable },
-        google: { enabled: false },
+        openai: { enabled: isOpenAI },
+        anthropic: { enabled: isAnthropic },
+        google: { enabled: isGoogle },
         ollama: {
           enabled: true,
           baseUrl: this.configService.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434',
@@ -177,13 +206,7 @@ export class ModelsService {
     if (!saved) return fallback;
 
     try {
-      // Perform on-the-fly migration if stale llama3 ID is found
-      let updatedValue = saved.value;
-      if (updatedValue.includes('ollama/llama3"')) {
-        updatedValue = updatedValue.replace(/ollama\/llama3"/g, 'ollama/llama3.2:3b"');
-      }
-      
-      const parsed = JSON.parse(updatedValue) as {
+      const parsed = JSON.parse(saved.value) as {
         routing?: Partial<ModelRoutingConfig>;
         providerConfig?: Record<string, ProviderConfigState>;
       };
@@ -195,29 +218,11 @@ export class ModelsService {
         outputReviewer: parsed.routing?.outputReviewer || fallback.routing.outputReviewer,
       };
 
-      // SANITIZATION: Force all routes to Ollama-only mode
-      if (!finalRouting.low.startsWith('ollama/')) {
-        finalRouting.low = fallback.routing.low;
-      }
-      if (!finalRouting.medium.startsWith('ollama/')) {
-        finalRouting.medium = fallback.routing.medium;
-      }
-      if (!finalRouting.high.startsWith('ollama/')) {
-        finalRouting.high = fallback.routing.high;
-      }
-      if (!finalRouting.outputReviewer.startsWith('ollama/')) {
-        finalRouting.outputReviewer = fallback.routing.outputReviewer;
-      }
-
       return {
         routing: finalRouting,
         providerConfig: {
           ...fallback.providerConfig,
           ...(parsed.providerConfig ?? {}),
-          // Force non-Ollama providers to be disabled in this mode
-          openai: { enabled: false },
-          anthropic: { enabled: false },
-          google: { enabled: false },
           ollama: { 
             ...fallback.providerConfig.ollama, 
             ...(parsed.providerConfig?.ollama ?? {}) 

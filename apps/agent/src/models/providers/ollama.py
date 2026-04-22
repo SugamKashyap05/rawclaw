@@ -9,296 +9,7 @@ from src.config import settings
 logger = logging.getLogger("rawclaw.ollama")
 
 
-def _extract_textual_tool_calls(content: str) -> tuple[str, List[Dict[str, Any]]]:
-    """
-    Extract textual tool-call markup from model output.
-
-    Some models emit tool calls as text markup like:
-    - <minimax:tool_call>{"name": "web_search", "arguments": {...}}</minimax:tool_call>
-    - <invoke name="web_search">...</invoke>
-    - <tool>web_search</tool>
-
-    Returns: (cleaned_content, list of tool_call dicts)
-    """
-    if not content or not isinstance(content, str):
-        return content, []
-
-    tool_calls = []
-    cleaned = content
-
-    # Pattern 1: <minimax:tool_call>{"name": "...", "arguments": {...}}</minimax:tool_call>
-    # Pattern 2: <minimax:tool_call>{"function": {"name": "...", "arguments": {...}}}</minimax:tool_call>
-    minimax_pattern = r'<minimax:tool_call>(.*?)</minimax:tool_call>'
-    for match in re.finditer(minimax_pattern, content, re.DOTALL):
-        try:
-            data = json.loads(match.group(1))
-            # Handle both formats
-            if "name" in data:
-                tool_calls.append({
-                    "name": data.get("name", ""),
-                    "arguments": data.get("arguments", {})
-                })
-            elif "function" in data:
-                func = data["function"]
-                tool_calls.append({
-                    "name": func.get("name", ""),
-                    "arguments": func.get("arguments", {})
-                })
-            # Remove from cleaned content
-            cleaned = cleaned.replace(match.group(0), "")
-        except (json.JSONDecodeError, AttributeError):
-            pass
-
-    # Pattern 3: <invoke name="..."><parameter name="...">...</parameter>...</invoke>
-    invoke_pattern = r'<invoke\s+name="([^"]+)"[^>]*>(.*?)</invoke>'
-    for match in re.finditer(invoke_pattern, content, re.DOTALL):
-        try:
-            tool_name = match.group(1)
-            inner = match.group(2)
-            # Extract parameters
-            args = {}
-            param_pattern = r'<parameter\s+name="([^"]+)"[^>]*>(.*?)</parameter>'
-            for pmatch in re.finditer(param_pattern, inner, re.DOTALL):
-                args[pmatch.group(1)] = pmatch.group(2).strip()
-
-            tool_calls.append({
-                "name": tool_name,
-                "arguments": args
-            })
-            cleaned = cleaned.replace(match.group(0), "")
-        except (AttributeError, IndexError):
-            pass
-
-    # Pattern 4: <tool_call>{"name": "...", "arguments": {...}}</tool_call> (generic)
-    generic_pattern = r'<tool_call>(.*?)</tool_call>'
-    for match in re.finditer(generic_pattern, content, re.DOTALL):
-        try:
-            data = json.loads(match.group(1))
-            if "name" in data:
-                tool_calls.append({
-                    "name": data.get("name", ""),
-                    "arguments": data.get("arguments", {})
-                })
-            cleaned = cleaned.replace(match.group(0), "")
-        except (json.JSONDecodeError, AttributeError):
-            pass
-
-    # Pattern 5: <tool>name</tool> with arguments in various formats
-    tool_pattern = r'<tool>([^<]+)</tool>'
-    for match in re.finditer(tool_pattern, content, re.DOTALL):
-        try:
-            tool_name = match.group(1).strip()
-            # Look for following arguments in various formats
-            tool_calls.append({
-                "name": tool_name,
-                "arguments": {}
-            })
-            cleaned = cleaned.replace(match.group(0), "")
-        except AttributeError:
-            pass
-
-    # Pattern 6: <tool_code> structured output
-    # This handles formats seen in models like Qwen or Claude-lite.
-    # We now attempt standard JSON parsing first, with a fallback to fuzzy regex.
-    tool_code_pattern = r'<tool_code>(.*?)</tool_code>'
-    for match in re.finditer(tool_code_pattern, content, re.DOTALL):
-        try:
-            inner = match.group(1).strip()
-            
-            # 1. ATTEMPT PURE JSON PARSING
-            try:
-                # Replace Ruby-style => with JSON-style : for models that mix them
-                json_friendly = inner.replace("=>", ":")
-                data = json.loads(json_friendly)
-                
-                # Support both {tool: "name", args: {...}} and {name: "name", arguments: {...}}
-                tool_name = data.get("tool") or data.get("name")
-                args = data.get("args") or data.get("arguments") or {}
-                
-                if tool_name and isinstance(tool_name, str):
-                    final_args = {}
-                    if isinstance(args, dict):
-                        final_args = args
-                    elif isinstance(args, str):
-                        # Try to find XML tags inside the string argument
-                        xml_inner_pattern = r'<(\w+)>(.*?)</\1>'
-                        xml_matches = re.findall(xml_inner_pattern, args, re.DOTALL)
-                        if xml_matches:
-                            for tag_name, tag_value in xml_matches:
-                                final_args[tag_name] = tag_value.strip()
-                        else:
-                            final_args["input"] = args
-                    else:
-                        final_args["input"] = str(args)
-
-                    tool_calls.append({
-                        "name": tool_name.strip(),
-                        "arguments": final_args
-                    })
-                    cleaned = cleaned.replace(match.group(0), "")
-                    continue # Successfully parsed as JSON
-            except json.JSONDecodeError:
-                pass
-
-            # 2. FALLBACK TO FUZZY REGEX (for partial JSON or hash syntax)
-            # Extract tool/name field
-            tn_match = re.search(r"['\"]?(?:tool|name)['\"]?\s*(?:=>|:)\s*['\"]([^'\"]+)['\"]", inner)
-            if not tn_match:
-                tn_match = re.search(r"(?:tool|name)\s*(?:=>|:)\s*(\w+)", inner)
-
-            if tn_match:
-                tool_name = tn_match.group(1).strip()
-                args = {}
-
-                # Look for nested tags like <query>, <url>
-                xml_param_pattern = r'<(\w+)>(.*?)</\1>'
-                for xml_match in re.finditer(xml_param_pattern, inner, re.DOTALL):
-                    tag_name = xml_match.group(1)
-                    tag_value = xml_match.group(2).strip()
-                    args[tag_name] = tag_value
-
-                # If no XML params, try to extract from args/arguments field
-                if not args:
-                    arg_match = re.search(
-                        r"['\"]?(?:args|arguments)['\"]?\s*(?:=>|:)\s*(.+?)(?=,\s*['\"]?\w+['\"]?\s*(?:=>|:)|\}$)",
-                        inner, re.DOTALL
-                    )
-                    if arg_match:
-                        val = arg_match.group(1).strip()
-                        if val.startswith(("'", '"')) and val.endswith(("'", '"')):
-                            val = val[1:-1]
-                        
-                        # Try parsing val as JSON if it looks like an object
-                        if val.startswith("{") and val.endswith("}"):
-                            try:
-                                args.update(json.loads(val.replace("=>", ":")))
-                            except: pass
-                        else:
-                            # Map to a default 'input' or 'query' based on tool
-                            args["input"] = val
-
-                if not args:
-                    # Final attempt: search for any key: value pairs
-                    pairs = re.findall(r"['\"]?(\w+)['\"]?\s*(?:=>|:)\s*['\"]?([^'\",\s\}]+)['\"]?", inner)
-                    for k, v in pairs:
-                        if k not in ('tool', 'name', 'args', 'arguments'):
-                            args[k] = v
-
-                tool_calls.append({
-                    "name": tool_name,
-                    "arguments": args
-                })
-                cleaned = cleaned.replace(match.group(0), "")
-        except Exception as e:
-            logger.debug(f"Failed to parse tool_code: {e}")
-            pass
-
-    return cleaned, tool_calls
-
-
-class _TextualToolParser:
-    """
-    Stateful parser for streaming textual tool calls.
-    Buffers potential tags and extracts tool calls once complete blocks are found.
-    """
-
-    def __init__(self):
-        self._buffer = ""
-        # Tags we actively look for start markers
-        self._start_tags = ["<tool_code>", "<minimax:tool_call>", "<invoke", "<tool>", "<tool_call>"]
-        # Maps start markers to expected end tags
-        self._tag_pairs = {
-            "<tool_code>": "</tool_code>",
-            "<minimax:tool_call>": "</minimax:tool_call>",
-            "<invoke": "</invoke>",
-            "<tool>": "</tool>",
-            "<tool_call>": "</tool_call>"
-        }
-        self._active_start_tag = None
-
-    def ingest(self, chunk: str) -> AsyncIterator[Dict[str, Any]]:
-        """
-        Processes a chunk of text and yields either 'content' or 'tool_call' events.
-        """
-        self._buffer += chunk
-        
-        while self._buffer:
-            if not self._active_start_tag:
-                # Find the first occurrence of any start tag
-                first_pos = -1
-                found_tag = None
-                
-                for tag in self._start_tags:
-                    pos = self._buffer.find(tag)
-                    if pos != -1 and (first_pos == -1 or pos < first_pos):
-                        first_pos = pos
-                        found_tag = tag
-                
-                if found_tag is not None:
-                    # Yield content before the tag
-                    if first_pos > 0:
-                        yield {"type": "content", "content": self._buffer[:first_pos]}
-                        self._buffer = self._buffer[first_pos:]
-                    
-                    # Check if we have the FULL start tag (some tags like <invoke are partial)
-                    # For simple tags like <tool_code>, we just set it as active
-                    if found_tag.endswith(">") or " " in found_tag:
-                         self._active_start_tag = found_tag
-                    else:
-                        # Wait for more data if it's a partial match that might be a longer tag
-                        # But for our tags, they are either complete or have a space
-                        self._active_start_tag = found_tag
-                else:
-                    # No start tags found. 
-                    # BUT wait if the buffer ends with something that looks like a tag start!
-                    last_bracket = self._buffer.rfind("<")
-                    if last_bracket != -1:
-                        potential = self._buffer[last_bracket:]
-                        # If potential could become one of our tags, keep it in buffer
-                        if any(tag.startswith(potential) for tag in self._start_tags):
-                            if last_bracket > 0:
-                                yield {"type": "content", "content": self._buffer[:last_bracket]}
-                                self._buffer = self._buffer[last_bracket:]
-                            return # Wait for more chunks
-                    
-                    # Safe to yield everything
-                    yield {"type": "content", "content": self._buffer}
-                    self._buffer = ""
-                    return
-            else:
-                # We are inside an active tag. Look for the end tag.
-                end_tag = self._tag_pairs[self._active_start_tag]
-                end_pos = self._buffer.find(end_tag)
-                
-                if end_pos != -1:
-                    full_block_end = end_pos + len(end_tag)
-                    block_content = self._buffer[:full_block_end]
-                    
-                    # Extract tool call
-                    _, tool_calls = _extract_textual_tool_calls(block_content)
-                    for tc in tool_calls:
-                        yield {"type": "tool_call", "tool_call": tc}
-                    
-                    # Clear this block from buffer
-                    self._buffer = self._buffer[full_block_end:]
-                    self._active_start_tag = None
-                else:
-                    # Still waiting for end tag
-                    return
-
-    def flush(self) -> AsyncIterator[Dict[str, Any]]:
-        """Yields any remaining content in the buffer at the end of the stream."""
-        if self._buffer:
-            _, tool_calls = _extract_textual_tool_calls(self._buffer)
-            for tc in tool_calls:
-                yield {"type": "tool_call", "tool_call": tc}
-            
-            # If no tools found or after tools, just yield the raw buffer as content
-            # (In case it was an aborted tag or just normal text with a '<')
-            cleaned, _ = _extract_textual_tool_calls(self._buffer)
-            if cleaned:
-                yield {"type": "content", "content": cleaned}
-        self._buffer = ""
+from src.models.tool_parser import extract_textual_tool_calls, TextualToolParser
 
 
 class OllamaProvider(ModelProvider):
@@ -307,6 +18,20 @@ class OllamaProvider(ModelProvider):
         # (e.g. qwen3-coder:480b-cloud) are handled as virtual models by the local Ollama 
         # daemon. They are accessible via the standard /api/chat endpoint.
         self.base_url = settings.OLLAMA_BASE_URL
+
+    def has_native_thinking(self, model_id: str) -> bool:
+        """
+        Detects if the model has native thinking capabilities (e.g., DeepSeek R1).
+        Ollama models like deepseek-r1 output <think> blocks.
+        """
+        mid_lower = model_id.lower()
+        # Heuristics for reasoning models
+        # r1 models are the most prominent native thinkers in Ollama
+        logic_keywords = [
+            "deepseek-r1", "-r1", "reasoning", "thought", "logic", 
+            "phi-4", "o1", "o3", "thinking", "qwen-2.5-coder" # Qwen coder often reasons in tags
+        ]
+        return any(kw in mid_lower for kw in logic_keywords)
 
     async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[Any]:
         # Default to low model suffix if no model specified
@@ -359,7 +84,7 @@ class OllamaProvider(ModelProvider):
                         }
                         return
 
-                    parser = _TextualToolParser()
+                    parser = TextualToolParser()
                     async for line in response.aiter_lines():
                         if not line:
                             continue
@@ -437,7 +162,8 @@ class OllamaProvider(ModelProvider):
                     models.append(ModelInfo(
                         id=f"ollama/{name}",
                         name=name,
-                        provider="ollama"
+                        provider="ollama",
+                        supports_thinking=self.has_native_thinking(name)
                     ))
                 return models
         except Exception:

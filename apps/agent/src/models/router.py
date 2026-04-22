@@ -5,6 +5,7 @@ from typing import AsyncIterator, List, Dict, Any, Optional
 from src.models.base import ModelProvider, ModelInfo, ProviderHealth
 from src.models.providers.ollama import OllamaProvider
 from src.models.providers.anthropic import AnthropicProvider
+from src.models.providers.minimax import MinimaxProvider
 from src.config import settings
 
 logger = logging.getLogger("rawclaw.router")
@@ -13,7 +14,8 @@ class ModelRouter:
     def __init__(self):
         self.providers: Dict[str, ModelProvider] = {
             "ollama": OllamaProvider(),
-            "anthropic": AnthropicProvider()
+            "anthropic": AnthropicProvider(),
+            "minimax": MinimaxProvider()
         }
 
         
@@ -46,7 +48,7 @@ class ModelRouter:
             logger.warning(f"Failed to fetch Ollama tags: {e}")
             return []
 
-    async def _normalize_model_id(self, model_id: str) -> str:
+    async def normalize_model_id(self, model_id: str) -> str:
         """
         Normalizes a model ID. For Ollama, resolves base names (e.g. 'llama3') 
         to the best available installed tag (e.g. 'llama3:8b').
@@ -81,10 +83,22 @@ class ModelRouter:
         # 3. Fallback to original
         return model_id
 
-    def _parse_model_id(self, model_id: str) -> tuple[str, str]:
+    def has_native_thinking(self, model_id: str) -> bool:
+        """Checks if a normalized model ID supports native thinking."""
+        provider_name, inner_name = self._parse_model_id(model_id)
+        provider = self.providers.get(provider_name)
+        if provider:
+            return provider.has_native_thinking(inner_name)
+        return False
+
+    def _parse_model_id(self, model_id: Optional[str]) -> tuple[str, str]:
         """Returns (provider_name, inner_model_name)"""
+        if not model_id:
+            return "ollama", settings.DEFAULT_LOW_MODEL or "llama3:8b"
+
         if "/" in model_id:
-            return model_id.split("/", 1)
+            parts = model_id.split("/", 1)
+            return parts[0], parts[1]
             
         # Detect cloud labels
         if ":cloud" in model_id:
@@ -93,6 +107,8 @@ class ModelRouter:
             # But per user request, we default to ollama if the cloud providers aren't usable.
             if "claude" in model_id:
                 return "anthropic", model_id
+            if "minimax" in model_id:
+                return "minimax", model_id
             return "unknown", model_id # Will trigger fallback to ollama in run_chain
             
         return "ollama", model_id # Default to ollama if no prefix
@@ -147,7 +163,7 @@ class ModelRouter:
         # Normalize each model ID (resolves bare names like 'llama3' to 'llama3:8b')
         normalized_ids = []
         for mid in all_ids:
-            normalized = await self._normalize_model_id(mid)
+            normalized = await self.normalize_model_id(mid)
             normalized_ids.append(normalized)
 
         # Build deduplicated chain while preserving order

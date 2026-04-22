@@ -1,0 +1,52 @@
+{
+  "session_id": "eval-1f3ca9d6",
+  "timestamp": "2026-04-21T23:32:34",
+  "model": "minimax-m2.7:cloud",
+  "results": [
+    {
+      "step": 1,
+      "title": "Greeting & Identity",
+      "passed": false,
+      "latency_total": 35.30344891548157,
+      "latency_ttft": 5.563717842102051,
+      "tool_calls": 0
+    },
+    {
+      "step": 2,
+      "title": "Personality",
+      "passed": true,
+      "latency_total": 17.648024320602417,
+      "latency_ttft": 5.697042465209961,
+      "tool_calls": 0
+    },
+    {
+      "step": 3,
+      "title": "Abstract Reasoning",
+      "passed": true,
+      "latency_total": 22.610599279403687,
+      "latency_ttft": 8.626352787017822,
+      "tool_calls": 0
+    },
+    {
+      "step": 4,
+      "title": "Future/Platform",
+      "passed": false,
+      "latency_total": 17.859315156936646,
+      "latency_ttft": 8.246578454971313,
+      "tool_calls": 2
+    },
+    {
+      "step": 5,
+      "title": "Tech Stack Check",
+      "passed": false,
+      "latency_total": 6.999176263809204,
+      "latency_ttft": 0,
+      "tool_calls": 3
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "passed": 2,
+    "avg_latency": 20.084112787246703
+  }
+}

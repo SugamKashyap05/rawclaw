@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { RedisService } from './redis.service';
+import { PrismaService } from './prisma.service';
 import { HealthStatus, RAWCLAW_VERSION } from '@rawclaw/shared';
 import { firstValueFrom } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
@@ -10,14 +11,26 @@ export class HealthController {
   constructor(
     private readonly redisService: RedisService,
     private readonly httpService: HttpService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly prismaService: PrismaService,
   ) {}
 
   @Get()
   async getHealth(): Promise<HealthStatus> {
     const redisOk = await this.redisService.ping();
     let agentOk = false;
+    let dbOk = false;
     
+    // 1. Database check
+    try {
+      await this.prismaService.$queryRaw`SELECT 1`;
+      dbOk = true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`Health check: Database is down: ${msg}`);
+    }
+
+    // 2. Agent check
     try {
       const configuredAgentUrl = this.configService.get<string>('agentUrl') || 'http://localhost:8001';
       const agentUrl = configuredAgentUrl.replace('localhost', '127.0.0.1');
@@ -32,7 +45,7 @@ export class HealthController {
     }
 
     const services = {
-      db: 'ok' as const, // Mocked to 'ok' per Phase 1 execution context
+      db: dbOk ? 'ok' as const : 'down' as const,
       redis: redisOk ? 'ok' as const : 'down' as const,
       agent: agentOk ? 'ok' as const : 'down' as const
     };

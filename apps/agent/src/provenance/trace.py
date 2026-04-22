@@ -15,7 +15,7 @@ import json
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
@@ -123,7 +123,7 @@ class ProvenanceTrace:
             source_url=source_url,
             duration_ms=duration_ms,
             sandboxed=sandboxed,
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat() + "Z",
         )
         self._steps.append(step)
         self._step_counter += 1
@@ -209,7 +209,7 @@ class ProvenanceTrace:
             "steps": [step.model_dump() for step in self._steps],
             "step_count": len(self._steps),
             "metadata": self.metadata,
-            "created_at": datetime.utcnow().isoformat() + "Z",
+            "created_at": datetime.now(timezone.utc).isoformat() + "Z",
         }
 
     @property

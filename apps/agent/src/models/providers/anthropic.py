@@ -11,6 +11,12 @@ class AnthropicProvider(ModelProvider):
         if self.api_key:
             self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
 
+    def has_native_thinking(self, model_id: str) -> bool:
+        """Returns True for Claude 3.7+ models which support native thinking."""
+        mid_lower = model_id.lower()
+        return "claude-3-7" in mid_lower or "claude-3.7" in mid_lower or "thinking" in mid_lower
+
+
     async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[Any]:
         if not self.client:
             yield {
@@ -42,19 +48,33 @@ class AnthropicProvider(ModelProvider):
             _current_tool_input_json: str = ""
             _streamed_tool_ids: set[str] = set()
 
+            # Prepare request parameters
+            request_params = {
+                "model": model,
+                "max_tokens": 4096,
+                "system": system_msg,
+                "messages": filtered_messages,
+                "tools": tools if tools else anthropic.NOT_GIVEN,
+                "temperature": options.get("temperature", anthropic.NOT_GIVEN),
+                "top_p": options.get("top_p", anthropic.NOT_GIVEN)
+            }
+
+            # Enable native thinking for models that support it
+            if self.has_native_thinking(model):
+                # If temperature is 1.0 (default for thinking), Anthropic prefers it
+                # or we can just set a budget.
+                request_params["thinking"] = {"type": "enabled", "budget_tokens": 1024}
+                # Thinking requires temperature=1.0 or not set
+                request_params["temperature"] = 1.0
+
             # Use the more general message stream to capture both text and tool blocks
-            async with self.client.messages.stream(
-                model=model,
-                max_tokens=4096,
-                system=system_msg,
-                messages=filtered_messages,
-                tools=tools if tools else anthropic.NOT_GIVEN,
-                temperature=options.get("temperature", anthropic.NOT_GIVEN),
-                top_p=options.get("top_p", anthropic.NOT_GIVEN)
-            ) as stream:
+            async with self.client.messages.stream(**request_params) as stream:
                 async for event in stream:
-                    if event.type == "content_block_delta" and event.delta.type == "text_delta":
-                        yield event.delta.text
+                    if event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            yield event.delta.text
+                        elif event.delta.type == "thinking_delta":
+                            yield {"type": "thinking", "thinking": event.delta.thinking}
 
                     elif event.type == "content_block_start" and event.content_block.type == "tool_use":
                         # Begin accumulating a new tool call
@@ -120,9 +140,9 @@ class AnthropicProvider(ModelProvider):
             return ProviderHealth(status="error", error=str(e))
 
     async def list_models(self) -> List[ModelInfo]:
-        # Hardcoded set for standard Claude models since provider API listing varies
         return [
             ModelInfo(id="anthropic/claude-3-haiku-20240307", name="Claude 3 Haiku", provider="anthropic", context_window=200000),
             ModelInfo(id="anthropic/claude-3-sonnet-20240229", name="Claude 3 Sonnet", provider="anthropic", context_window=200000),
             ModelInfo(id="anthropic/claude-3-opus-20240229", name="Claude 3 Opus", provider="anthropic", context_window=200000),
+            ModelInfo(id="anthropic/claude-3-7-sonnet-20250219", name="Claude 3.7 Sonnet", provider="anthropic", context_window=200000, supports_thinking=True),
         ]

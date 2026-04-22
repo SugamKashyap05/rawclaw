@@ -9,10 +9,11 @@
   
   /* Accents: Electric Neon */
   --neon-cyan: #00f0ff;
-  --neon-cyan-glow: rgba(0, 240, 255, 0.4);
+  --neon-cyan-glow: rgba(0, 240, 255, 0.5); /* Stronger glow */
   --neon-red: #ff3d00;
-  --neon-red-glow: rgba(255, 61, 0, 0.4);
+  --neon-red-glow: rgba(255, 61, 0, 0.5);
   --neon-purple: #9d00ff;
+  --neon-purple-glow: rgba(157, 0, 255, 0.4);
   
   --text-primary: #f2f2f7;
   --text-secondary: #a0a0b8;
@@ -20,11 +21,12 @@
   
   /* Borders & Glass */
   --border-glass: rgba(255, 255, 255, 0.08);
-  --border-neon: rgba(0, 240, 255, 0.25);
-  --shadow-neon: 0 0 20px rgba(0, 240, 255, 0.12);
-  --glass-blur: blur(16px);
-  --glass-bg: rgba(15, 15, 24, 0.4);
-  --glass-bg-accent: rgba(0, 240, 255, 0.04);
+  --border-glass-bright: rgba(255, 255, 255, 0.15);
+  --border-neon: rgba(0, 240, 255, 0.35);
+  --shadow-neon: 0 0 25px rgba(0, 240, 255, 0.15);
+  --glass-blur: blur(20px); /* Increased blur */
+  --glass-bg: rgba(15, 15, 24, 0.45);
+  --glass-bg-accent: rgba(0, 240, 255, 0.03);
 
   /* Functional */
   --success: #00ff88;
@@ -210,8 +212,8 @@ code, pre, .mono {
 /* --- Premium Scrollbar --- */
 .custom-scrollbar::-webkit-scrollbar,
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px; /* Thinner */
+  height: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track,
@@ -221,20 +223,21 @@ code, pre, .mono {
 
 .custom-scrollbar::-webkit-scrollbar-thumb,
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
-  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 100px;
   background-clip: padding-box;
+  transition: background 0.3s ease;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover,
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(0, 200, 200, 0.2);
+  background: var(--neon-cyan);
+  box-shadow: 0 0 10px var(--neon-cyan-glow);
 }
 
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.06) transparent;
 }
 
 /* Status dots */

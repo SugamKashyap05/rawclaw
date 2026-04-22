@@ -38,6 +38,8 @@ export class AgentsService {
         description: payload.description?.trim() || null,
         systemPrompt: payload.systemPrompt.trim(),
         isDefault: payload.isDefault ?? false,
+        modelId: payload.modelId || null,
+        skills: payload.skills ? JSON.stringify(payload.skills) : null,
       },
     });
     return this.toAgent(created);
@@ -56,6 +58,8 @@ export class AgentsService {
         systemPrompt: payload.systemPrompt?.trim(),
         status: payload.status,
         isDefault: payload.isDefault,
+        modelId: payload.modelId,
+        skills: payload.skills ? JSON.stringify(payload.skills) : undefined,
       },
     });
     return this.toAgent(updated);
@@ -72,16 +76,7 @@ export class AgentsService {
     });
   }
 
-  private toAgent(row: {
-    id: string;
-    name: string;
-    description: string | null;
-    systemPrompt: string;
-    status: string;
-    isDefault: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  }): AgentProfile {
+  private toAgent(row: any): AgentProfile {
     return {
       id: row.id,
       name: row.name,
@@ -89,6 +84,8 @@ export class AgentsService {
       systemPrompt: row.systemPrompt,
       status: row.status as AgentProfile['status'],
       isDefault: row.isDefault,
+      modelId: row.modelId || undefined,
+      skills: row.skills ? JSON.parse(row.skills) : [],
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

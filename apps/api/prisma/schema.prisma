@@ -136,6 +136,8 @@ model AgentProfile {
   systemPrompt String
   status       String   @default("idle")
   isDefault    Boolean  @default(false)
+  modelId      String?
+  skills       String?  // JSON array of strings
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

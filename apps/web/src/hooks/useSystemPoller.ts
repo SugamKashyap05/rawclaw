@@ -69,16 +69,26 @@ export function useSystemPoller(sessionId?: string, intervalMs = 3000): SystemPo
     let mounted = true;
 
     const poll = async () => {
-      if (!mounted) return;
+      // Opt-out if document hidden to save resources
+      if (!mounted || document.hidden) return;
       await fetchData();
     };
 
     void poll();
     const timer = window.setInterval(poll, intervalMs);
 
+    // Also poll on visibility change
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && mounted) {
+        void fetchData();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     return () => {
       mounted = false;
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [intervalMs]);
 

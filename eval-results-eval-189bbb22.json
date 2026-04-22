@@ -1,0 +1,44 @@
+{
+  "session_id": "eval-189bbb22",
+  "timestamp": "2026-04-21T23:26:11",
+  "model": "minimax-m2.7:cloud",
+  "results": [
+    {
+      "step": 1,
+      "title": "Greeting & Identity",
+      "passed": true,
+      "latency_total": 12.787001132965088,
+      "latency_ttft": 5.808215618133545,
+      "tool_calls": 1
+    },
+    {
+      "step": 2,
+      "title": "Personality",
+      "passed": true,
+      "latency_total": 13.649568319320679,
+      "latency_ttft": 9.33366084098816,
+      "tool_calls": 0
+    },
+    {
+      "step": 3,
+      "title": "Abstract Reasoning",
+      "passed": true,
+      "latency_total": 23.230748414993286,
+      "latency_ttft": 5.295343399047852,
+      "tool_calls": 0
+    },
+    {
+      "step": 12,
+      "title": "GitHub Research",
+      "passed": false,
+      "latency_total": 30.842430353164673,
+      "latency_ttft": 7.9476447105407715,
+      "tool_calls": 0
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "passed": 3,
+    "avg_latency": 20.12743705511093
+  }
+}

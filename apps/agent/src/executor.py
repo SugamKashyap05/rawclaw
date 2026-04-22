@@ -54,6 +54,14 @@ class Executor:
 
         messages = [m.model_dump() for m in request.messages]
         tools_schema = TOOL_REGISTRY.get_schemas()
+        
+        # Determine provider and thinking support early for tool filtering
+        normalized_model = await self.model_router.normalize_model_id(request.model)
+        has_native_thinking = self.model_router.has_native_thinking(normalized_model)
+
+        # User Request: Even if model has native thinking, allow sequential_thinking for 'big tasks'
+        # So we no longer filter it out here.
+        logger.info(f"[TOOL_TRACE] Model: {normalized_model}, Native thinking: {has_native_thinking}")
 
         accumulated_content = ""
         tool_calls_made: List[ToolCall] = []
@@ -108,6 +116,8 @@ class Executor:
             current_datetime = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
             system_prompts = [f"Current local time: {current_datetime}"]
             
+            # Determine provider and thinking support (Already determined above for tool filtering)
+
             # Check for Edit Mode vs Normal Mode
             if request.editRequest:
                 er = request.editRequest
@@ -128,7 +138,33 @@ class Executor:
                     request.temperature = 0.1
             else:
                 # Normal mode prompt
-                system_prompts.append("You are RawClaw, a highly capable AI agent.")
+                system_prompts.append(
+                    "You are RawClaw, a highly capable AI agent built by the RawClaw team.\n"
+                    "Status: Phase 1.5 - Rebuilding core agent primitives.\n"
+                    "Focus: Local-first intelligence, secure tool execution, and deterministic routing.\n"
+                )
+                
+                # THINKING STRATEGY:
+                if has_native_thinking:
+                    system_prompts.append(
+                        "### THINKING PROTOCOL ###\n"
+                        "You have native thinking capabilities. Always reason step-by-step inside <thinking> tags before answering complex queries or using tools. "
+                        "1. Breakdown the user's request into logical steps.\n"
+                        "2. Identify potential edge cases or security risks.\n"
+                        "3. Plan your tool calls and explain why you are choosing them.\n"
+                        "4. Synthesize your final answer after the reasoning is complete.\n\n"
+                        "SPECIAL INSTRUCTION: If the task is complex or multi-step ('a big task'), you should use the 'sequential_thinking' tool for structured planning and reflection, in addition to your native thinking.\n"
+                        "Do not output your reasoning outside of <thinking> tags unless using the sequential_thinking tool."
+                    )
+                else:
+                    system_prompts.append(
+                        "### THINKING PROTOCOL ###\n"
+                        "You MUST use the 'sequential_thinking' tool to plan and reason before any complex task. "
+                        "Do not skip the thinking phase. Use multiple thought steps if the problem is non-trivial. "
+                        "Your thoughts will be displayed as reasoning blocks in the UI. "
+                        "Always use sequential_thinking BEFORE using other tools like search_web or run_command."
+                    )
+
                 if has_task_kw:
                     # DYNAMIC TOOL DISCOVERY
                     tool_list_str = ""
@@ -209,6 +245,15 @@ class Executor:
                 tools_schema = TOOL_REGISTRY.get_schemas()
                 logger.info(f"[TOOL_TRACE] Using {len(tools_schema)} tools from registry")
 
+            # 2.3 THINKING TOOL FILTERING
+            # If the model has native thinking, we filter out 'sequential_thinking' from tools
+            # to prevent the model from getting confused between two different ways of thinking.
+            if has_native_thinking:
+                original_count = len(tools_schema)
+                tools_schema = [t for t in tools_schema if t.get("function", {}).get("name") != "sequential_thinking"]
+                if len(tools_schema) < original_count:
+                    logger.info(f"[THINKING_FILTER] Removed sequential_thinking tool because model {normalized_model} has native thinking.")
+
             # 3. STREAM FROM MODEL
             logger.info(f"Starting model completion for {request.model}...")
             async_it = self.model_router.complete(
@@ -231,6 +276,16 @@ class Executor:
                     }) + "\n"
                     break
 
+                # Check for native thinking from model (passthrough)
+                if isinstance(delta, dict) and delta.get("type") in ["thinking", "thinking_delta"]:
+                    thought = delta.get("thinking", "")
+                    # UNIFIED EVENT: Always yield as 'thinking' type for the client
+                    yield json.dumps({
+                        "type": "thinking",
+                        "thinking": thought
+                    }) + "\n"
+                    continue
+
                 # Check if model wants to call a tool
                 if isinstance(delta, dict) and delta.get("type") == "tool_call":
                     turn_count += 1
@@ -250,26 +305,36 @@ class Executor:
                     # Record tool call
                     trace.add_tool_call(tool_call.tool_name, tool_call.input)
 
-                    # Yield tool_call event - ALIGNED WITH INTEGRATION TESTS (name, arguments)
-                    yield json.dumps({
-                        "type": "tool_call",
-                        "tool_call": {
-                            "name": tool_name,
-                            "arguments": tool_input
-                        },
-                    }) + "\n"
+                    # --- THINKING INTERCEPTION ---
+                    if mapped_name == "sequential_thinking":
+                        thought = tool_input.get("thought", "Analyzing...")
+                        logger.info(f"[THINKING_INTERCEPT] Intercepted sequential_thinking: {thought[:50]}...")
+                        # Yield as thinking event instead of tool_call
+                        yield json.dumps({
+                            "type": "thinking",
+                            "thinking": thought
+                        }) + "\n"
+                    else:
+                        # Standard tool_call event for all other tools
+                        yield json.dumps({
+                            "type": "tool_call",
+                            "tool_call": {
+                                "name": tool_name,
+                                "arguments": tool_input
+                            },
+                        }) + "\n"
 
-                    # --- HARNESS SYSTEM ---
-                    yield json.dumps({
-                        "type": "harness",
-                        "harness_log": {
-                            "step": "pre-invocation",
-                            "tool": tool_name,
-                            "input_keys": list(tool_input.keys()) if isinstance(tool_input, dict) else [],
-                            "context_prepared": True,
-                            "safety_check": "passed"
-                        }
-                    }) + "\n"
+                        # --- HARNESS SYSTEM (Only for non-thinking tools) ---
+                        yield json.dumps({
+                            "type": "harness",
+                            "harness_log": {
+                                "step": "pre-invocation",
+                                "tool": tool_name,
+                                "input_keys": list(tool_input.keys()) if isinstance(tool_input, dict) else [],
+                                "context_prepared": True,
+                                "safety_check": "passed"
+                            }
+                        }) + "\n"
 
                     tool_result = await self._execute_tool_with_confirmation(
                         request.session_id,
@@ -331,6 +396,13 @@ class Executor:
                     yield json.dumps({
                         "type": "content",
                         "content": content,
+                    }) + "\n"
+                elif isinstance(delta, dict) and delta.get("type") in ["thinking", "thinking_delta"]:
+                    # Unified thinking event (from native blocks or provider mapping)
+                    thought = delta.get("thinking", "")
+                    yield json.dumps({
+                        "type": "thinking",
+                        "thinking": thought,
                     }) + "\n"
                 elif isinstance(delta, dict) and delta.get("type") == "metadata":
                     md = delta.get("metadata", {})

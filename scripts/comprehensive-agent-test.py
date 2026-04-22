@@ -2,13 +2,16 @@
 """
 Comprehensive Agent Evaluation Script for RawClaw.
 
-Evaluates the agent across 12 turns:
-1-4: Normal Conversation & Memory Initializer
-5-8: System Awareness & Memory Check
-9-12: Tool Calling (Web Search, Sequential Thinking) & Reasoning
+Evaluates the agent across multiple phases:
+1. Identity & Short-term Memory
+2. System Awareness (Time, Files)
+3. Web Research (Search, Scraping)
+4. RAG & Knowledge Retrieval (Vector Memory)
+5. Advanced Reasoning (Sequential Thinking)
+6. Multi-turn Context & Continuity
 
 Usage:
-    python scripts/comprehensive-agent-test.py --model minimax-m2.7:cloud
+    python scripts/comprehensive-agent-test.py --model ollama/llama3.2:3b
 """
 
 import asyncio
@@ -22,8 +25,7 @@ from uuid import uuid4
 import httpx
 
 API_BASE = "http://localhost:3000/api"
-AGENT_BASE = "http://localhost:8001"
-DEFAULT_MODEL = "minimax-m2.7:cloud"
+DEFAULT_MODEL = "ollama/llama3.2:3b"
 AUTH_SECRET = "Kuki7816"
 
 class Colors:
@@ -41,24 +43,43 @@ def log_header(text: str):
     print(f"{Colors.BOLD}{text.center(70)}{Colors.ENDC}")
     print(f"{Colors.HEADER}{'='*70}{Colors.ENDC}\n")
 
-def log_step(step: int, phase: str, title: str):
-    print(f"{Colors.CYAN}[STEP {step}/12] {phase}:{Colors.ENDC} {Colors.BOLD}{title}{Colors.ENDC}")
+def log_step(step: int, phase: str, title: str, total_steps: int):
+    print(f"{Colors.CYAN}[STEP {step}/{total_steps}] {phase}:{Colors.ENDC} {Colors.BOLD}{title}{Colors.ENDC}")
 
 def log_send(msg: str):
     print(f"  {Colors.BLUE}USER  >{Colors.ENDC} {msg}")
 
+def log_thinking(thought: str):
+    snippet = thought.strip()
+    if len(snippet) > 100:
+        snippet = snippet[:100] + "..."
+    print(f"  {Colors.YELLOW}THINKING >{Colors.ENDC} {snippet}")
+
 def log_recv(msg: str, latency: float = None):
     lat_str = f" [{latency:.2f}s]" if latency else ""
-    print(f"  {Colors.GREEN}AGENT <{Colors.ENDC} {msg[:150]}{'...' if len(msg) > 150 else ''}{Colors.YELLOW}{lat_str}{Colors.ENDC}")
+    text = f"  {Colors.GREEN}AGENT <{Colors.ENDC} {msg[:150].replace('\n', ' ')}{'...' if len(msg) > 150 else ''}{Colors.YELLOW}{lat_str}{Colors.ENDC}"
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode('ascii', 'ignore').decode('ascii'))
 
 def log_success(msg: str):
-    print(f"  {Colors.GREEN}✓ {msg}{Colors.ENDC}")
+    try:
+        print(f"  {Colors.GREEN}[+] {msg}{Colors.ENDC}")
+    except UnicodeEncodeError:
+        print(f"  [+] {msg.encode('ascii', 'ignore').decode('ascii')}")
 
 def log_error(msg: str):
-    print(f"  {Colors.RED}✗ {msg}{Colors.ENDC}")
+    try:
+        print(f"  {Colors.RED}[!] {msg}{Colors.ENDC}")
+    except UnicodeEncodeError:
+        print(f"  [!] {msg.encode('ascii', 'ignore').decode('ascii')}")
 
 def log_info(msg: str):
-    print(f"  {Colors.YELLOW}ℹ {msg}{Colors.ENDC}")
+    try:
+        print(f"  {Colors.YELLOW}[i] {msg}{Colors.ENDC}")
+    except UnicodeEncodeError:
+        print(f"  [i] {msg.encode('ascii', 'ignore').decode('ascii')}")
 
 async def get_token() -> str:
     """Get auth token using secret."""
@@ -66,18 +87,64 @@ async def get_token() -> str:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{API_BASE}/auth/token",
-                json={"secret": AUTH_SECRET}
+                json={"secret": AUTH_SECRET},
+                timeout=10.0
             )
             if resp.status_code in (200, 201):
                 return resp.json().get("access_token", "")
             return ""
-    except Exception:
+    except Exception as e:
+        log_error(f"Auth error: {str(e)}")
         return ""
 
-async def send_chat(session_id: str, message: str, model: str, token: str) -> Dict[str, Any]:
+async def create_test_agent(token: str, model_id: str) -> Optional[str]:
+    """Create a temporary test agent with specific configuration."""
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {
+        "name": f"Eval-Agent-{uuid4().hex[:4]}",
+        "description": "Temporary agent for comprehensive evaluation",
+        "modelId": model_id,
+        "systemPrompt": "You are RawClaw Eval Agent. You are a high-performance assistant capable of memory recall, web research, and browser automation. Always use your tools when needed to be precise.",
+        "skills": ["web_search", "browser", "filesystem", "research", "sequential_thinking"],
+        "isDefault": False
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{API_BASE}/agents", json=payload, headers=headers)
+            if resp.status_code in (200, 201):
+                agent_id = resp.json().get("id")
+                log_success(f"Test Agent created: {agent_id}")
+                return agent_id
+            log_error(f"Failed to create agent: {resp.status_code} - {resp.text}")
+            return None
+    except Exception as e:
+        log_error(f"Agent creation error: {str(e)}")
+        return None
+
+async def add_test_memory(token: str, content: str):
+    """Inject test data into RAG memory."""
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {
+        "content": content,
+        "collection": "default",
+        "tags": ["eval"],
+        "source": "eval-script"
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{API_BASE}/memory/add", json=payload, headers=headers)
+            if resp.status_code in (200, 201):
+                log_success(f"Memory injected: {content[:40]}...")
+                return True
+            return False
+    except Exception:
+        return False
+
+async def send_chat(session_id: str, message: str, agent_id: str, token: str) -> Dict[str, Any]:
     """Send chat message and collect response."""
     result = {
         "content": "",
+        "thinking": [],
         "tool_calls": [],
         "tool_results": [],
         "ttft": 0,
@@ -86,11 +153,11 @@ async def send_chat(session_id: str, message: str, model: str, token: str) -> Di
         "error": None
     }
     
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    headers = {"Authorization": f"Bearer {token}"}
     start_time = time.time()
     
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             async with client.stream(
                 "POST",
                 f"{API_BASE}/chat/send",
@@ -98,157 +165,270 @@ async def send_chat(session_id: str, message: str, model: str, token: str) -> Di
                 json={
                     "session_id": session_id,
                     "messages": [{"role": "user", "content": message}],
-                    "model": model,
+                    "agent_id": agent_id,
                     "stream": True
                 }
             ) as resp:
                 if resp.status_code not in (200, 201):
-                    result["error"] = f"HTTP {resp.status_code}"
+                    body = await resp.aread()
+                    result["error"] = f"HTTP {resp.status_code}: {body.decode()}"
                     return result
                 
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
+                buffer = b""
+                async for chunk in resp.aiter_bytes():
+                    buffer += chunk
+                    while b"\n" in buffer:
+                        line_bytes, buffer = buffer.split(b"\n", 1)
+                        line = line_bytes.decode('utf-8', errors='ignore').strip()
                         
-                    data_str = line[6:].strip()
-                    if not data_str or data_str == "[DONE]":
-                        continue
-                        
-                    try:
-                        data = json.loads(data_str)
-                        etype = data.get("type")
-                        
-                        if etype == "content":
-                            if not result["content"]:
-                                result["ttft"] = time.time() - start_time
-                            result["content"] += data.get("content", "")
+                        if not line or not line.startswith("data: "):
+                            continue
                             
-                        elif etype == "tool_call":
-                            result["tool_calls"].append(data.get("tool_call"))
+                        data_str = line[6:].strip()
+                        if data_str == "[DONE]":
+                            continue
                             
-                        elif etype == "tool_result":
-                            result["tool_results"].append(data.get("tool_result"))
+                        try:
+                            data = json.loads(data_str)
+                            etype = data.get("type")
                             
-                        elif etype == "error":
-                            result["error"] = data.get("message")
-                            
-                        elif etype == "done":
-                            result["success"] = True
-                            
-                    except json.JSONDecodeError:
-                        continue
+                            if etype == "content":
+                                if not result["content"]:
+                                    result["ttft"] = time.time() - start_time
+                                result["content"] += data.get("content", "")
+                                
+                            elif etype == "thinking":
+                                thought = data.get("thinking", "")
+                                if thought:
+                                    result["thinking"].append(thought)
+                                    log_thinking(thought)
+
+                            elif etype == "tool_call":
+                                result["tool_calls"].append(data.get("tool_call"))
+                                log_info(f"Tool Call: {data.get('tool_call', {}).get('name')}")
+                                
+                            elif etype == "tool_result":
+                                result["tool_results"].append(data.get("tool_result"))
+                                log_info(f"Tool Result: {data.get('tool_result', {}).get('tool_call_id')}")
+                                
+                            elif etype == "error":
+                                result["error"] = data.get("message")
+                                
+                            elif etype == "done":
+                                result["success"] = True
+                                
+                        except json.JSONDecodeError:
+                            continue
     except Exception as e:
-        result["error"] = str(e)
+        result["error"] = f"{type(e).__name__}: {str(e)}"
         
     result["total_time"] = time.time() - start_time
     return result
 
 async def main():
     import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default=DEFAULT_MODEL)
-    args = parser.parse_args()
-    
+    parser = argparse.ArgumentParser(description="RawClaw Comprehensive Agent Test")
+    parser.add_argument("model_id", nargs="?", default=DEFAULT_MODEL, help="Model ID to use (e.g., gemma4:31b-cloud)")
+    parser.add_argument("--model", type=str, help="Alias for model_id")
+    args, unknown = parser.parse_known_args()
+
+    # Handle various ways user might pass the model
+    model_to_use = args.model or args.model_id
+    if unknown:
+        for u in unknown:
+            if not u.startswith("-"):
+                model_to_use = u
+                break
+            elif ":" in u or "llama" in u or "gemma" in u:
+                model_to_use = u.lstrip("-")
+                break
+
     log_header("RawClaw Comprehensive Agent Test")
     
     token = await get_token()
     if not token:
-        log_error("Failed to get auth token. Ensure API is running and secret is correct.")
+        log_error("Auth failed. Ensure API is running.")
         sys.exit(1)
         
+    # Phase 0: Prep
+    log_header("Phase 0: Environment Preparation")
+    agent_id = await create_test_agent(token, model_to_use)
+    if not agent_id:
+        sys.exit(1)
+        
+    # Inject diverse memory types
+    await add_test_memory(token, "PROJECT_VANGUARD: The secret decryption key is 'X-DELTA-9-GHOST'.")
+    await add_test_memory(token, "RawClaw's system kernel was initialized by Operator-X on January 15th, 2026.")
+    await add_test_memory(token, "The current mission objective for RawClaw is 'Autonomous Workspace Mastery'.")
+    
     session_id = f"eval-{uuid4().hex[:8]}"
     log_info(f"Session: {session_id}")
-    log_info(f"Model:   {args.model}")
+    log_info(f"Model:   {model_to_use}")
     
     test_cases = [
-        # Phase 1: Normal Conversation
-        {"phase": "Chat", "title": "Greeting & Identity", "msg": "Hello! I'm testing RawClaw today. My name is Sugam.", "check": ["hello", "sugam"]},
-        {"phase": "Chat", "title": "Personality", "msg": "How are you? Tell me a short joke about AI.", "check": ["joke", "ai"]},
-        {"phase": "Chat", "title": "Abstract Reasoning", "msg": "What is the meaning of life, according to a computer?", "check": ["meaning", "life", "42"]},
-        {"phase": "Chat", "title": "Future/Platform", "msg": "What is the biggest challenge in building a local-first AI platform?", "check": ["privacy", "performance", "local"]},
+        # Phase 1: Identity & System Awareness
+        {
+            "phase": "Identity", 
+            "title": "System Role", 
+            "msg": "Identify yourself. What is your name, your purpose, and which system do you reside in?", 
+            "check": ["rawclaw", "agent"]
+        },
+        {
+            "phase": "System", 
+            "title": "Date/Time Awareness", 
+            "msg": "What is the exact current date and time? I need to timestamp a security log.", 
+            "tool": "datetime"
+        },
         
-        # Phase 2: System Awareness & Memory
-        {"phase": "System", "title": "Tech Stack Check", "msg": "What is the core tech stack of RawClaw as per our project rules?", "check": ["nestjs", "fastapi", "react", "sqlite"]},
-        {"phase": "System", "title": "Project Phase", "msg": "What phase of the rebuild are we currently in?", "check": ["phase", "rebuild"]},
-        {"phase": "System", "title": "Component Logic", "msg": "Explain the role of 'apps/agent' in RawClaw.", "check": ["fastapi", "tools", "executor"]},
-        {"phase": "System", "title": "Memory Check", "msg": "What was my name? Just checking if you remember.", "check": ["sugam"]},
+        # Phase 2: Memory & Context
+        {
+            "phase": "Memory", 
+            "title": "Short-term Learning", 
+            "msg": "I am Operator-X. My favorite color is Neon Purple and I prefer using Python 3.12 for system scripts. Please acknowledge this preference.", 
+            "check": ["python 3.12", "neon purple"]
+        },
+        {
+            "phase": "Memory", 
+            "title": "Context Persistence", 
+            "msg": "Based on the preference I just told you, which language should we use for our new automation script?", 
+            "check": ["python"]
+        },
         
-        # Phase 3: Tools & Complex Reasoning
-        {"phase": "Tools", "title": "Sequential Thinking", "msg": "Use sequential thinking to plan a simple 'Hello World' microservice in NestJS.", "tool": "sequential_thinking"},
-        {"phase": "Tools", "title": "Web Search (Fresh Info)", "msg": "Search the web for the current versions of Next.js and FastAPI released in 2024 or 2025.", "tool": "web_search"},
-        {"phase": "Tools", "title": "Contextual Fix", "msg": "I am having timeouts with 'docker-toolkit'. What should the timeout be set to according to our latest fix?", "check": ["300", "seconds"]},
-        {"phase": "Tools", "title": "GitHub Research", "msg": "Search the web for a trending AI library on GitHub and summarize why it's popular.", "tool": "web_search"},
+        # Phase 3: Research & Web Skills
+        {
+            "phase": "Research", 
+            "title": "Web Search", 
+            "msg": "Search for the latest stable version of the Rust programming language released in 2024 or 2025.", 
+            "tool": "search_web"
+        },
+        {
+            "phase": "Research", 
+            "title": "Browser & Scraping", 
+            "msg": "Navigate to 'https://news.ycombinator.com', find the #1 post, and give me a 1-sentence summary of what it's about.", 
+            "tool": "playwright"
+        },
+        
+        # Phase 4: RAG (Vector Retrieval)
+        {
+            "phase": "RAG", 
+            "title": "Deep Knowledge Recall", 
+            "msg": "I need to access the Vanguard project. What is the secret decryption key and when was the system kernel initialized?", 
+            "check": ["X-DELTA-9-GHOST", "January 15th, 2026"]
+        },
+        
+        # Phase 5: Advanced Reasoning
+        {
+            "phase": "Reasoning", 
+            "title": "Complex Planning", 
+            "msg": "We need to containerize the RawClaw agent and deploy it to a Kubernetes cluster. Use sequential thinking to break this down into a 5-step plan including networking and storage requirements.", 
+            "tool": "sequential_thinking"
+        },
+        
+        # Phase 6: Filesystem & Integration
+        {
+            "phase": "Integration", 
+            "title": "Workspace Access", 
+            "msg": "List the directories in the root of our project to confirm the 'packages' and 'apps' folders are present.", 
+            "tool": "list_dir",
+            "check": ["apps", "packages"]
+        },
+        
+        # Phase 7: Continuity & Conclusion
+        {
+            "phase": "Continuity", 
+            "title": "Multi-turn Synthesis", 
+            "msg": "Great. Now, summarize everything we've done in this session, referring to me by my preferred name and accounting for my coding language preference.", 
+            "check": ["Operator-X", "Python"]
+        }
     ]
-    
+
     results = []
+    log_header("Running Test Suite")
     
     for i, tc in enumerate(test_cases, 1):
-        log_step(i, tc["phase"], tc["title"])
+        log_step(i, tc["phase"], tc["title"], len(test_cases))
         log_send(tc["msg"])
         
-        res = await send_chat(session_id, tc["msg"], args.model, token)
+        res = await send_chat(session_id, tc["msg"], agent_id, token)
         
         if res["error"]:
             log_error(f"Error: {res['error']}")
+            results.append({
+                "step": i, 
+                "phase": tc["phase"],
+                "title": tc["title"], 
+                "passed": False, 
+                "error": res["error"]
+            })
         else:
             log_recv(res["content"], res["total_time"])
             
-            # Checks
             passed = True
+            reasons = []
+            
+            # Keyword check
             if "check" in tc:
                 content_lower = res["content"].lower()
                 for keyword in tc["check"]:
                     if keyword.lower() not in content_lower:
-                        log_info(f"Missing keyword: {keyword}")
                         passed = False
+                        reasons.append(f"Missing keyword: {keyword}")
             
+            # Tool call check
             if "tool" in tc:
                 tool_called = any(tc["tool"] in tc_item.get("name", "") for tc_item in res["tool_calls"])
                 if not tool_called:
-                    log_error(f"Tool {tc['tool']} was NOT called.")
                     passed = False
-                else:
-                    log_success(f"Tool {tc['tool']} called.")
+                    reasons.append(f"Tool '{tc['tool']}' not called")
             
             if passed:
                 log_success("Response validated.")
             else:
-                log_info("Validation incomplete or failed.")
+                for r in reasons:
+                    log_info(f"Validation Note: {r}")
+                log_info("Validation failed.")
             
             results.append({
                 "step": i,
+                "phase": tc["phase"],
                 "title": tc["title"],
                 "passed": passed,
-                "latency_total": res["total_time"],
-                "latency_ttft": res["ttft"],
-                "tool_calls": len(res["tool_calls"])
+                "latency": res["total_time"],
+                "tool_calls": len(res["tool_calls"]),
+                "thinking": len(res["thinking"]),
+                "reasons": reasons
             })
             
-        await asyncio.sleep(1) # Breath
+        # Give system time to settle
+        await asyncio.sleep(1.5)
         
-    log_header("Test Summary")
-    total_passed = sum(1 for r in results if r["passed"])
-    avg_latency = sum(r["latency_total"] for r in results) / len(results) if results else 0
+    log_header("Final Test Report")
+    total_passed = sum(1 for r in results if r.get("passed", False))
+    pass_rate = (total_passed / len(test_cases)) * 100
     
-    print(f"Total Steps: {len(test_cases)}")
-    print(f"Passed:      {total_passed}")
-    print(f"Avg Latency: {avg_latency:.2f}s")
+    print(f"{Colors.BOLD}Total Test Cases:{Colors.ENDC}  {len(test_cases)}")
+    print(f"{Colors.BOLD}Passed:{Colors.ENDC}            {total_passed}")
+    print(f"{Colors.BOLD}Pass Rate:{Colors.ENDC}         {pass_rate:.1f}%")
     
-    output_path = f"eval-results-{session_id}.json"
-    with open(output_path, "w") as f:
+    report_file = f"eval-results-{session_id}.json"
+    with open(report_file, "w") as f:
         json.dump({
-            "session_id": session_id,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "model": args.model,
-            "results": results,
-            "summary": {
-                "total": len(test_cases),
-                "passed": total_passed,
-                "avg_latency": avg_latency
-            }
+            "metadata": {
+                "session_id": session_id,
+                "model": model_to_use,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            },
+            "results": results
         }, f, indent=2)
     
-    log_info(f"Detailed report saved to {output_path}")
+    log_info(f"Full report saved to {report_file}")
+    
+    if total_passed == len(test_cases):
+        log_success("ALL TESTS PASSED!")
+    elif pass_rate > 80:
+        log_info("High pass rate, but some issues detected.")
+    else:
+        log_error("Critical failures detected. Review the report.")
 
 if __name__ == "__main__":
     try:

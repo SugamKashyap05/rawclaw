@@ -139,11 +139,12 @@ export interface ModelInfo {
   context_window?: number;
 }
 
-export type ChatStreamChunkType = 'content' | 'tool_call' | 'tool_result' | 'sources' | 'error' | 'done' | 'provenance' | 'metadata' | 'review_result' | 'harness' | 'approval_required';
+export type ChatStreamChunkType = 'content' | 'thinking' | 'tool_call' | 'tool_result' | 'sources' | 'error' | 'done' | 'provenance' | 'metadata' | 'review_result' | 'harness' | 'approval_required';
 
 export interface ChatStreamChunk {
   type: ChatStreamChunkType;
   content?: string;
+  thinking?: string;
   tool_call?: ToolCall;
   tool_result?: ToolResult;
   sources?: string[];

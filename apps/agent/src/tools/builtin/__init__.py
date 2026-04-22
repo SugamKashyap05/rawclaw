@@ -12,6 +12,7 @@ from src.tools.builtin.read_file import ReadFileTool
 from src.tools.builtin.smart_search import SmartSearchTool
 from src.tools.builtin.shell_execute import ShellExecuteTool
 from src.tools.builtin.list_dir import ListDirTool
+from src.tools.builtin.sequential_thinking import SequentialThinkingTool
 
 
 def register_builtin_tools() -> None:
@@ -24,6 +25,7 @@ def register_builtin_tools() -> None:
     TOOL_REGISTRY.register(SmartSearchTool())
     TOOL_REGISTRY.register(ShellExecuteTool())
     TOOL_REGISTRY.register(ListDirTool())
+    TOOL_REGISTRY.register(SequentialThinkingTool())
 
 
 # Auto-register on import
@@ -36,5 +38,8 @@ __all__ = [
     "WebFetchTool",
     "ReadFileTool",
     "SmartSearchTool",
+    "ShellExecuteTool",
+    "ListDirTool",
+    "SequentialThinkingTool",
     "register_builtin_tools",
 ]

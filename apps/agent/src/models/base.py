@@ -8,6 +8,7 @@ class ModelInfo(BaseModel):
     provider: str
     description: Optional[str] = None
     context_window: Optional[int] = None
+    supports_thinking: bool = False
 
 class ProviderHealth(BaseModel):
     status: str
@@ -19,6 +20,10 @@ class ModelProvider(ABC):
     async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[Any]:
         """Provides a streaming completion for the given messages."""
         pass
+
+    def has_native_thinking(self, model_id: str) -> bool:
+        """Returns True if the specific model supports native thinking/reasoning blocks."""
+        return False
 
     @abstractmethod
     async def health(self) -> ProviderHealth:

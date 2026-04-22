@@ -1,0 +1,92 @@
+{
+  "session_id": "eval-a1d087ac",
+  "timestamp": "2026-04-21T23:19:18",
+  "model": "minimax-m2.7:cloud",
+  "results": [
+    {
+      "step": 1,
+      "title": "Greeting & Identity",
+      "passed": true,
+      "latency_total": 15.678314924240112,
+      "latency_ttft": 11.3931884765625,
+      "tool_calls": 0
+    },
+    {
+      "step": 2,
+      "title": "Personality",
+      "passed": true,
+      "latency_total": 26.1323664188385,
+      "latency_ttft": 5.997020959854126,
+      "tool_calls": 0
+    },
+    {
+      "step": 3,
+      "title": "Abstract Reasoning",
+      "passed": true,
+      "latency_total": 20.090179681777954,
+      "latency_ttft": 4.681680679321289,
+      "tool_calls": 0
+    },
+    {
+      "step": 4,
+      "title": "Future/Platform",
+      "passed": false,
+      "latency_total": 49.78301930427551,
+      "latency_ttft": 16.279937028884888,
+      "tool_calls": 1
+    },
+    {
+      "step": 5,
+      "title": "Tech Stack Check",
+      "passed": false,
+      "latency_total": 18.898380041122437,
+      "latency_ttft": 7.602667808532715,
+      "tool_calls": 0
+    },
+    {
+      "step": 6,
+      "title": "Project Phase",
+      "passed": false,
+      "latency_total": 5.363656044006348,
+      "latency_ttft": 0,
+      "tool_calls": 1
+    },
+    {
+      "step": 7,
+      "title": "Component Logic",
+      "passed": false,
+      "latency_total": 5.17648983001709,
+      "latency_ttft": 0,
+      "tool_calls": 1
+    },
+    {
+      "step": 9,
+      "title": "Sequential Thinking",
+      "passed": false,
+      "latency_total": 8.769712209701538,
+      "latency_ttft": 0,
+      "tool_calls": 1
+    },
+    {
+      "step": 10,
+      "title": "Web Search (Fresh Info)",
+      "passed": false,
+      "latency_total": 13.824805736541748,
+      "latency_ttft": 0,
+      "tool_calls": 1
+    },
+    {
+      "step": 11,
+      "title": "Contextual Fix",
+      "passed": false,
+      "latency_total": 34.10368466377258,
+      "latency_ttft": 6.77369236946106,
+      "tool_calls": 1
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "passed": 3,
+    "avg_latency": 19.78206088542938
+  }
+}

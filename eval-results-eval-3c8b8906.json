@@ -1,0 +1,21 @@
+{
+  "session_id": "eval-3c8b8906",
+  "timestamp": "2026-04-22T11:01:44",
+  "model": "gemma4:e4b",
+  "results": [
+    {
+      "step": 1,
+      "title": "Identity Check",
+      "passed": false,
+      "latency_total": 181.32737231254578,
+      "latency_ttft": 0,
+      "tool_calls": 0,
+      "thinking_steps": 0
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "passed": 0,
+    "avg_latency": 181.32737231254578
+  }
+}

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     # API Keys
     ANTHROPIC_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
+    MINIMAX_API_KEY: Optional[str] = None
+    MINIMAX_BASE_URL: str = "https://api.minimax.chat/v1"
     
     # Models
     DEFAULT_LOW_MODEL: str = "ollama/qwen2.5:1.5b"
@@ -60,6 +62,8 @@ except Exception:
         OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
         ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
         OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+        MINIMAX_API_KEY = os.environ.get("MINIMAX_API_KEY")
+        MINIMAX_BASE_URL = os.environ.get("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
         DEFAULT_LOW_MODEL = "ollama/qwen2.5:1.5b"
         DEFAULT_MEDIUM_MODEL = "ollama/llama3.2:3b"
         DEFAULT_HIGH_MODEL = "ollama/llama3:8b"

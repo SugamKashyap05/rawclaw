@@ -1,0 +1,11 @@
+{
+  "session_id": "eval-47c62cdc",
+  "timestamp": "2026-04-22T10:57:49",
+  "model": "gemma4:31b-cloud",
+  "results": [],
+  "summary": {
+    "total": 12,
+    "passed": 0,
+    "avg_latency": 0
+  }
+}

@@ -8,7 +8,8 @@
         "@oevortex/ddg_search"
       ],
       "url": null,
-      "env": {}
+      "env": {},
+      "timeout": 30.0
     },
     "fetch": {
       "transport": "stdio",
@@ -20,7 +21,8 @@
         "mcp/fetch"
       ],
       "url": null,
-      "env": {}
+      "env": {},
+      "timeout": 30.0
     },
     "playwright": {
       "transport": "stdio",
@@ -32,7 +34,8 @@
         "mcp/playwright"
       ],
       "url": null,
-      "env": {}
+      "env": {},
+      "timeout": 30.0
     },
     "sequentialthinking": {
       "transport": "stdio",
@@ -44,7 +47,8 @@
         "mcp/sequentialthinking"
       ],
       "url": null,
-      "env": {}
+      "env": {},
+      "timeout": 30.0
     },
     "filesystem": {
       "transport": "stdio",
@@ -55,7 +59,8 @@
         "C:/Users"
       ],
       "url": null,
-      "env": {}
+      "env": {},
+      "timeout": 30.0
     },
     "google-search": {
       "transport": "stdio",
@@ -68,7 +73,8 @@
       "env": {
         "GOOGLE_API_KEY": "",
         "GOOGLE_SEARCH_ENGINE_ID": ""
-      }
+      },
+      "timeout": 30.0
     }
   }
 }
