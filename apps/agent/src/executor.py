@@ -476,21 +476,35 @@ class Executor:
                         # Add system prompt to force synthesis using tool results with truthfulness constraints
                         # Check if the tool result includes quality assessment
                         quality_note = ""
-                        if hasattr(tool_result, 'output') and isinstance(tool_result.output, dict):
-                            quality = tool_result.output.get('result_quality')
-                            if quality == "weak":
-                                quality_note = "\nNOTE: The search results appear incomplete or placeholder-like. Be extra cautious and only state what can be verified."
+                        try:
+                            # Access the tool result output which should be a dict
+                            tool_output = tool_result.output
+                            logger.info(f"Tool result output type: {type(tool_output)}, content: {str(tool_output)[:200]}...")
+                            if isinstance(tool_output, dict):
+                                quality = tool_output.get('result_quality')
+                                logger.info(f"Result quality detected: {quality}")
+                                if quality == "weak":
+                                    quality_note = "\nCRITICAL: Search results appear incomplete or placeholder-like. ONLY state what can be verified from the actual results. DO NOT make claims about events not happening based on incomplete data."
+                            else:
+                                logger.warning(f"Tool result output is not a dict: {type(tool_output)}")
+                        except (AttributeError, TypeError) as e:
+                            logger.warning(f"Could not access tool result output: {e}")
+                            # If tool_result.output is not accessible or not a dict, proceed without quality note
+                            pass
                         
                         messages.append({
-                            "role": "system",
-                            "content": "Synthesize a truthful answer using ONLY the tool results. Follow these strict rules:\n"
-                            "1. Only state what the tool results actually PROVE - do not make broader inferences\n"
-                            "2. If results are incomplete, placeholder-like, or conflicting, say you couldn't verify the information\n"
-                            "3. NEVER claim an event 'has not happened' or 'does not exist' based on incomplete search results\n"
-                            "4. Use epistemic language like 'I couldn't verify' or 'the sources appear incomplete' when evidence is weak\n"
-                            "5. Distinguish between 'no results found' and 'results were incomplete/placeholder-like'\n"
-                            "6. Do not use system date or memory to override uncertain tool evidence"
-                            f"{quality_note}"
+                            "role": "system", 
+                            "content": (
+                                "STRICT SYNTHESIS RULES - FOLLOW EXACTLY:\n"
+                                "1. ANSWER ONLY FROM TOOL RESULTS - ignore all other knowledge\n"
+                                "2. If results are incomplete/placeholder, say: 'I couldn't verify X from the search results'\n"
+                                "3. NEVER say 'X has not happened' or 'does not exist' based on incomplete results\n"
+                                "4. If no actual data found, say: 'The search didn't return verified current data'\n"
+                                "5. DO NOT use phrases like 'as of the current date' or reference time\n"
+                                "6. If you see placeholder content, describe it as 'appears to be placeholder content'\n"
+                                "7. Example for incomplete sports data: 'The search returned placeholder pages rather than actual standings'\n"
+                                f"{quality_note}"
+                            )
                         });
 
                         # Store tool result in memory
@@ -921,14 +935,19 @@ class Executor:
         Calls the reviewer model to evaluate the output.
         """
         review_prompt = (
-            "You are a Quality Assurance Reviewer.\n"
-            "Review output for accuracy, safety, and truthfulness under uncertainty.\n\n"
-            "CRITICAL RULES FOR REJECTION:\n"
-            "- REJECT if answer makes stronger factual claims than the tool evidence supports\n"
-            "- REJECT if answer claims an event 'has not happened' based on incomplete search results\n"
-            "- REJECT if answer uses definitive language ('definitely', 'certainly') with weak evidence\n"
-            "- REJECT if answer infers broader conclusions than the tool results justify\n"
-            "- REJECT if answer uses system date/memory to override uncertain tool evidence\n\n"
+            "You are a Strict Truthfulness Reviewer.\n"
+            "REJECT any answer that makes unsupported claims from search results.\n\n"
+            "IMMEDIATE REJECTION CRITERIA:\n"
+            "- REJECT if answer claims an event 'has not happened' or 'does not exist'\n"
+            "- REJECT if answer uses phrases like 'as of the current date' or time references\n"
+            "- REJECT if answer makes definitive claims from placeholder/incomplete results\n"
+            "- REJECT if answer infers 'season has not occurred' from missing current data\n"
+            "- REJECT if answer uses external knowledge beyond the tool results\n"
+            "- REJECT for phrases: 'has not yet taken place', 'not yet occurred', 'future tournament'\n\n"
+            "APPROVE ONLY if answer:\n"
+            "- Says 'I couldn't verify' or 'search didn't return reliable data'\n"
+            "- Describes results as 'placeholder', 'incomplete', or 'speculative'\n"
+            "- Stays within what the actual tool results show\n\n"
             "OUTPUT:\n"
             f"{content}\n\n"
             "Respond ONLY with JSON:\n"

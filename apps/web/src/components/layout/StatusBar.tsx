@@ -1,66 +1,13 @@
-import { useEffect, useState } from 'react';
 import { FiRefreshCw } from 'react-icons/fi';
-import { api } from '../../lib/api';
 import { SystemStatusSnapshot } from '@rawclaw/shared';
-import { DEFAULT_SYSTEM_STATUS } from '../../lib/constants';
 
 interface StatusBarProps {
-  onStatus?: (status: SystemStatusSnapshot) => void;
+  status: SystemStatusSnapshot;
+  onRefresh?: () => Promise<void> | void;
+  isRefreshing?: boolean;
 }
 
-export function StatusBar({ onStatus }: StatusBarProps) {
-  const [status, setStatus] = useState<SystemStatusSnapshot>(DEFAULT_SYSTEM_STATUS);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const poll = async () => {
-      try {
-        const response = await api.get<SystemStatusSnapshot>('/system/status');
-        if (!mounted) return;
-        setStatus(response.data);
-        onStatus?.(response.data);
-      } catch {
-        if (!mounted) return;
-        setStatus((current) => ({
-          ...current,
-          services: {
-            ...current.services,
-            api: 'down',
-          },
-          websocket: { connected: false },
-        }));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    void poll();
-    const timer = window.setInterval(() => void poll(), 5000);
-
-    return () => {
-      mounted = false;
-      window.clearInterval(timer);
-    };
-  }, [onStatus]);
-
-  const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get<SystemStatusSnapshot>('/system/status');
-      setStatus(response.data);
-      onStatus?.(response.data);
-    } catch {
-      setStatus((current) => ({
-        ...current,
-        services: { ...current.services, api: 'down' },
-        websocket: { connected: false },
-      }));
-    } finally {
-      setLoading(false);
-    }
-  };
+export function StatusBar({ status, onRefresh, isRefreshing = false }: StatusBarProps) {
 
   return (
     <footer
@@ -92,10 +39,10 @@ export function StatusBar({ onStatus }: StatusBarProps) {
         <span style={{ fontSize: '0.82rem' }}>{status.git.lastCommit || 'No commit metadata'}</span>
         <button
           className="btn-ghost"
-          onClick={handleRefresh}
+          onClick={() => void onRefresh?.()}
           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.7rem' }}
         >
-          <FiRefreshCw className={loading ? 'icon-spin' : undefined} />
+          <FiRefreshCw className={isRefreshing ? 'icon-spin' : undefined} />
           Refresh
         </button>
       </div>

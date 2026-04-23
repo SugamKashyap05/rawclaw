@@ -1,6 +1,6 @@
 import { ProvenanceTrace as IProvenanceTrace } from '@rawclaw/shared';
 import { useState } from 'react';
-import { FiActivity, FiTool, FiCheckCircle, FiCpu, FiAlertTriangle, FiZap, FiChevronDown, FiChevronUp, FiLink } from 'react-icons/fi';
+import { FiActivity, FiTool, FiCheckCircle, FiCpu, FiAlertTriangle, FiZap, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 
 interface ProvenanceTraceProps {
   trace: Partial<IProvenanceTrace> | null | undefined;
@@ -19,23 +19,23 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
   const getIcon = (type: string) => {
     switch (type) {
       case 'plan':
-        return <FiActivity />;
+        return <FiActivity size={10} />;
       case 'tool_call':
-        return <FiTool />;
+        return <FiTool size={10} />;
       case 'tool_result':
-        return <FiCheckCircle />;
+        return <FiCheckCircle size={10} />;
       case 'synthesis':
-        return <FiZap />;
+        return <FiZap size={10} />;
       case 'error':
-        return <FiAlertTriangle />;
+        return <FiAlertTriangle size={10} />;
       default:
-        return <FiCpu />;
+        return <FiCpu size={10} />;
     }
   };
 
   const getTimeStatus = (ms: number) => {
     if (ms < 500) return { color: '#00ffa3', label: 'Fast' };
-    if (ms < 2000) return { color: '#ffcc00', label: 'Normal' };
+    if (ms < 2000) return { color: '#ffcc00', label: 'Norm' };
     return { color: '#ff4d4d', label: 'Slow' };
   };
 
@@ -43,12 +43,13 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
     <div
       className="provenance-container"
       style={{
-        marginTop: '1rem',
-        padding: '0.8rem',
-        background: 'rgba(255, 255, 255, 0.02)',
-        borderRadius: '12px',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
-        fontSize: '0.8rem',
+        marginTop: '0.5rem',
+        padding: 0,
+        background: 'transparent',
+        borderRadius: 0,
+        border: 'none',
+        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+        fontSize: '0.65rem',
       }}
     >
       <div
@@ -56,65 +57,41 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '0.65rem',
-          padding: isExpanded ? '0 0.2rem 1rem 0.2rem' : '0 0.2rem',
+          gap: '0.4rem',
+          padding: '0.35rem 0.5rem',
           color: 'var(--text-secondary)',
           fontWeight: 600,
-          fontSize: '0.75rem',
+          fontSize: '0.65rem',
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
           cursor: 'pointer',
-          userSelect: 'none'
+          userSelect: 'none',
+          height: 32,
+          maxHeight: 32,
+          overflow: 'hidden',
         }}
       >
-        <FiActivity style={{ color: 'var(--neon-cyan)', filter: 'drop-shadow(0 0 5px var(--neon-cyan-glow))' }} />
-        REASONING TRACE
+        <FiActivity style={{ color: 'var(--neon-cyan)' }} size={10} />
+        TRACE
         {summary && !isExpanded && (
           <span style={{ 
             color: 'var(--text-muted)', 
             textTransform: 'none', 
             fontWeight: 400, 
             letterSpacing: 'normal',
-            marginLeft: '0.4rem',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            maxWidth: '320px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem'
+            marginLeft: '0.3rem',
           }}>
-            <span style={{ opacity: 0.5 }}>|</span>
-            {summary.brief}
+            {summary.brief?.slice(0, 40) || ''}
           </span>
         )}
-        <span style={{ marginLeft: 'auto', fontSize: '0.7rem', opacity: 0.5, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          {trace?.runIds && trace.runIds.length > 0 && (
-            <div style={{ display: 'flex', gap: '0.3rem', marginRight: '0.5rem' }}>
-              {trace.runIds.slice(0, 2).map(rid => (
-                <span key={rid} title={`Linked Task Run: ${rid}`} style={{ 
-                  background: 'rgba(0, 255, 163, 0.1)', 
-                  color: '#00ffa3', 
-                  padding: '1px 5px', 
-                  borderRadius: '4px', 
-                  fontSize: '0.65rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '2px',
-                  border: '1px solid rgba(0, 255, 163, 0.2)'
-                }}>
-                  <FiLink size={8} /> {rid.slice(0, 6)}
-                </span>
-              ))}
-            </div>
-          )}
-          {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
-          ID: {traceId.slice(0, 8)}
+        <span style={{ marginLeft: 'auto', fontSize: '0.6rem', opacity: 0.5, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          {isExpanded ? <FiChevronUp size={10} /> : <FiChevronDown size={10} />}
+          {traceId.slice(0, 6)}
         </span>
       </div>
 
       {isExpanded && (
-        <div style={{ display: 'grid', gap: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+        <div style={{ display: 'grid', gap: '0.35rem', padding: '0.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '4px' }}>
           {steps.map((step, idx) => {
             const rawStep = step as any;
             const duration = typeof step.durationMs === 'number' ? step.durationMs : (typeof rawStep.duration_ms === 'number' ? rawStep.duration_ms : 0);
@@ -128,32 +105,31 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
               key={idx}
               style={{
                 display: 'flex',
-                alignItems: 'flex-start',
-                gap: '0.8rem',
-                padding: '0.65rem 0.8rem',
-                background: 'rgba(255, 255, 255, 0.03)',
-                borderRadius: '8px',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.35rem 0.5rem',
+                background: 'rgba(255, 255, 255, 0.02)',
+                borderRadius: '4px',
                 borderLeft: `2px solid ${timing.color}`,
-                transition: 'transform 0.2s',
+                fontSize: '0.65rem',
               }}
             >
-              <span style={{ fontSize: '1rem', marginTop: '0.1rem', display: 'flex' }}>{getIcon(stepType)}</span>
+              <span style={{ display: 'flex', color: timing.color }}>{getIcon(stepType)}</span>
 
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500, color: 'var(--text-main)', textTransform: 'capitalize' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 500, color: 'var(--text-main)', textTransform: 'capitalize', fontSize: '0.65rem' }}>
                   {stepType.replace('_', ' ')}
-                  {toolName ? <span style={{ color: 'var(--neon-cyan)', marginLeft: '0.4rem' }}>({toolName})</span> : null}
+                  {toolName ? <span style={{ color: 'var(--neon-cyan)', marginLeft: '0.25rem', fontSize: '0.6rem' }}>({toolName})</span> : null}
                 </div>
                 {outputSummary ? (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                    {outputSummary}
+                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {outputSummary.slice(0, 60)}
                   </div>
                 ) : null}
               </div>
 
-              <div style={{ textAlign: 'right', fontSize: '0.7rem' }}>
-                <div style={{ color: timing.color, fontWeight: 600 }}>{duration}ms</div>
-                <div style={{ color: 'var(--text-muted)', opacity: 0.6 }}>{timing.label}</div>
+              <div style={{ textAlign: 'right', fontSize: '0.55rem', color: timing.color }}>
+                {duration}ms
               </div>
             </div>
           );

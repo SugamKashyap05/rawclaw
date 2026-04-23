@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AgentProfile, ChatStreamChunk, ToolResult } from '@rawclaw/shared';
+import { AgentProfile, ChatStreamChunk, ToolResult, SystemStatusSnapshot } from '@rawclaw/shared';
 import { api } from '../lib/api';
 import { AUTH_TOKEN_KEY } from '../lib/auth';
 import { ChatSidebar } from '../components/ChatSidebar';
 import { ChatSkeleton } from '../components/chat/ChatSkeleton';
 // DEPRECATED: ConfirmationBanner kept as fallback; replaced by PendingConfirmationsPanel
 // import { ConfirmationBanner } from '../components/ConfirmationBanner';
-import { HarnessStatusPanel } from '../components/chat/HarnessStatusPanel';
 import { PendingConfirmationsPanel } from '../components/chat/PendingConfirmationsPanel';
 import { TaskRunPanel } from '../components/chat/TaskRunPanel';
 import { useSystemPoller } from '../hooks/useSystemPoller';
@@ -15,7 +14,7 @@ import {
   FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, 
   FiCopy, FiFolder, FiFileText, FiX, FiPlus, 
   FiMessageSquare, FiSquare, FiEye, FiAlertTriangle, FiActivity, FiShield,
-  FiChevronDown, FiChevronUp, FiCpu
+  FiChevronDown, FiChevronUp, FiCpu, FiUser, FiGitBranch
 } from 'react-icons/fi';
 import { WebSearchResult } from '../components/chat/WebSearchResult';
 import { BrowserResult } from '../components/chat/BrowserResult';
@@ -85,6 +84,7 @@ interface Props {
   selectedModel: string;
   temperature: number;
   top_p: number;
+  systemStatus: SystemStatusSnapshot;
 }
 
 interface SessionMessage {
@@ -259,7 +259,7 @@ async function processFileForAttachment(file: File): Promise<{ attachment?: Chat
   }
 }
 
-export default function Chat({ selectedModel, temperature, top_p }: Props) {
+export default function Chat({ selectedModel, temperature, top_p, systemStatus }: Props) {
   const { sessionId: routeSessionId } = useParams();
   const navigate = useNavigate();
   const [localSessionId] = useState(() => cryptoRandom());
@@ -285,14 +285,15 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
   const [showTasks, setShowTasks] = useState(false);
 
   // Centralized system poller - replaces scattered useEffect intervals
-  const { 
-    status: systemStatus, 
-    pendingConfirmations, 
+  const {
+    pendingConfirmations,
     recentRuns,
     refresh: refreshPoller 
   } = useSystemPoller(sessionId, 3000);
 
   const hasRunningRun = useMemo(() => recentRuns.some(r => r.status === 'running'), [recentRuns]);
+  const currentInputCount = input.length;
+  const currentTokenEstimate = Math.max(0, Math.ceil(input.trim().length / 4));
 
   // Auto-expand task panel when background work starts
   useEffect(() => {
@@ -752,7 +753,87 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
       void loadAgents();
       if (routeSessionId) void loadHistory(routeSessionId);
     }}>
-    <div className="chat-page-container" style={{ display: 'flex', flex: 1, minHeight: 0, gap: '1rem', position: 'relative', overflow: 'hidden' }}>
+    <div className="chat-page-container chat-page-shell" style={{ display: 'flex', flex: 1, minHeight: 0, gap: '1rem', position: 'relative', overflow: 'hidden' }}>
+      <style>{`
+        .chat-page-shell .glass-card,
+        .chat-page-shell .btn-primary,
+        .chat-page-shell .btn-secondary,
+        .chat-page-shell .btn-ghost,
+        .chat-page-shell textarea,
+        .chat-page-shell select,
+        .chat-page-shell .message-surface,
+        .chat-page-shell .provenance-container {
+          border-radius: 0 !important;
+        }
+        .chat-page-shell .active-session {
+          background: rgba(79, 70, 229, 0.92) !important;
+          border: 1px solid rgba(129, 140, 248, 0.92) !important;
+        }
+        .chat-page-shell .active-session div,
+        .chat-page-shell .active-session span {
+          color: #fff !important;
+        }
+        .chat-page-shell .message-bubble:hover .message-actions {
+          opacity: 0.95 !important;
+        }
+        .chat-page-shell .provenance-container {
+          background: rgba(255,255,255,0.03) !important;
+          border: 1px solid rgba(255,255,255,0.08) !important;
+          font-family: var(--font-mono, monospace);
+          font-size: 12px !important;
+        }
+        .chat-page-shell .typing-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 999px;
+          background: var(--neon-cyan);
+          opacity: 0.35;
+          animation: rawclawTyping 1.2s infinite ease-in-out;
+        }
+        .chat-page-shell .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+        .chat-page-shell .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+        .chat-page-shell .shimmer-block {
+          position: relative;
+          overflow: hidden;
+          background: rgba(255,255,255,0.05);
+        }
+        .chat-page-shell .shimmer-block::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          transform: translateX(-100%);
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+          animation: rawclawShimmer 1.6s infinite;
+        }
+        .chat-page-shell .send-pulse {
+          animation: rawclawButtonPulse 1.8s infinite ease-in-out;
+        }
+        .chat-page-shell .status-dot-ok {
+          animation: rawclawPulse 1.7s infinite;
+        }
+        .chat-page-shell .status-dot-error {
+          animation: rawclawBlink 1s infinite;
+        }
+        @keyframes rawclawTyping {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+          40% { transform: translateY(-3px); opacity: 1; }
+        }
+        @keyframes rawclawShimmer {
+          100% { transform: translateX(100%); }
+        }
+        @keyframes rawclawButtonPulse {
+          0%, 100% { box-shadow: 0 0 0 rgba(99,102,241,0); }
+          50% { box-shadow: 0 0 14px rgba(99,102,241,0.35); }
+        }
+        @keyframes rawclawPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.2); }
+          50% { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+        }
+        @keyframes rawclawBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
+        }
+      `}</style>
       <ChatSidebar />
 
       {/* Main Chat Area */}
@@ -788,40 +869,34 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
           }
         }}
       >
-        <div style={{ paddingBottom: '1rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-glass)', display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
-              <h1 style={{ 
-                fontSize: '1.8rem', 
-                margin: 0, 
-                fontWeight: 800, 
-                letterSpacing: '-0.02em',
-                background: 'linear-gradient(to right, #fff, var(--neon-cyan))',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent'
+        <div style={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0.5rem', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h1 style={{ 
+              fontSize: '1rem', 
+              margin: 0, 
+              fontWeight: 800, 
+              letterSpacing: '-0.02em',
+              background: 'linear-gradient(to right, #fff, var(--neon-cyan))',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent'
+            }}>
+              RawClaw
+            </h1>
+            {routeSessionId && (
+              <span className="mono" style={{ 
+                fontSize: '0.6rem', 
+                color: 'var(--text-muted)', 
+                padding: '1px 4px', 
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid var(--border-glass)'
               }}>
-                RawClaw <span style={{ fontWeight: 300, opacity: 0.8 }}>Chat</span>
-              </h1>
-              {routeSessionId && (
-                <span className="mono" style={{ 
-                  fontSize: '0.65rem', 
-                  color: 'var(--text-muted)', 
-                  padding: '2px 8px', 
-                  borderRadius: '10px', 
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid var(--border-glass)'
-                }}>
-                  {routeSessionId}
-                </span>
-              )}
-            </div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-              Stream responses, inspect tool executions, and switch agent profiles mid-conversation.
-            </div>
+                {routeSessionId.slice(0, 8)}...
+              </span>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: '0.75rem', minWidth: '320px' }}>
-            <select value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)} style={fieldStyle}>
-              <option value="">No agent override</option>
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+            <select value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)} style={{ ...fieldStyle, border: '1px solid rgba(34,211,238,0.45)', padding: '0.25rem 0.5rem', fontSize: '0.7rem', minWidth: '140px' }}>
+              <option value="">No agent</option>
               {agents.map((agent) => (
                 <option key={agent.id} value={agent.id}>
                   {agent.name}
@@ -831,29 +906,16 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
             <button 
               className="btn-secondary" 
               onClick={() => setShowWorkspace(!showWorkspace)}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: showWorkspace ? 'rgba(0, 240, 255, 0.1)' : undefined }}
+              style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
             >
-              <FiFolder /> Workspace
+              <FiFolder size={12} />
             </button>
             <button 
               className="btn-secondary" 
               onClick={() => setShowTasks(!showTasks)}
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '0.5rem', 
-                background: showTasks ? 'rgba(0, 240, 255, 0.1)' : undefined,
-                position: 'relative'
-              }}
+              style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
             >
-              <FiActivity /> Tasks
-              {hasRunningRun && (
-                <span className="pulse-dot" style={{ 
-                  position: 'absolute', top: -4, right: -4, 
-                  width: 10, height: 10, borderRadius: '50%', 
-                  background: 'var(--neon-cyan)', boxShadow: '0 0 8px var(--neon-cyan)' 
-                }} />
-              )}
+              <FiActivity size={12} />
             </button>
           </div>
         </div>
@@ -906,25 +968,46 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
           </div>
         )}
 
-        <HarnessStatusPanel
-          sessionId={sessionId}
-          agentName={selectedAgent?.name || 'Default'}
-          modelDisplayLabel={selectedModel.startsWith('complexity:') ? selectedModel.split(':')[1] : (selectedModel.split('/').pop() || selectedModel)}
-          modelMode={selectedModel.startsWith('complexity:') ? 'complexity' : 'direct'}
-          systemStatus={systemStatus}
-        />
-
         <PendingConfirmationsPanel
           confirmations={pendingConfirmations}
           onAction={() => void refreshPoller()}
         />
 
-        <div ref={scrollRef} className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: '1rem', paddingRight: '0.25rem', minHeight: 0 }}>
+        <div
+          ref={scrollRef}
+          className="custom-scrollbar"
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem',
+            padding: '0.5rem',
+            minHeight: 0,
+          }}
+        >
           {loadingHistory && messages.length === 0 ? <ChatSkeleton /> : null}
 
           {!loadingHistory && messages.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', padding: '3rem 0', textAlign: 'center' }}>
-              Start a conversation to activate the full chat, tool, and memory pipeline.
+            <div style={{ color: 'var(--text-muted)', padding: '1.5rem 0 1rem', textAlign: 'center', display: 'grid', gap: '0.85rem', alignContent: 'center', minHeight: '40vh', justifyItems: 'center' }}>
+              <div style={{ display: 'grid', placeItems: 'center', width: 52, height: 52, border: '1px solid rgba(99,102,241,0.35)', background: 'rgba(99,102,241,0.08)' }}>
+                <FiCpu size={24} color="#818cf8" />
+              </div>
+              <div className="mono" style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>No messages yet. Start a conversation.</div>
+              <div style={{ fontSize: '0.85rem' }}>Ask a question, run a tool, or attach a file to start.</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem', justifyContent: 'center' }}>
+                {['Run a web search', 'List active agents', 'Summarize memory'].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    className="btn-ghost"
+                    onClick={() => setInput(suggestion)}
+                    style={{ border: '1px solid rgba(255,255,255,0.12)', padding: '0.45rem 0.65rem', fontSize: '0.76rem' }}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             messages.map((message, index) => (
@@ -940,9 +1023,9 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
           )}
         </div>
 
-        <div style={{ paddingTop: '1rem', marginTop: '1rem', borderTop: '1px solid var(--border-glass)' }}>
+        <div style={{ paddingTop: '0.65rem', marginTop: '0.65rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           {selectedAgent ? (
-            <div style={{ marginBottom: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+            <div style={{ marginBottom: '0.45rem', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
               Active agent: <strong>{selectedAgent.name}</strong>
             </div>
           ) : null}
@@ -993,8 +1076,8 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', position: 'relative' }}>
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: '0.7rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid var(--border-glass)' }} title="Attach local file">
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-end', position: 'relative' }}>
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)' }} title="Attach file or image">
               <FiPlus size={20} />
               <input 
                 type="file" 
@@ -1017,32 +1100,55 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
                 }} 
               />
             </label>
-            <textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              rows={3}
-              placeholder="Ask RawClaw to search, browse, run tools, or reason through a task..."
-              style={{ ...fieldStyle, resize: 'vertical', minHeight: '84px' }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  void send();
-                }
-              }}
-            />
+            <div style={{ flex: 1, position: 'relative' }}>
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                rows={3}
+                placeholder="Ask RawClaw to search, browse, run tools, or reason through a task..."
+                style={{ ...fieldStyle, resize: 'vertical', minHeight: '56px', paddingBottom: '1.8rem' }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    void send();
+                  }
+                }}
+              />
+              <div className="mono" style={{ position: 'absolute', right: '0.75rem', bottom: '0.45rem', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                {currentInputCount} chars / ~{currentTokenEstimate} tok
+              </div>
+            </div>
             {sending ? (
               <button 
                 className="btn-primary" 
                 onClick={stopGeneration}
-                style={{ background: 'var(--error-glow)', borderColor: 'var(--error)' }}
+                style={{ background: 'var(--error-glow)', borderColor: 'var(--error)', minHeight: '56px', padding: '0 1rem' }}
               >
                 Stop
               </button>
             ) : (
-              <button className="btn-primary" onClick={() => void send()} disabled={sending || !input.trim()}>
+              <button className={`btn-primary ${input.trim() ? 'send-pulse' : ''}`} onClick={() => void send()} disabled={sending || !input.trim()} style={{ minHeight: '56px', padding: '0 1rem' }}>
                 Send
               </button>
             )}
+          </div>
+          <div style={{ marginTop: '0.55rem', paddingTop: '0.55rem', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <ServicePill label="API" state={systemStatus?.services?.api || 'down'} />
+              <ServicePill label="Agent" state={systemStatus?.services?.agent || 'down'} />
+              <ServicePill label="Redis" state={systemStatus?.services?.redis || 'down'} />
+              <ServicePill label="ChromaDB" state={systemStatus?.services?.chroma || 'down'} />
+              <ServicePill label="Prisma/SQLite" state={systemStatus?.services?.database || 'down'} />
+              <ServicePill label="WebSocket" state={systemStatus?.websocket?.connected ? 'ok' : 'down'} />
+            </div>
+            <button
+              className="btn-ghost"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', border: '1px solid var(--border-glass)', padding: '0.45rem 0.7rem' }}
+              title={systemStatus?.git?.lastCommit || 'Git branch'}
+            >
+              <FiGitBranch size={14} />
+              <span className="mono" style={{ fontSize: '0.76rem' }}>{systemStatus?.git?.branch || 'unknown'}</span>
+            </button>
           </div>
         </div>
         
@@ -1241,6 +1347,8 @@ function MessageCard({
   const [copied, setCopied] = useState(false);
   const [showThinking, setShowThinking] = useState(true);
   const [editContent, setEditContent] = useState(message.content);
+  const [expanded, setExpanded] = useState(false);
+  const isLongResponse = !isUser && ((message.content?.length || 0) > 1400 || (message.content?.split('\n').length || 0) > 18);
 
   const handleCopy = async () => {
     try {
@@ -1255,17 +1363,21 @@ function MessageCard({
   return (
     <div className="message-bubble" style={{ display: 'grid', gap: '0.65rem', justifyItems: isUser ? 'end' : 'start', position: 'relative' }}>
       <div
-        className={isUser ? 'user-bubble' : 'assistant-bubble'}
+        className={`${isUser ? 'user-bubble' : 'assistant-bubble'} message-surface`}
         style={{
-          maxWidth: '84%',
-          borderRadius: '16px',
+          maxWidth: '820px',
           padding: '1.25rem',
-          border: '1px solid transparent',
-          position: 'relative'
+          border: `1px solid ${isUser ? 'rgba(34,211,238,0.18)' : 'rgba(99,102,241,0.24)'}`,
+          borderLeft: `3px solid ${isUser ? 'rgba(34,211,238,0.9)' : 'rgba(99,102,241,0.9)'}`,
+          position: 'relative',
+          background: isUser ? 'rgba(34,211,238,0.04)' : 'rgba(255,255,255,0.03)'
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', gap: '1rem' }}>
           <div className="mono" style={{ fontSize: '0.65rem', color: isUser ? 'var(--neon-cyan)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ display: 'inline-flex', width: 22, height: 22, alignItems: 'center', justifyContent: 'center', border: `1px solid ${isUser ? 'rgba(34,211,238,0.35)' : 'rgba(99,102,241,0.35)'}`, background: isUser ? 'rgba(34,211,238,0.08)' : 'rgba(99,102,241,0.08)' }}>
+              {isUser ? <FiUser size={12} /> : <FiCpu size={12} />}
+            </span>
             {isUser ? 'USER' : 'RAWCLAW'}
             <span style={{ opacity: 0.5, fontWeight: 400 }}>{formatTime(message.createdAt)}</span>
           </div>
@@ -1398,13 +1510,13 @@ function MessageCard({
             ) : null}
             
             {message.content ? (
-              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, maxWidth: '720px' }}>
                 {(() => {
                   const { suggestion, textContent } = parseEditSuggestion(message.content);
                   if (suggestion) {
                     return (
                       <>
-                        <div className="markdown-content">
+                        <div className="markdown-content" style={{ maxHeight: isLongResponse && !expanded ? '24rem' : 'none', overflow: 'hidden', position: 'relative' }}>
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {textContent}
                           </ReactMarkdown>
@@ -1428,28 +1540,54 @@ function MessageCard({
                     );
                   }
                   return (
-                    <div className="markdown-content">
+                    <div className="markdown-content" style={{ maxHeight: isLongResponse && !expanded ? '24rem' : 'none', overflow: 'hidden', position: 'relative' }}>
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {message.content}
                       </ReactMarkdown>
                     </div>
                   );
                 })()}
+                {isLongResponse && (
+                  <button
+                    onClick={() => setExpanded((current) => !current)}
+                    style={{
+                      marginTop: '0.75rem',
+                      border: 'none',
+                      background: 'none',
+                      color: 'var(--neon-cyan)',
+                      cursor: 'pointer',
+                      padding: 0,
+                      fontSize: '0.82rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem'
+                    }}
+                  >
+                    {expanded ? 'Show less ↑' : 'Show more ↓'}
+                  </button>
+                )}
               </div>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--neon-cyan)', opacity: 0.8 }}>
-                {!message.provenanceTrace?.steps?.length && (
-                  <span className="pulse-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', boxShadow: '0 0 10px currentColor' }} />
-                )}
-                <span style={{ fontSize: '0.9rem', fontStyle: 'italic' }}>
-                  {message.approvalRequired
-                    ? 'Waiting for approval...'
-                    : message.tool_calls && message.tool_calls.length > 0
-                      ? `Running tool: ${message.tool_calls[message.tool_calls.length - 1]?.name || 'tool'}...`
-                      : message.isDeepResearch
-                        ? 'Deep Researching...'
-                        : 'RawClaw is thinking...'}
-                </span>
+              <div style={{ display: 'grid', gap: '0.75rem', color: 'var(--neon-cyan)', opacity: 0.9, minWidth: '340px' }}>
+                <div className="shimmer-block" style={{ height: '1rem', width: '58%' }} />
+                <div className="shimmer-block" style={{ height: '1rem', width: '92%' }} />
+                <div className="shimmer-block" style={{ height: '1rem', width: '76%' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                  </div>
+                  <span style={{ fontSize: '0.9rem', fontStyle: 'italic' }}>
+                    {message.approvalRequired
+                      ? 'Waiting for approval...'
+                      : message.tool_calls && message.tool_calls.length > 0
+                        ? `Running tool: ${message.tool_calls[message.tool_calls.length - 1]?.name || 'tool'}...`
+                        : message.isDeepResearch
+                          ? 'Deep Researching...'
+                          : 'RawClaw is thinking...'}
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -1719,11 +1857,22 @@ export function formatTime(date?: string | Date) {
 const fieldStyle = {
   width: '100%',
   padding: '0.8rem 0.9rem',
-  borderRadius: '12px',
   border: '1px solid var(--border-glass)',
   background: 'rgba(255,255,255,0.04)',
   color: 'var(--text-primary)',
 };
+
+function ServicePill({ label, state }: { label: string; state: 'ok' | 'degraded' | 'down' }) {
+  const ok = state === 'ok';
+  const degraded = state === 'degraded';
+  const color = ok ? '#10b981' : degraded ? '#f59e0b' : '#ef4444';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', border: '1px solid rgba(255,255,255,0.08)', padding: '0.25rem 0.42rem', background: 'rgba(255,255,255,0.03)' }}>
+      <span className={ok ? 'status-dot-ok' : 'status-dot-error'} style={{ width: 8, height: 8, borderRadius: '999px', background: color }} />
+      <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>{label}</span>
+    </div>
+  );
+}
 
 function cryptoRandom() {
   // Generate a premium-looking hex identifier instead of generic 'session-'

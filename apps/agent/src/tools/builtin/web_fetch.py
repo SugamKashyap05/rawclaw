@@ -62,8 +62,177 @@ async def _is_safe_url(url: str) -> Tuple[bool, str]:
     except Exception as e:
         return False, f"URL validation error: {str(e)}"
 
+def _extract_meaningful_content(html: str) -> str:
+    """
+    Extracts meaningful content from HTML while removing boilerplate.
+    Focuses on main content areas and removes navigation, footers, ads, etc.
+    """
+    import re
+    import html as html_module
+    
+    # Remove script, style, header, and other junk elements completely
+    patterns_to_remove = [
+        r'<(script|style|header|nav|footer|aside|form|iframe)[^>]*>.*?</\1>',
+        r'<!--.*?-->',  # Comments
+        r'<noscript[^>]*>.*?</noscript>',
+        r'<meta[^>]*>',
+        r'<link[^>]*>',
+        r'<svg[^>]*>.*?</svg>',
+        r'<img[^>]*/?>',
+    ]
+    
+    text = html
+    for pattern in patterns_to_remove:
+        text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE)
+    
+    # Remove common boilerplate container elements
+    boilerplate_container_patterns = [
+        r'<div[^>]*(class|id)=["\']*(menu|navigation|nav|footer|sidebar|ad|banner|cookie|promo|widget|popup|modal|overlay|lightbox|tooltip|notification)[^>]*>.*?</div>',
+        r'<div[^>]*(class|id)=["\']*(social|share|comment|related|sidebar|widget)[^>]*>.*?</div>',
+        r'<span[^>]*(class|id)=["\']*(icon|button|badge|label|tag)[^>]*>.*?</span>',
+        r'<li[^>]*(class|id)=["\']*(social|share|menu)[^>]*>.*?</li>',
+    ]
+    
+    for pattern in boilerplate_container_patterns:
+        text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE)
+    
+    # Extract text content from remaining HTML - MORE AGGRESSIVE CLEANING
+    # First remove all HTML tags but preserve line breaks
+    text = re.sub(r'<br\s*/?>', '\n', text)
+    text = re.sub(r'<[^>]+>', ' ', text)
+    
+    # Decode HTML entities
+    text = html_module.unescape(text)
+    
+    # Aggressive whitespace and noise cleaning
+    # Remove repeated whitespace characters
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Multiple blank lines -> 2 newlines
+    
+    # Remove common boilerplate phrases - MORE COMPREHENSIVE LIST
+    unwanted_patterns = [
+        # Navigation/menu text
+        r'home\s+about\s+contact\s+services', 
+        r'menu\s+.*?\s+menu',
+        r'points\s+table\s+points\s+table',
+        # Sports banner repetitions
+        r'(to follow all the live action from.*?){2,}',
+        r'(follow.*?live.*?action.*?){3,}',
+        # Repeated symbols/punctuation
+        r'[>\-=~]{3,}',
+        r'[•\-–—]{2,}',
+        # Footer-like patterns  
+        r'all rights reserved.*?(?:\d{4})?',
+        r'cookie policy.*?privacy',
+        r'subscribe.*?newsletter',
+        # Layout artifacts
+        r'\s*[|]\s*[|]\s*[|]\s*',  # Multiple pipes |
+        r'\s*[/]\s*[/]\s*[/]\s*',  # Multiple slashes /
+        r'copy\s+all\s+years',
+        # Empty content indicators  
+        r'no\s+(?:results|matches|data|information).*?found',
+        # Loading/placeholder indicators
+        r'loading\.\.\.?',
+        r'please wait\.\.\.?',
+    ]
+    
+    for pattern in unwanted_patterns:
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.MULTILINE)
+    
+    # Remove common boilerplate phrases individually 
+    unwanted_phrases = [
+        'cookie policy', 'privacy policy', 'terms of service', 'terms and conditions',
+        'all rights reserved', 'copyright', '©', 'follow us', 'share this', 
+        'subscribe', 'newsletter', 'sign up', 'log in', 'register',
+        'click here', 'read more', 'learn more', 'continue reading',
+        'advertisement', 'sponsored', 'promoted', 'recommended',
+        'related articles', 'you might also like', 'popular posts',
+        'back to top', 'scroll to top', 'page of',
+        'comments', 'shares', 'likes', 'views',
+        # Sports-specific boilerplate
+        'to follow all the live action', 'live action from', 'points table',  
+        'loading', 'share video on', 'view all', 'see more', 'filters season',
+        'playoffs', 'copy all years', 'role batsman', 'nationality', 'bio',
+        'magic moments', 'ipl exclusive', 'related videos', 
+        '-->', '>>', '>>>', '<<<', '<<', '->', '<-', '=>', '<=',
+        # Symbols and artifacts
+        '', '', '', '', '', '', '', '', '', '', 
+        # Empty content
+        'tbd', 'to be determined', 'qualifier', 'eliminator', 
+        'final', 'as per current points table'
+    ]
+    
+    for phrase in unwanted_phrases:
+        # More aggressive phrase removal with word boundaries
+        text = re.sub(r'\b' + re.escape(phrase) + r'\b', '', text, flags=re.IGNORECASE)
+        # Also try removing spaces around it just in case  
+        text = re.sub(r'\s*' + re.escape(phrase) + r'\s*', ' ', text, flags=re.IGNORECASE)
+    
+    # Clean up whitespace thoroughly 
+    text = re.sub(r'\s+', ' ', text)  # Collapse multiple spaces
+    text = re.sub(r'\n\s+', '\n', text)  # Remove leading spaces on lines
+    text = re.sub(r'\s+\n', '\n', text)  # Remove trailing spaces on lines
+    text = re.sub(r'\n+', '\n', text)  # Collapse multiple newlines
+    text = text.strip()
+    
+    # Split into lines and remove low-value lines
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    meaningful_lines = []
+    
+    for line in lines:
+        # Skip very short lines (likely just symbols or single words)
+        if len(line) < 5:
+            continue
+            
+        # Skip lines with high symbol-to-text ratio (likely layout artifacts)  
+        alpha_chars = sum(1 for c in line if c.isalpha())
+        total_chars = len(line)
+        if total_chars > 0 and (alpha_chars / total_chars) < 0.3:
+            continue
+            
+        # Skip lines with too many numbers in sequence (likely pagination)
+        if re.search(r'\d{5,}', line):  # 5+ consecutive digits
+            continue
+            
+        # Skip obvious boilerplate lines
+        boilerplate_indicators = [
+            'click', 'here', 'more', 'follow', 'share', 'subscribe', 
+            'cookie', 'policy', 'privacy', 'terms', 'loading'
+        ]
+        if any(indicator in line.lower() for indicator in boilerplate_indicators):
+            # But allow lines with content words too
+            content_words = ['team', 'points', 'standings', 'table', 'rank', 'won', 'lost', 'nrr']
+            if not any(word in line.lower() for word in content_words):
+                continue
+                
+        meaningful_lines.append(line)
+    
+    # SPECIAL HANDLING FOR SPORTS STANDINGS PAGES
+    # We no longer explicitly label this as "PLACEHOLDER CONTENT DETECTED" 
+    # but we still use the detection to filter noise and guide the model.
+    
+    # identify if the page is primarily placeholders
+    placeholder_terms = ['tbd', 'to be determined', 'qualifier', 'eliminator', 'final']
+    has_placeholders = any(term in clean_text.lower() for term in placeholder_terms)
+    has_actual_data = bool(re.search(r'\b\d+\s+(?:won|lost|points|pts|nrr|matches)\b', clean_text.lower()))
+    
+    if has_placeholders and not has_actual_data:
+        # Instead of a loud "PLACEHOLDER DETECTED" label, we just return 
+        # the cleaned text and let the model reason over the "TBD"s.
+        result = ' '.join(meaningful_lines)
+    else:
+        # Prioritize structured content
+        result = ' '.join(meaningful_lines)
+    
+    # Limit output length to avoid overwhelming the model
+    max_length = 3000
+    if len(result) > max_length:
+        result = result[:max_length] + '... [content truncated]'
+    
+    return result if result.strip() else "No meaningful content extracted - page may be primarily boilerplate"
+
 def _strip_html_to_text(html: str) -> str:
-    """Simple regex based text extraction for HTML."""
+    """Simple regex based text extraction for HTML. (Fallback)"""
     import re
     import html as html_module
     
@@ -140,7 +309,19 @@ class WebFetchTool(BaseTool):
                             title = match.group(1).strip()
                         
                         if extract_text:
-                            content = _strip_html_to_text(full_body)
+                            try:
+                                original_length = len(full_body)
+                                content = _extract_meaningful_content(full_body)
+                                extracted_length = len(content)
+                                logger.info(f"Content extraction: {original_length} → {extracted_length} chars ({extracted_length/original_length*100:.1f}% kept)")
+                                
+                                # If extraction removed too much, fall back to basic extraction
+                                if len(content.strip()) < 100:
+                                    logger.warning("Content extraction removed too much, using fallback")
+                                    content = _strip_html_to_text(full_body)
+                            except Exception as e:
+                                logger.warning(f"Content extraction failed, using fallback: {e}")
+                                content = _strip_html_to_text(full_body)
                         else:
                             content = full_body
                     else:

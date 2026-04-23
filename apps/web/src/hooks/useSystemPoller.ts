@@ -1,10 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../lib/api';
-import { SystemStatusSnapshot, ToolConfirmation, TaskRun } from '@rawclaw/shared';
-import { DEFAULT_SYSTEM_STATUS } from '../lib/constants';
+import { ToolConfirmation, TaskRun } from '@rawclaw/shared';
 
 interface SystemPollerData {
-  status: SystemStatusSnapshot | null;
   pendingConfirmations: ToolConfirmation[];
   recentRuns: TaskRun[];
   refresh: () => Promise<void>;
@@ -16,7 +14,6 @@ interface SystemPollerData {
  * Polls for system status and pending tool confirmations.
  */
 export function useSystemPoller(sessionId?: string, intervalMs = 3000): SystemPollerData {
-  const [status, setStatus] = useState<SystemStatusSnapshot>(DEFAULT_SYSTEM_STATUS);
   const [pendingConfirmations, setPendingConfirmations] = useState<ToolConfirmation[]>([]);
   const [recentRuns, setRecentRuns] = useState<TaskRun[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -30,8 +27,7 @@ export function useSystemPoller(sessionId?: string, intervalMs = 3000): SystemPo
   const fetchData = async () => {
     try {
       setIsRefreshing(true);
-      const [statusRes, confRes, runsRes] = await Promise.all([
-        api.get<SystemStatusSnapshot>('/system/status').catch(() => null),
+      const [confRes, runsRes] = await Promise.all([
         activeSessionRef.current 
           ? api.get<ToolConfirmation[]>(`/tools/confirm?sessionId=${activeSessionRef.current}`).catch(() => null)
           : Promise.resolve(null),
@@ -41,17 +37,6 @@ export function useSystemPoller(sessionId?: string, intervalMs = 3000): SystemPo
             : '/tasks/runs/recent'
         ).catch(() => null)
       ]);
-
-      if (statusRes?.data) {
-        setStatus(statusRes.data);
-      } else if (!statusRes) {
-        // Fallback for failed network
-        setStatus((cur) => ({
-          ...cur,
-          services: { ...cur.services, api: 'down' },
-          websocket: { connected: false }
-        }));
-      }
 
       if (confRes?.data) {
         setPendingConfirmations(confRes.data);
@@ -92,5 +77,5 @@ export function useSystemPoller(sessionId?: string, intervalMs = 3000): SystemPo
     };
   }, [intervalMs]);
 
-  return { status, pendingConfirmations, recentRuns, refresh: fetchData, isRefreshing };
+  return { pendingConfirmations, recentRuns, refresh: fetchData, isRefreshing };
 }

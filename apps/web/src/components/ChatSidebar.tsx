@@ -79,57 +79,67 @@ export function ChatSidebar() {
     <div
       className={isCollapsed ? 'chat-sidebar-collapsed' : ''}
       style={{
-        width: isCollapsed ? '48px' : '280px',
-        minWidth: isCollapsed ? '48px' : '280px',
+        width: isCollapsed ? '40px' : '240px',
+        minWidth: isCollapsed ? '40px' : '240px',
         height: '100%',
-        background: 'rgba(255, 255, 255, 0.02)',
-        borderRight: '1px solid var(--border-glass)',
+        background: 'rgba(0, 0, 0, 0.3)',
+        borderRight: '1px solid rgba(255,255,255,0.05)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        transition: 'width 0.2s ease, min-width 0.2s ease',
+        transition: 'width 0.15s ease',
       }}
     >
       <div style={{
-        padding: isCollapsed ? '1rem 0.5rem' : '1.5rem',
-        borderBottom: '1px solid var(--border-glass)',
+        padding: isCollapsed ? '0.5rem 0' : '0.5rem',
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
         display: 'flex',
-        gap: '0.5rem',
-        justifyContent: isCollapsed ? 'center' : 'flex-start',
-        alignItems: 'center'
+        flexDirection: 'column',
+        gap: '0.25rem',
+        alignItems: 'center',
       }}>
         {!isCollapsed && (
           <button
             onClick={handleNewChat}
             className="btn-primary"
             style={{
-              flex: 1,
+              width: '100%',
               justifyContent: 'center',
-              padding: '0.75rem',
-              fontSize: '0.85rem',
+              padding: '0.4rem',
+              fontSize: '0.7rem',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.5rem'
+              gap: '0.3rem'
             }}
           >
-            <FiPlus size={16} />
-            <span className="mono">NEW_SESSION</span>
+            <FiPlus size={12} />
+            <span className="mono">NEW</span>
           </button>
         )}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="chat-sidebar-toggle"
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          style={{
+            padding: '0.3rem',
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
-          {isCollapsed ? <FiChevronRight size={16} /> : <FiChevronLeft size={16} />}
+          {isCollapsed ? <FiChevronRight size={14} /> : <FiChevronLeft size={14} />}
         </button>
       </div>
 
       {!isCollapsed && (
 
-      <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '1rem 0.5rem' }}>
+      <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 0.5rem' }}>
         <div className="mono" style={{ fontSize: '0.65rem', color: 'var(--text-muted)', paddingLeft: '1rem', marginBottom: '1rem' }}>
-          RECENT_TERMINALS
+          RECENT_SESSIONS
         </div>
         
         {sessions.length === 0 ? (

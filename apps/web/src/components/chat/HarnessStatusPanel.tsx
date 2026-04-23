@@ -25,66 +25,68 @@ export function HarnessStatusPanel({ sessionId, agentName, modelDisplayLabel, mo
 
   return (
     <div 
-      className="harness-status-panel glass-card"
+      className="harness-status-panel"
       style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0.6rem 1rem',
-        margin: '0 0 0.75rem 0',
-        borderRadius: '8px',
-        border: '1px solid var(--border-glass)',
-        background: 'rgba(0, 0, 0, 0.2)',
-        fontSize: '0.85rem',
-        gap: '0.75rem',
-        flexWrap: 'wrap',
+        padding: '0.25rem 0.75rem',
+        margin: '0 0 0.5rem 0',
+        borderRadius: 0,
+        border: 'none',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        background: 'transparent',
+        fontSize: '0.65rem',
+        gap: '0.5rem',
+        height: 36,
+        maxHeight: 36,
       }}
     >
-      <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
         
         {/* Session ID */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <FiHash size={13} style={{ color: 'var(--text-muted)' }} />
-          <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Session:</span>
-          <span className="mono" style={{ color: 'var(--text-primary)', fontSize: '0.82rem' }}>
-            {sessionId ? sessionId.slice(0, 8) + '...' : 'none'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+          <FiHash size={10} style={{ color: 'var(--text-muted)' }} />
+          <span style={{ color: 'var(--text-secondary)' }}>S:</span>
+          <span className="mono" style={{ color: 'var(--text-primary)' }}>
+            {sessionId ? sessionId.slice(0, 6) + '...' : 'none'}
           </span>
         </div>
 
         {/* Agent */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <FiCpu size={13} style={{ color: 'var(--text-muted)' }} />
-          <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Agent:</span>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 500, fontSize: '0.82rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+          <FiCpu size={10} style={{ color: 'var(--text-muted)' }} />
+          <span style={{ color: 'var(--text-secondary)' }}>A:</span>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
             {agentName || 'Default'}
           </span>
         </div>
 
         {/* Model / Complexity */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <FiActivity size={13} style={{ color: 'var(--text-muted)' }} />
-          <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
-            {modelMode === 'complexity' ? 'Route:' : 'Model:'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+          <FiActivity size={10} style={{ color: 'var(--text-muted)' }} />
+          <span style={{ color: 'var(--text-secondary)' }}>
+            {modelMode === 'complexity' ? 'Route:' : 'M:'}
           </span>
-          <span style={{ color: 'var(--text-primary)', fontSize: '0.82rem' }}>
+          <span style={{ color: 'var(--text-primary)' }}>
             {modelDisplayLabel}
           </span>
         </div>
 
         {/* MCP Servers */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <FiServer size={13} style={{ color: 'var(--text-muted)' }} />
-          <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>MCPs:</span>
-          <span style={{ color: mcpCount > 0 ? 'var(--success, #10b981)' : 'var(--text-primary)', fontWeight: 500, fontSize: '0.82rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+          <FiServer size={10} style={{ color: 'var(--text-muted)' }} />
+          <span style={{ color: 'var(--text-secondary)' }}>MCP:</span>
+          <span style={{ color: mcpCount > 0 ? 'var(--success, #10b981)' : 'var(--text-primary)', fontWeight: 500 }}>
             {mcpCount}
           </span>
         </div>
 
         {/* Pending tasks - only show if nonzero */}
         {pendingTasks > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ color: 'var(--warning, #f59e0b)', fontWeight: 600, fontSize: '0.82rem' }}>
-              {pendingTasks} pending
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+            <span style={{ color: 'var(--warning, #f59e0b)', fontWeight: 600 }}>
+              {pendingTasks} pend
             </span>
           </div>
         )}
@@ -92,23 +94,23 @@ export function HarnessStatusPanel({ sessionId, agentName, modelDisplayLabel, mo
       </div>
 
       {/* Health Status */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Backend:</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+        <span style={{ color: 'var(--text-secondary)', fontSize: '0.6rem' }}>BE:</span>
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '0.3rem',
+          gap: '0.15rem',
           color: overallHealth === 'ok'
             ? 'var(--success, #10b981)'
             : overallHealth === 'degraded'
               ? 'var(--warning, #f59e0b)'
               : 'var(--error, #ef4444)',
         }}>
-          {overallHealth === 'ok' ? <FiCheckCircle size={14} /> : <FiAlertCircle size={14} />}
+          {overallHealth === 'ok' ? <FiCheckCircle size={11} /> : <FiAlertCircle size={11} />}
           <span style={{
             fontWeight: 600,
             textTransform: 'uppercase',
-            fontSize: '0.72rem',
+            fontSize: '0.6rem',
             letterSpacing: '0.5px',
           }}>{overallHealth}</span>
         </div>

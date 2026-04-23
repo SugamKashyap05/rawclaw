@@ -17,7 +17,7 @@ import ModelSelector from './components/ModelSelector';
 import { Sidebar } from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
 import { bootstrapWorkspace, getBootstrapStatus, initializeAuth } from './lib/auth';
-import { SystemStatusSnapshot } from '@rawclaw/shared';
+import { useHealthStatus } from './hooks/useHealthStatus';
 
 function App() {
   const [selectedModel, setSelectedModel] = useState<string>('complexity:medium');
@@ -29,8 +29,8 @@ function App() {
   const [setupUser, setSetupUser] = useState<string>('');
   const [setupMemory, setSetupMemory] = useState<string>('');
   const [setupSaving, setSetupSaving] = useState<boolean>(false);
-  const [systemStatus, setSystemStatus] = useState<SystemStatusSnapshot | null>(null);
   const location = useLocation();
+  const { status: systemStatus, refresh: refreshHealth, isRefreshing: healthRefreshing } = useHealthStatus();
 
   const bootstrap = async () => {
     setAuthLoading(true);
@@ -157,7 +157,7 @@ function App() {
 
   return (
     <div className={isChatPage ? 'chat-page-shell' : ''} style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar counts={systemStatus?.counts} />
+      <Sidebar counts={systemStatus.counts} />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: isChatPage ? 'hidden' : 'auto' }}>
         <header
@@ -166,7 +166,7 @@ function App() {
             justifyContent: 'space-between',
             alignItems: 'center',
             gap: '1rem',
-            padding: '1rem 1.4rem',
+            padding: '0.55rem 1rem',
             borderBottom: '1px solid var(--border-glass)',
             background: 'rgba(8, 8, 14, 0.88)',
             backdropFilter: 'blur(14px)',
@@ -177,13 +177,13 @@ function App() {
           }}
         >
           <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.2rem' }}>{pageTitle}</div>
-            <div style={{ color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '0.05rem' }}>{pageTitle}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem', lineHeight: 1.25 }}>
               Use the rebuilt command center to operate agents, memory, tools, models, and tasks.
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: '320px', position: 'relative', overflow: 'visible' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: '320px', position: 'relative', overflow: 'visible' }}>
             <ModelSelector
               selectedModel={selectedModel}
               onModelChange={setSelectedModel}
@@ -194,18 +194,18 @@ function App() {
                 setTopP(p);
               }}
             />
-            <NavLink to="/chat" className="btn-primary" style={{ textDecoration: 'none' }}>
+            <NavLink to="/chat" className="btn-primary" style={{ textDecoration: 'none', padding: '0.55rem 0.9rem' }}>
               New Chat
             </NavLink>
           </div>
         </header>
 
-        <main style={{ flex: 1, overflow: isChatPage ? 'hidden' : 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+        <main style={{ flex: 1, overflow: isChatPage ? 'hidden' : 'auto', padding: '0.9rem', display: 'flex', flexDirection: 'column' }}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route
               path="/chat/:sessionId?"
-              element={<Chat selectedModel={selectedModel} temperature={temperature} top_p={top_p} />}
+              element={<Chat selectedModel={selectedModel} temperature={temperature} top_p={top_p} systemStatus={systemStatus} />}
             />
             <Route path="/agents" element={<Agents />} />
             <Route path="/mcp" element={<MCPServers />} />
@@ -221,7 +221,7 @@ function App() {
           </Routes>
         </main>
 
-        <StatusBar onStatus={setSystemStatus} />
+        <StatusBar status={systemStatus} onRefresh={refreshHealth} isRefreshing={healthRefreshing} />
       </div>
     </div>
   );

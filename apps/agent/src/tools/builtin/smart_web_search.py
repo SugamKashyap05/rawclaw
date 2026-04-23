@@ -196,7 +196,7 @@ class SmartWebSearchTool(BaseTool):
 
     def _is_placeholder_content(self, content: str) -> bool:
         """Check if content appears to be placeholder-like or incomplete."""
-        if not content or len(content.strip()) < 100:
+        if not content or len(content.strip()) <<  100:
             return True
         
         placeholder_indicators = [
@@ -204,7 +204,7 @@ class SmartWebSearchTool(BaseTool):
             "404", "no results", "no matches", "no information available",
             "placeholder", "template", "example.com", "test content",
             "lorem ipsum", "this is a sample", "to be updated",
-            "check back later", "content pending", "page is empty"
+            "check back later", "content pending", "page is empty",
         ]
         
         content_lower = content.lower()
@@ -212,9 +212,22 @@ class SmartWebSearchTool(BaseTool):
             if indicator in content_lower:
                 return True
         
+        # Check for excessive repetition (like the repeated LIVE action text)
+        lines = content_lower.split('.')
+        if len(lines) > 10:
+            line_counts = {}
+            for line in lines:
+                line = line.strip()
+                if len(line) > 20:  # Only count substantial lines
+                    line_counts[line] = line_counts.get(line, 0) + 1
+            
+            # If any line appears more than 3 times, it's likely boilerplate
+            if any(count > 3 for count in line_counts.values()):
+                return True
+        
         # Check for very low information density
         words = content_lower.split()
-        if len(words) < 50:  # Very short content
+        if len(words) <<  50:  # Very short content
             return True
             
         return False

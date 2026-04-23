@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   FiActivity,
   FiBox,
+  FiChevronLeft,
+  FiChevronRight,
   FiCpu,
   FiDatabase,
   FiLayers,
@@ -37,20 +40,33 @@ const ITEMS = [
 ];
 
 export function Sidebar({ counts }: SidebarProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('rawclaw_main_sidebar_collapsed');
+    if (saved) setIsCollapsed(saved === 'true');
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('rawclaw_main_sidebar_collapsed', String(isCollapsed));
+  }, [isCollapsed]);
+
   return (
     <aside
       style={{
-        width: '280px',
-        minWidth: '280px',
+        width: isCollapsed ? '72px' : '280px',
+        minWidth: isCollapsed ? '72px' : '280px',
         background: 'rgba(8, 8, 14, 0.92)',
         borderRight: '1px solid var(--border-glass)',
         display: 'flex',
         flexDirection: 'column',
         backdropFilter: 'blur(18px)',
+        transition: 'width 0.16s ease, min-width 0.16s ease',
       }}
     >
-      <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-glass)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+      <div style={{ padding: isCollapsed ? '0.9rem 0.7rem' : '1rem 1.1rem', borderBottom: '1px solid var(--border-glass)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', justifyContent: isCollapsed ? 'center' : 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
           <div
             style={{
               width: '42px',
@@ -66,16 +82,35 @@ export function Sidebar({ counts }: SidebarProps) {
               R
             </span>
           </div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>RawClaw v2</div>
-            <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.78rem', letterSpacing: '0.25em' }}>
-              COMMAND CENTER
+          {!isCollapsed && (
+            <div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>RawClaw v2</div>
+              <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem', letterSpacing: '0.2em' }}>
+                COMMAND CENTER
+              </div>
             </div>
+          )}
           </div>
+          <button
+            onClick={() => setIsCollapsed((current) => !current)}
+            title={isCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+            }}
+          >
+            {isCollapsed ? <FiChevronRight size={16} /> : <FiChevronLeft size={16} />}
+          </button>
         </div>
       </div>
 
-      <nav style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.45rem', flex: 1 }}>
+      <nav style={{ padding: isCollapsed ? '0.7rem 0.45rem' : '1rem', display: 'flex', flexDirection: 'column', gap: '0.45rem', flex: 1 }}>
         {ITEMS.map((item) => {
           const Icon = item.icon;
           const badgeValue = item.badge ? counts?.[item.badge] ?? 0 : 0;
@@ -89,19 +124,19 @@ export function Sidebar({ counts }: SidebarProps) {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: '0.8rem',
-                padding: '0.95rem 1rem',
-                borderRadius: '18px',
+                padding: isCollapsed ? '0.9rem 0.75rem' : '0.95rem 1rem',
                 color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                 background: isActive ? 'rgba(110, 103, 255, 0.16)' : 'transparent',
                 border: isActive ? '1px solid rgba(110, 103, 255, 0.25)' : '1px solid transparent',
                 textDecoration: 'none',
               })}
+              title={isCollapsed ? item.label : undefined}
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
                 <Icon />
-                <span style={{ fontSize: '1.02rem' }}>{item.label}</span>
+                {!isCollapsed && <span style={{ fontSize: '1.02rem' }}>{item.label}</span>}
               </span>
-              {item.badge ? (
+              {item.badge && !isCollapsed ? (
                 <span
                   className="mono"
                   style={{
@@ -118,12 +153,29 @@ export function Sidebar({ counts }: SidebarProps) {
                 >
                   {badgeValue}
                 </span>
+              ) : item.badge && isCollapsed ? (
+                <span
+                  className="mono"
+                  style={{
+                    minWidth: '10px',
+                    height: '10px',
+                    display: 'grid',
+                    placeItems: 'center',
+                    background: 'rgba(110, 103, 255, 0.9)',
+                    color: 'transparent',
+                    fontSize: '0.1rem',
+                    borderRadius: '999px',
+                  }}
+                >
+                  {badgeValue}
+                </span>
               ) : null}
             </NavLink>
           );
         })}
       </nav>
 
+      {!isCollapsed && (
       <div style={{ padding: '1rem 1.25rem 1.4rem', borderTop: '1px solid var(--border-glass)' }}>
         <div className="glass-card" style={{ padding: '1rem' }}>
           <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginBottom: '0.85rem' }}>
@@ -136,6 +188,7 @@ export function Sidebar({ counts }: SidebarProps) {
           </div>
         </div>
       </div>
+      )}
     </aside>
   );
 }
