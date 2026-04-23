@@ -518,15 +518,79 @@ class Executor:
                         continue_reasoning = True
 
                     elif isinstance(delta, str):
-                        # Check for "tool leak" - if this string looks like it's starting a tool call, 
-                        # we might want to buffer it. For now, we just clean it if a full tag is found.
+                        # Strip tool tags and check for raw JSON tool calls
                         cleaned = self._strip_tool_tags(delta)
-                        if cleaned or not delta.strip().startswith("<"):
-                            turn_content += delta
-                            accumulated_content += delta
+                        
+                        # Check if this looks like raw JSON tool call leakage
+                        # Models sometimes output raw JSON like {"name": "web_search", ...} without tags
+                        raw_tool_call = self._try_parse_raw_tool_call(cleaned)
+                        if raw_tool_call:
+                            # Intercept as proper tool call instead of leaking JSON
+                            logger.info(f"[TOOL_TRACE] Intercepted raw JSON tool call: {raw_tool_call.get('name')}")
+                            turn_count += 1
+                            turn_had_tool_call = True
+                            
+                            tool_call = ToolCall(
+                                tool_name=raw_tool_call.get('name', ''),
+                                input=raw_tool_call.get('arguments', {}),
+                            )
+                            trace.add_tool_call(tool_call.tool_name, tool_call.input)
+                            
+                            # Yield as tool_call event
+                            yield json.dumps({
+                                "type": "tool_call",
+                                "tool_call": {
+                                    "name": tool_call.tool_name,
+                                    "arguments": tool_call.input
+                                },
+                            }) + "\n"
+                            
+                            # Execute the tool
+                            tool_result = await self._execute_tool_with_confirmation(
+                                request.session_id,
+                                tool_call,
+                                trace,
+                                knowledge_brain=knowledge_brain,
+                            )
+                            
+                            trace.add_tool_result(tool_result, int(tool_result.duration_ms))
+                            tool_calls_made.append(tool_call)
+                            if tool_result.source_url:
+                                sources.append(tool_result.source_url)
+                            
+                            # Yield tool result
+                            yield json.dumps({
+                                "type": "tool_result",
+                                "tool_call": {
+                                    "name": tool_call.tool_name,
+                                    "arguments": tool_call.input
+                                },
+                                "tool_result": tool_result.model_dump(),
+                            }) + "\n"
+                            
+                            # Add to messages for next turn
+                            messages.append({
+                                "role": "tool",
+                                "content": json.dumps(tool_result.model_dump()),
+                                "name": tool_call.tool_name,
+                            })
+                            
+                            # Add synthesis system prompt
+                            messages.append({
+                                "role": "system",
+                                "content": "STRICT SYNTHESIS RULES:\n1. ANSWER ONLY FROM TOOL RESULTS\n2. Say 'I couldn't verify' if results are incomplete\n3. NEVER claim events 'have not happened' based on incomplete data\n4. Use epistemic language for weak evidence"
+                            })
+                            
+                            continue_reasoning = True
+                            continue
+                        
+                        # Normal content - only yield if there's actual cleaned content
+                        if cleaned and not cleaned.strip().startswith("<"):
+                            turn_content += cleaned
+                            accumulated_content += cleaned
                             yield json.dumps({
                                 "type": "content",
-                                "content": delta,
+                                "content": cleaned,
                             }) + "\n"
 
 
