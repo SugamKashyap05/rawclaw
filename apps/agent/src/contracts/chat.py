@@ -58,6 +58,10 @@ class ChatRequest(BaseModel):
     selection: Optional[DocumentSelection] = None
     editRequest: Optional[DocumentEditRequest] = None
 
+    model_config = {
+        "extra": "allow"
+    }
+
 
 class ModelMetadata(BaseModel):
     """Metadata about the model used for execution."""

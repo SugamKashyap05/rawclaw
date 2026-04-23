@@ -48,11 +48,14 @@ class ModelRouter:
             logger.warning(f"Failed to fetch Ollama tags: {e}")
             return []
 
-    async def normalize_model_id(self, model_id: str) -> str:
+    async def normalize_model_id(self, model_id: Optional[str]) -> str:
         """
-        Normalizes a model ID. For Ollama, resolves base names (e.g. 'llama3') 
+        Normalizes a model ID. For Ollama, resolves base names (e.g. 'llama3')
         to the best available installed tag (e.g. 'llama3:8b').
         """
+        if not model_id:
+            return settings.DEFAULT_LOW_MODEL or "ollama/llama3:8b"
+
         provider_name, inner_name = self._parse_model_id(model_id)
         
         if provider_name != "ollama":
@@ -203,17 +206,33 @@ class ModelRouter:
 
                 try:
                     success = False
-                    async for chunk in provider.complete(messages, {
-                        "model": inner_name, 
+                    # Call provider.complete and check if it's an async generator
+                    generator = provider.complete(messages, {
+                        "model": inner_name,
                         "tools": tools,
                         "temperature": temperature,
                         "top_p": top_p
-                    }):
+                    })
+
+                    # Use a helper to ensure we have an async iterator
+                    async def ensure_async_iterator(g):
+                        if hasattr(g, "__aiter__"):
+                            async for item in g:
+                                yield item
+                        elif hasattr(g, "__iter__"):
+                            for item in g:
+                                yield item
+                        else:
+                            # Fallback for cases where it's not an iterator but a single value
+                            # that needs to be yielded (though provider.complete should be a generator)
+                            yield g
+
+                    async for chunk in ensure_async_iterator(generator):
                         if isinstance(chunk, dict) and chunk.get("type") == "error":
                             err_msg = chunk.get("message", "")
                             if "not found" in err_msg.lower() or "404" in err_msg:
                                 last_error = err_msg
-                                break 
+                                break
                             yield chunk
                         else:
                             success = True

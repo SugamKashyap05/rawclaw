@@ -13,6 +13,21 @@ class ToolCall(BaseModel):
     tool_name: str
     input: Any
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{"tool_name": "get_datetime", "input": {}}]
+        }
+    }
+
+    # Allow aliases for compatibility with different model providers/test scripts
+    # name -> tool_name, arguments -> input
+    def __init__(self, **data):
+        if "name" in data and "tool_name" not in data:
+            data["tool_name"] = data.pop("name")
+        if "arguments" in data and "input" not in data:
+            data["input"] = data.pop("arguments")
+        super().__init__(**data)
+
 
 class ToolResult(BaseModel):
     """Represents the result of a tool execution."""

@@ -151,7 +151,30 @@ class SkillLoader:
             logger.info(f"Loaded skill: {tool.name}")
 
         return self._skills
+        
+    def reload(self) -> None:
+        """
+        Rediscover skills from disk and register them with the global TOOL_REGISTRY.
+        Existing skills are overridden.
+        """
+        from src.tools.registry import TOOL_REGISTRY
+        
+        old_count = len(self._skills)
+        self.discover()
+        
+        # Register new/updated skills
+        for skill in self._skills:
+            # Remove old version if it exists
+            if skill.name in TOOL_REGISTRY.tool_names:
+                del TOOL_REGISTRY._tools[skill.name]
+            try:
+                TOOL_REGISTRY.register(skill)
+            except ValueError as e:
+                logger.warning(f"Failed to register reloaded skill {skill.name}: {e}")
+                
+        logger.info(f"Skill reload complete. Previous count: {old_count}, New count: {len(self._skills)}")
 
     @property
     def count(self) -> int:
         return len(self._skills)
+

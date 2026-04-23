@@ -18,6 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from pydantic import BaseModel
 
 from src.contracts import ChatRequest, ChatResponse, HealthStatus, ToolCall, TaskExecutionRequest
 from src.models.router import ModelRouter
@@ -31,6 +32,7 @@ from src.tools.registry import TOOL_REGISTRY
 from src.tools.mcp_gateway import MCPGateway
 from src.tools.mcp_tool_wrapper import wrap_mcp_tools
 from src.tools.skill_loader import SkillLoader
+from src.tools.skill_researcher import SkillResearcher
 from src.tools.mcp_discovery import MCPDiscovery
 from src.executor import EXECUTOR
 
@@ -114,6 +116,7 @@ logger = logging.getLogger("rawclaw.main")
 model_router = ModelRouter()
 mcp_gateway: MCPGateway | None = None
 skill_loader: SkillLoader | None = None
+skill_researcher: SkillResearcher | None = None
 
 
 @asynccontextmanager
@@ -147,7 +150,9 @@ async def lifespan(app: FastAPI):
 
     # 3. Load and register skills
     global skill_loader
+    global skill_researcher
     skill_loader = SkillLoader()
+    skill_researcher = SkillResearcher()
     skills = skill_loader.discover()
     for skill in skills:
         try:
@@ -335,6 +340,16 @@ async def get_tool(tool_name: str):
     }
 
 
+from fastapi.exceptions import RequestValidationError
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"Pydantic Validation Error: {exc.errors()} | Body: {await request.body()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": str(await request.body())},
+    )
+
 @app.post("/execute")
 async def execute_chat(request: Request, chat_request: ChatRequest):
     """
@@ -357,18 +372,22 @@ async def execute_chat(request: Request, chat_request: ChatRequest):
     model_id = chat_request.model or cfg.DEFAULT_HIGH_MODEL
 
     async def event_generator():
-        if use_langgraph:
-            async for chunk in executor.execute(
-                [m.model_dump() for m in chat_request.messages],
-                session_id=session_id,
-                model_id=model_id,
-                chroma_memory=chroma_memory,
-                knowledge_brain=knowledge_brain,
-            ):
-                yield chunk
-        else:
-            async for chunk in executor.execute(chat_request, chroma_memory, knowledge_brain, mcp_discovery):
-                yield chunk
+        try:
+            if use_langgraph:
+                async for chunk in executor.execute(
+                    [m.model_dump() for m in chat_request.messages],
+                    session_id=session_id,
+                    model_id=model_id,
+                    chroma_memory=chroma_memory,
+                    knowledge_brain=knowledge_brain,
+                ):
+                    yield chunk
+            else:
+                async for chunk in executor.execute(chat_request, chroma_memory, knowledge_brain, mcp_discovery):
+                    yield chunk
+        except Exception as e:
+            logger.error(f"Error in event_generator: {e}", exc_info=True)
+            yield json.dumps({"type": "error", "error": "generator_error", "message": str(e)}) + "\n"
 
     return StreamingResponse(
         event_generator(),
@@ -629,6 +648,49 @@ async def memory_clear(request: Request, collection: str = None):
     if not chroma_memory:
         return {"cleared": 0}
     return chroma_memory.clear(collection=collection)
+
+
+class CloneRequest(BaseModel):
+    repo_url: str
+
+class InstallRequest(BaseModel):
+    source_path: str
+
+class BuildSkillRequest(BaseModel):
+    name: str
+    description: str
+    tags: list[str]
+    instructions: str
+
+@app.get("/api/skills/research")
+async def get_researched_skills():
+    if not skill_researcher:
+        return {"skills": [], "message": "Skill Researcher not available"}
+    return {"skills": skill_researcher.list_researched_skills()}
+
+@app.post("/api/skills/clone")
+async def clone_skill_repo(request: CloneRequest):
+    if not skill_researcher:
+        return {"success": False, "error": "Skill Researcher not available"}
+    return await skill_researcher.clone_repository(request.repo_url)
+
+@app.post("/api/skills/install")
+async def install_skill(request: InstallRequest):
+    if not skill_researcher:
+        return {"success": False, "error": "Skill Researcher not available"}
+    result = skill_researcher.install_skill(request.source_path)
+    if result.get("success") and skill_loader:
+        skill_loader.reload()
+    return result
+
+@app.post("/api/skills/build")
+async def build_skill(request: BuildSkillRequest):
+    if not skill_researcher:
+        return {"success": False, "error": "Skill Researcher not available"}
+    result = skill_researcher.build_skill(request.name, request.description, request.tags, request.instructions)
+    if result.get("success") and skill_loader:
+        skill_loader.reload()
+    return result
 
 
 def start():

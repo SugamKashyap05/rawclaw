@@ -1,0 +1,16 @@
+{
+  "metadata": {
+    "session_id": "eval-41f4f6e4",
+    "model": "ollama/llama3.2:3b",
+    "timestamp": "2026-04-22 22:27:10"
+  },
+  "results": [
+    {
+      "step": 1,
+      "phase": "Identity",
+      "title": "System Role",
+      "passed": false,
+      "error": "'async for' requires an object with __aiter__ method, got generator"
+    }
+  ]
+}

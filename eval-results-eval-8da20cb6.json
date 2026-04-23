@@ -1,0 +1,79 @@
+{
+  "metadata": {
+    "session_id": "eval-8da20cb6",
+    "model": "ollama/llama3.2:3b",
+    "timestamp": "2026-04-22 17:15:11"
+  },
+  "results": [
+    {
+      "step": 1,
+      "phase": "Identity",
+      "title": "System Role",
+      "passed": false,
+      "error": "ReadError: "
+    },
+    {
+      "step": 2,
+      "phase": "System",
+      "title": "Date/Time Awareness",
+      "passed": false,
+      "error": "ConnectError: All connection attempts failed"
+    },
+    {
+      "step": 3,
+      "phase": "Memory",
+      "title": "Short-term Learning",
+      "passed": false,
+      "error": "ConnectError: All connection attempts failed"
+    },
+    {
+      "step": 4,
+      "phase": "Memory",
+      "title": "Context Persistence",
+      "passed": false,
+      "error": "ConnectError: All connection attempts failed"
+    },
+    {
+      "step": 5,
+      "phase": "Research",
+      "title": "Web Search",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 6,
+      "phase": "Research",
+      "title": "Browser & Scraping",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 7,
+      "phase": "RAG",
+      "title": "Deep Knowledge Recall",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 8,
+      "phase": "Reasoning",
+      "title": "Complex Planning",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 9,
+      "phase": "Integration",
+      "title": "Workspace Access",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 10,
+      "phase": "Continuity",
+      "title": "Multi-turn Synthesis",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    }
+  ]
+}

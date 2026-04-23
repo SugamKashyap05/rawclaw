@@ -36,8 +36,9 @@ class OllamaProvider(ModelProvider):
     async def complete(self, messages: List[Dict[str, Any]], options: Dict[str, Any] = None) -> AsyncIterator[Any]:
         # Default to low model suffix if no model specified
         default_model = settings.DEFAULT_LOW_MODEL.split('/')[-1]
-        model = options.get("model", default_model) if options else default_model
-        tools = options.get("tools") if options else None
+        options = options or {}
+        model = options.get("model", default_model)
+        tools = options.get("tools")
 
         # Prepare messages for Ollama /api/chat
         payload = {
@@ -71,12 +72,12 @@ class OllamaProvider(ModelProvider):
                     if response.status_code != 200:
                         error_detail_raw = await response.aread()
                         error_detail = error_detail_raw.decode()
-                        
+
                         error_type = "provider_http_error"
                         # Heuristic: detect context length/prompt too long errors
                         if "too long" in error_detail.lower() or "context" in error_detail.lower():
                             error_type = "context_limit_exceeded"
-                            
+
                         yield {
                             "type": "error",
                             "error": error_type,
@@ -110,6 +111,8 @@ class OllamaProvider(ModelProvider):
                             if "message" in chunk and "content" in chunk["message"]:
                                 content = chunk["message"]["content"]
                                 if content:
+                                    # IMPORTANT: parser.ingest is an async generator.
+                                    # We must use 'async for' here.
                                     async for event in parser.ingest(content):
                                         if event["type"] == "content":
                                             yield event["content"]
@@ -117,6 +120,7 @@ class OllamaProvider(ModelProvider):
                                             yield event
 
                             if chunk.get("done"):
+                                # IMPORTANT: parser.flush is also an async generator.
                                 async for event in parser.flush():
                                     if event["type"] == "content":
                                         yield event["content"]

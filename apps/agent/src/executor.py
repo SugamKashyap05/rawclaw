@@ -81,6 +81,17 @@ class Executor:
                 "provenance_trace": trace.to_dict(),
             }) + "\n"
 
+            # FIX: Ensure this is handled as an async iterator to prevent 'async for' error
+            async def ensure_async_iterator(g):
+                if hasattr(g, "__aiter__"):
+                    async for item in g:
+                        yield item
+                elif hasattr(g, "__iter__"):
+                    for item in g:
+                        yield item
+                else:
+                    yield g
+
             latest_user_query = next(
                 (message.content for message in reversed(request.messages) if getattr(message, "role", "") == "user" and getattr(message, "content", "").strip()),
                 "",
@@ -264,8 +275,20 @@ class Executor:
                 temperature=request.temperature,
                 top_p=request.top_p
             )
+
+            # Wrap the generator to ensure it's an async iterator
+            async def wrap_generator(g):
+                if hasattr(g, "__aiter__"):
+                    async for item in g:
+                        yield item
+                elif hasattr(g, "__iter__"):
+                    for item in g:
+                        yield item
+                else:
+                    yield g
+
             turn_count = 0
-            async for delta in async_it:
+            async for delta in wrap_generator(async_it):
                 # Check turn limit
                 if turn_count >= MAX_AGENT_TURNS:
                     logger.warning(f"Session {session_id} reached MAX_AGENT_TURNS ({MAX_AGENT_TURNS}). Stopping.")

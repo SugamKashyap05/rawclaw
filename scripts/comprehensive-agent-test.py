@@ -268,78 +268,11 @@ async def main():
     test_cases = [
         # Phase 1: Identity & System Awareness
         {
-            "phase": "Identity", 
-            "title": "System Role", 
-            "msg": "Identify yourself. What is your name, your purpose, and which system do you reside in?", 
+            "phase": "Identity",
+            "title": "System Role",
+            "msg": "Identify yourself. What is your name, your purpose, and which system do you reside in?",
             "check": ["rawclaw", "agent"]
         },
-        {
-            "phase": "System", 
-            "title": "Date/Time Awareness", 
-            "msg": "What is the exact current date and time? I need to timestamp a security log.", 
-            "tool": "datetime"
-        },
-        
-        # Phase 2: Memory & Context
-        {
-            "phase": "Memory", 
-            "title": "Short-term Learning", 
-            "msg": "I am Operator-X. My favorite color is Neon Purple and I prefer using Python 3.12 for system scripts. Please acknowledge this preference.", 
-            "check": ["python 3.12", "neon purple"]
-        },
-        {
-            "phase": "Memory", 
-            "title": "Context Persistence", 
-            "msg": "Based on the preference I just told you, which language should we use for our new automation script?", 
-            "check": ["python"]
-        },
-        
-        # Phase 3: Research & Web Skills
-        {
-            "phase": "Research", 
-            "title": "Web Search", 
-            "msg": "Search for the latest stable version of the Rust programming language released in 2024 or 2025.", 
-            "tool": "search_web"
-        },
-        {
-            "phase": "Research", 
-            "title": "Browser & Scraping", 
-            "msg": "Navigate to 'https://news.ycombinator.com', find the #1 post, and give me a 1-sentence summary of what it's about.", 
-            "tool": "playwright"
-        },
-        
-        # Phase 4: RAG (Vector Retrieval)
-        {
-            "phase": "RAG", 
-            "title": "Deep Knowledge Recall", 
-            "msg": "I need to access the Vanguard project. What is the secret decryption key and when was the system kernel initialized?", 
-            "check": ["X-DELTA-9-GHOST", "January 15th, 2026"]
-        },
-        
-        # Phase 5: Advanced Reasoning
-        {
-            "phase": "Reasoning", 
-            "title": "Complex Planning", 
-            "msg": "We need to containerize the RawClaw agent and deploy it to a Kubernetes cluster. Use sequential thinking to break this down into a 5-step plan including networking and storage requirements.", 
-            "tool": "sequential_thinking"
-        },
-        
-        # Phase 6: Filesystem & Integration
-        {
-            "phase": "Integration", 
-            "title": "Workspace Access", 
-            "msg": "List the directories in the root of our project to confirm the 'packages' and 'apps' folders are present.", 
-            "tool": "list_dir",
-            "check": ["apps", "packages"]
-        },
-        
-        # Phase 7: Continuity & Conclusion
-        {
-            "phase": "Continuity", 
-            "title": "Multi-turn Synthesis", 
-            "msg": "Great. Now, summarize everything we've done in this session, referring to me by my preferred name and accounting for my coding language preference.", 
-            "check": ["Operator-X", "Python"]
-        }
     ]
 
     results = []

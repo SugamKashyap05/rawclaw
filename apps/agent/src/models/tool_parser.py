@@ -106,7 +106,7 @@ def extract_textual_tool_calls(content: str) -> tuple[str, List[Dict[str, Any]]]
     return cleaned, tool_calls
 
 class TextualToolParser:
-    """ Stateful parser for streaming textual tool calls. """
+    """Stateful parser for streaming textual tool calls."""
     def __init__(self):
         self._buffer = ""
         self._start_tags = ["<thinking>", "<think>", "<tool_code>", "<minimax:tool_call>", "<invoke", "<tool>", "<tool_call>"]
@@ -121,7 +121,7 @@ class TextualToolParser:
         }
         self._active_start_tag = None
 
-    def ingest(self, chunk: str) -> AsyncIterator[Dict[str, Any]]:
+    async def ingest(self, chunk: str) -> AsyncIterator[Dict[str, Any]]:
         self._buffer += chunk
         while self._buffer:
             if not self._active_start_tag:
@@ -209,7 +209,7 @@ class TextualToolParser:
                     else:
                         return # Need more data
 
-    def flush(self) -> AsyncIterator[Dict[str, Any]]:
+    async def flush(self) -> AsyncIterator[Dict[str, Any]]:
         if self._buffer:
             _, tool_calls = extract_textual_tool_calls(self._buffer)
             for tc in tool_calls:
