@@ -1,0 +1,161 @@
+{
+  "metadata": {
+    "session_id": "eval-9cc1ebc4",
+    "model": "gemma4:31b-cloud",
+    "timestamp": "2026-04-23 14:28:32"
+  },
+  "results": [
+    {
+      "step": 1,
+      "phase": "Identity",
+      "title": "System Role",
+      "passed": true,
+      "latency": 14.635829210281372,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 2,
+      "phase": "Memory",
+      "title": "RAG Recall",
+      "passed": true,
+      "latency": 0.46929025650024414,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 3,
+      "phase": "Memory",
+      "title": "Short-Term Memory",
+      "passed": true,
+      "latency": 14.957484722137451,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 4,
+      "phase": "Memory",
+      "title": "Short-Term Recall",
+      "passed": true,
+      "latency": 14.685920000076294,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 5,
+      "phase": "Isolation",
+      "title": "Session A Setup",
+      "passed": true,
+      "latency": 13.458619594573975,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 6,
+      "phase": "Isolation",
+      "title": "Session B Isolation",
+      "passed": true,
+      "latency": 15.569768190383911,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 7,
+      "phase": "System",
+      "title": "Current Date/Time",
+      "passed": true,
+      "latency": 16.372432470321655,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 8,
+      "phase": "System",
+      "title": "File Read",
+      "passed": true,
+      "latency": 15.890622854232788,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 9,
+      "phase": "System",
+      "title": "Directory Listing",
+      "passed": true,
+      "latency": 33.9778950214386,
+      "tool_calls": 2,
+      "thinking": 1,
+      "reasons": []
+    },
+    {
+      "step": 10,
+      "phase": "Reasoning",
+      "title": "Sequential Thinking",
+      "passed": false,
+      "latency": 26.153971195220947,
+      "tool_calls": 0,
+      "thinking": 1,
+      "reasons": [
+        "None of required tools ['sequential_thinking'] were called"
+      ]
+    },
+    {
+      "step": 11,
+      "phase": "Web",
+      "title": "Web Search",
+      "passed": true,
+      "latency": 34.734076499938965,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 12,
+      "phase": "Web",
+      "title": "Web Fetch",
+      "passed": true,
+      "latency": 31.015093088150024,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 13,
+      "phase": "Continuity",
+      "title": "Tool Follow-Up",
+      "passed": true,
+      "latency": 82.5413498878479,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 14,
+      "phase": "RAG",
+      "title": "Explicit RAG Fact",
+      "passed": true,
+      "latency": 0.4522120952606201,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 15,
+      "phase": "RAG",
+      "title": "RAG vs General Knowledge",
+      "passed": true,
+      "latency": 0.5247526168823242,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    }
+  ]
+}

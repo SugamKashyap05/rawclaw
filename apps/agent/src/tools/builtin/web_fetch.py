@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import socket
 import time
@@ -18,10 +19,14 @@ BLOCKED_PREFIXES = [
     "172.31.", "169.254.", "::1", "fc00:", "fd"
 ]
 
-def _is_safe_url(url: str) -> Tuple[bool, str]:
+# DNS resolution timeout in seconds
+DNS_RESOLVE_TIMEOUT = 5.0
+
+async def _is_safe_url(url: str) -> Tuple[bool, str]:
     """
     Validates a URL against common SSRF targets and schemes.
     This check runs before any HTTP connection is attempted.
+    Uses async DNS resolution to avoid blocking the event loop.
     """
     try:
         parsed = urlparse(url)
@@ -31,7 +36,22 @@ def _is_safe_url(url: str) -> Tuple[bool, str]:
         if not hostname:
             return False, "URL has no hostname"
         
-        resolved_ip = socket.gethostbyname(hostname)
+        # CRITICAL FIX: Use async DNS resolution instead of blocking socket.gethostbyname()
+        # The old synchronous call blocked the entire event loop for up to 30s per URL,
+        # which caused the chat stream to freeze and the UI to hang.
+        try:
+            loop = asyncio.get_event_loop()
+            addrinfo = await asyncio.wait_for(
+                loop.getaddrinfo(hostname, None, family=socket.AF_INET),
+                timeout=DNS_RESOLVE_TIMEOUT,
+            )
+            if not addrinfo:
+                return False, f"Could not resolve hostname: {hostname}"
+            # addrinfo entries: (family, type, proto, canonname, sockaddr)
+            resolved_ip = addrinfo[0][4][0]
+        except asyncio.TimeoutError:
+            return False, f"DNS resolution timed out for hostname: {hostname}"
+
         for prefix in BLOCKED_PREFIXES:
             if resolved_ip.startswith(prefix):
                 return False, f"Blocked: {resolved_ip} is a private/loopback address"
@@ -82,12 +102,12 @@ class WebFetchTool(BaseTool):
         extract_text = input.get("extract_text", True)
         
         # 1. SSRF PROTECTION CHECK
-        is_safe, reason = _is_safe_url(url)
+        is_safe, reason = await _is_safe_url(url)
         if not is_safe:
             return ToolResult(
-                success=False,
-                error=reason,
                 tool_name=self.name,
+                input=input,
+                error=reason,
                 duration_ms=0,
                 sandboxed=False
             )
@@ -128,8 +148,8 @@ class WebFetchTool(BaseTool):
                         
                     duration_ms = int((time.monotonic() - start_time) * 1000)
                     return ToolResult(
-                        success=True,
                         tool_name=self.name,
+                        input=input,
                         output={
                             "url": str(response.url),
                             "title": title,
@@ -143,17 +163,17 @@ class WebFetchTool(BaseTool):
                     
         except httpx.HTTPError as e:
             return ToolResult(
-                success=False,
-                error=f"HTTP error: {str(e)}",
                 tool_name=self.name,
+                input=input,
+                error=f"HTTP error: {str(e)}",
                 duration_ms=int((time.monotonic() - start_time) * 1000),
                 sandboxed=False
             )
         except Exception as e:
             return ToolResult(
-                success=False,
-                error=f"Fetch failed: {str(e)}",
                 tool_name=self.name,
+                input=input,
+                error=f"Fetch failed: {str(e)}",
                 duration_ms=int((time.monotonic() - start_time) * 1000),
                 sandboxed=False
             )

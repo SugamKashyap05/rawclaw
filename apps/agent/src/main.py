@@ -138,7 +138,10 @@ async def lifespan(app: FastAPI):
         collection_name=cfg.CHROMA_COLLECTION,
     )
     app.state.chroma_memory = chroma_memory
-    app.state.knowledge_brain = KnowledgeBrain(chroma_memory) if cfg.ENABLE_WIKIPEDIA_RAG else None
+    # Always enable the knowledge brain so internal Chroma recall works.
+    # The KnowledgeBrain itself already degrades gracefully when Wikipedia
+    # augmentation is unavailable or disabled.
+    app.state.knowledge_brain = KnowledgeBrain(chroma_memory)
     app.state.use_langgraph = cfg.USE_LANGGRAPH
     app.state.mcp_discovery = MCPDiscovery(chroma_memory)
     logger.info("ChromaDB memory and MCP discovery initialized")

@@ -49,8 +49,13 @@ class KnowledgeBrain:
         internal = []
         external = []
 
+        logger.info(f"DEBUG: Retrieving memory for query: '{query}' (session: {session_id})")
+
         if self.chroma_memory:
-            internal = self.chroma_memory.search(
+            # Blend session-scoped chat recall with global knowledge recall.
+            # Test memory and manually added knowledge entries are usually not
+            # stored with a session_id, so a strict session filter hides them.
+            session_literal = self.chroma_memory.search_literal(
                 query=query,
                 session_id=session_id,
                 collection=collection,
@@ -58,6 +63,47 @@ class KnowledgeBrain:
                 source=source,
                 n_results=limit,
             )
+            global_literal = self.chroma_memory.search_literal(
+                query=query,
+                collection=collection,
+                tags=tags,
+                source=source,
+                n_results=limit,
+            )
+            session_results = self.chroma_memory.search(
+                query=query,
+                session_id=session_id,
+                collection=collection,
+                tags=tags,
+                source=source,
+                n_results=limit,
+            )
+            global_results = self.chroma_memory.search(
+                query=query,
+                collection=collection,
+                tags=tags,
+                source=source,
+                n_results=limit,
+            )
+
+            logger.info(f"DEBUG: Session results count: {len(session_results)}")
+            logger.info(f"DEBUG: Global results count: {len(global_results)}")
+            logger.info(f"DEBUG: Session literal results count: {len(session_literal)}")
+            logger.info(f"DEBUG: Global literal results count: {len(global_literal)}")
+            if global_results:
+                logger.info(f"DEBUG: Top global result content: {global_results[0].get('content', 'N/A')[:100]}...")
+            if global_literal:
+                logger.info(f"DEBUG: Top global literal result content: {global_literal[0].get('content', 'N/A')[:100]}...")
+
+            seen_ids: set[str] = set()
+            for item in session_literal + global_literal + session_results + global_results:
+                item_id = str(item.get("id", ""))
+                if item_id in seen_ids:
+                    continue
+                seen_ids.add(item_id)
+                internal.append(item)
+                if len(internal) >= limit:
+                    break
 
         if self.wikipedia and query.strip():
             try:
@@ -106,15 +152,16 @@ class KnowledgeBrain:
 
         blocks: list[str] = []
         if retrieval.get("internal"):
-            blocks.append("Internal memory:")
+            blocks.append("INTERNAL TRUSTED KNOWLEDGE (USE THIS FOR ACCURACY):")
             for item in retrieval["internal"][:4]:
-                blocks.append(f"- [{item.get('collection', 'memory')}] {item.get('preview', item.get('content', ''))}")
+                blocks.append(f"- [{item.get('collection', 'memory')}] {item.get('content', item.get('preview', ''))}")
 
         if retrieval.get("external"):
             blocks.append("Wikipedia knowledge:")
             for item in retrieval["external"][:2]:
-                blocks.append(f"- [{item.get('source', 'Wikipedia')}] {item.get('preview', item.get('content', ''))}")
+                blocks.append(f"- [{item.get('source', 'Wikipedia')}] {item.get('content', item.get('preview', ''))}")
 
         context = "\n".join(blocks).strip()
+        logger.info(f"DEBUG: Final context block: \n--- START ---\n{context}\n--- END ---")
         logger.info(f"Context built: {len(blocks)} blocks found.")
         return context

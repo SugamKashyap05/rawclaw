@@ -94,17 +94,17 @@ class DuckDuckGoSearchTool(BaseTool):
 
     async def duckduckgo_search(self, query: str) -> Optional[List[Dict]]:
         """Search using DuckDuckGo Html directly and fallback to Wikipedia if needed."""
+        results = []
         try:
             import bs4
             import urllib.parse
-            async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=5) as client:
                 data = {"q": query, "b": "", "kl": "wt-wt"}
                 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
                 resp = await client.post("https://html.duckduckgo.com/html/", data=data, headers=headers)
                 resp.raise_for_status()
                 
                 soup = bs4.BeautifulSoup(resp.text, "html.parser")
-                results = []
                 for result in soup.find_all("div", class_="result"):
                     title_elem = result.find("a", class_="result__url")
                     snippet_elem = result.find("a", class_="result__snippet")
@@ -124,30 +124,30 @@ class DuckDuckGoSearchTool(BaseTool):
                             "url": url,
                             "snippet": snippet,
                         })
-                
-                if not results:
-                    # Fallback to Wikipedia Opensearch if DuckDuckGo Html returns nothing
-                    try:
-                        wiki_resp = await client.get(
-                            "https://en.wikipedia.org/w/api.php",
-                            params={"action": "opensearch", "search": query, "limit": 10, "format": "json"}
-                        )
-                        wiki_resp.raise_for_status()
-                        wiki_data = wiki_resp.json()
-                        if len(wiki_data) == 4 and wiki_data[1]:
-                            for i in range(len(wiki_data[1])):
-                                results.append({
-                                    "title": wiki_data[1][i] + " (Wikipedia)",
-                                    "snippet": wiki_data[2][i] or f"Wikipedia article for {wiki_data[1][i]}",
-                                    "url": wiki_data[3][i]
-                                })
-                    except Exception as e:
-                        logger.warning(f"Wikipedia fallback failed: {e}")
-                
-                return results if results else None
         except Exception as e:
-            logger.error(f"DuckDuckGo error: {e}")
-            return None
+            logger.warning(f"DuckDuckGo search failed, will fallback: {e}")
+
+        if not results:
+            # Fallback to Wikipedia Opensearch if DuckDuckGo Html returns nothing
+            try:
+                async with httpx.AsyncClient(timeout=5) as client:
+                    wiki_resp = await client.get(
+                        "https://en.wikipedia.org/w/api.php",
+                        params={"action": "opensearch", "search": query, "limit": 10, "format": "json"}
+                    )
+                    wiki_resp.raise_for_status()
+                    wiki_data = wiki_resp.json()
+                    if len(wiki_data) == 4 and wiki_data[1]:
+                        for i in range(len(wiki_data[1])):
+                            results.append({
+                                "title": wiki_data[1][i] + " (Wikipedia)",
+                                "snippet": wiki_data[2][i] or f"Wikipedia article for {wiki_data[1][i]}",
+                                "url": wiki_data[3][i]
+                            })
+            except Exception as e:
+                logger.warning(f"Wikipedia fallback failed: {e}")
+        
+        return results if results else None
 
     async def health_check(self) -> str:
         return "ok"

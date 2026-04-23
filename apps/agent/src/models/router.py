@@ -230,7 +230,7 @@ class ModelRouter:
                     async for chunk in ensure_async_iterator(generator):
                         if isinstance(chunk, dict) and chunk.get("type") == "error":
                             err_msg = chunk.get("message", "")
-                            if "not found" in err_msg.lower() or "404" in err_msg:
+                            if "not found" in err_msg.lower() or "404" in err_msg or "does not support tools" in err_msg.lower():
                                 last_error = err_msg
                                 break
                             yield chunk

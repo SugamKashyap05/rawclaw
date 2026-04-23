@@ -1,0 +1,33 @@
+{
+  "metadata": {
+    "session_id": "eval-41974e23",
+    "model": "gemma4:31b-cloud",
+    "timestamp": "2026-04-23 09:29:02"
+  },
+  "results": [
+    {
+      "step": 1,
+      "phase": "Identity",
+      "title": "System Role",
+      "passed": false,
+      "latency": 4.976142644882202,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [
+        "Missing keyword: agent"
+      ]
+    },
+    {
+      "step": 2,
+      "phase": "Memory",
+      "title": "RAG Recall",
+      "passed": false,
+      "latency": 5.333209753036499,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [
+        "Missing keyword: X-DELTA-9-GHOST"
+      ]
+    }
+  ]
+}

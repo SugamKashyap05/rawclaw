@@ -11,6 +11,16 @@ const Tasks: React.FC = () => {
   const [runs, setRuns] = useState<TaskRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    description: '',
+    agentId: '',
+    schedule: '',
+    workspaceId: 'default',
+  });
 
   useEffect(() => {
     fetchData();
@@ -39,6 +49,42 @@ const Tasks: React.FC = () => {
       fetchData();
     } catch (error) {
       console.error('Failed to run task:', error);
+    }
+  };
+
+  const createTask = async () => {
+    const payload = {
+      name: createForm.name.trim(),
+      description: createForm.description.trim(),
+      agentId: createForm.agentId.trim() || undefined,
+      schedule: createForm.schedule.trim() || undefined,
+      workspaceId: createForm.workspaceId.trim() || 'default',
+      toolIds: [],
+    };
+
+    if (!payload.name || !payload.description) {
+      setCreateError('Task name and description are required.');
+      return;
+    }
+
+    setCreating(true);
+    setCreateError('');
+    try {
+      await api.post('/tasks', payload);
+      setCreateForm({
+        name: '',
+        description: '',
+        agentId: '',
+        schedule: '',
+        workspaceId: 'default',
+      });
+      setShowCreateForm(false);
+      await fetchData();
+    } catch (error: any) {
+      console.error('Failed to create task:', error);
+      setCreateError(error?.response?.data?.message || 'Failed to create task.');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -71,10 +117,96 @@ const Tasks: React.FC = () => {
             // ACTIVE_AGENTS: {tasks.length} | TOTAL_EXECUTIONS: {runs.length}
           </p>
         </div>
-        <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <button
+          className="btn-primary"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          onClick={() => {
+            setCreateError('');
+            setShowCreateForm((current) => !current);
+          }}
+        >
           <FiPlus /> CREATE_TASK
         </button>
       </div>
+
+      {showCreateForm && (
+        <div className="glass-card" style={{ marginBottom: '2rem', display: 'grid', gap: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Create Task</h2>
+            <button className="btn-ghost" onClick={() => setShowCreateForm(false)}>
+              CLOSE
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+            <label className="mono" style={{ display: 'grid', gap: '0.5rem', fontSize: '0.75rem' }}>
+              TASK_NAME
+              <input
+                value={createForm.name}
+                onChange={(e) => setCreateForm((current) => ({ ...current, name: e.target.value }))}
+                placeholder="Daily Workspace Scan"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.85rem' }}
+              />
+            </label>
+
+            <label className="mono" style={{ display: 'grid', gap: '0.5rem', fontSize: '0.75rem' }}>
+              AGENT_ID_OPTIONAL
+              <input
+                value={createForm.agentId}
+                onChange={(e) => setCreateForm((current) => ({ ...current, agentId: e.target.value }))}
+                placeholder="Leave blank for default agent"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.85rem' }}
+              />
+            </label>
+
+            <label className="mono" style={{ display: 'grid', gap: '0.5rem', fontSize: '0.75rem' }}>
+              SCHEDULE_OPTIONAL
+              <input
+                value={createForm.schedule}
+                onChange={(e) => setCreateForm((current) => ({ ...current, schedule: e.target.value }))}
+                placeholder="0 */6 * * *"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.85rem' }}
+              />
+            </label>
+
+            <label className="mono" style={{ display: 'grid', gap: '0.5rem', fontSize: '0.75rem' }}>
+              WORKSPACE_ID
+              <input
+                value={createForm.workspaceId}
+                onChange={(e) => setCreateForm((current) => ({ ...current, workspaceId: e.target.value }))}
+                placeholder="default"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.85rem' }}
+              />
+            </label>
+          </div>
+
+          <label className="mono" style={{ display: 'grid', gap: '0.5rem', fontSize: '0.75rem' }}>
+            DESCRIPTION
+            <textarea
+              value={createForm.description}
+              onChange={(e) => setCreateForm((current) => ({ ...current, description: e.target.value }))}
+              placeholder="Describe what this task should do."
+              rows={4}
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-glass)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.85rem', resize: 'vertical' }}
+            />
+          </label>
+
+          {createError && (
+            <div className="mono" style={{ color: 'var(--error)', fontSize: '0.75rem' }}>
+              {createError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+            <button className="btn-ghost" onClick={() => setShowCreateForm(false)} disabled={creating}>
+              CANCEL
+            </button>
+            <button className="btn-primary" onClick={createTask} disabled={creating} style={{ opacity: creating ? 0.7 : 1 }}>
+              {creating ? 'CREATING...' : 'SAVE_TASK'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '2rem', alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -139,10 +271,10 @@ const Tasks: React.FC = () => {
                   borderRadius: '4px', 
                   padding: '0.75rem',
                   fontSize: '0.8rem',
-                  borderLeft: `2px solid ${getStatusColor(run.status)}`
+                  borderLeft: `2px solid ${getStatusColor(run.status)}` 
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span style={{ fontWeight: 600 }}>{run.task?.name || 'UNKNOWN_TASK'}</span>
+                    <span style={{ fontWeight: 600 }}>{run.task?.name || (run as any).definition?.name || 'UNKNOWN_TASK'}</span>
                     <span className="mono" style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                       {run.startedAt ? formatDistanceToNow(new Date(run.startedAt), { addSuffix: true }).toUpperCase() : 'PENDING'}
                     </span>

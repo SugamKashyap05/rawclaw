@@ -38,6 +38,14 @@ export class ChatOrchestratorService {
     const systemContext = await this.docsService.getSystemContext();
     const selectedAgent = await this.agentsService.getOptional(request.agent_id);
 
+    // Respect the selected agent's preferred model when the request itself
+    // did not explicitly choose one. Without this, agent-bound modelIds are
+    // silently ignored and the request falls back to default routing.
+    if (!request.model && selectedAgent?.modelId) {
+      request.model = selectedAgent.modelId;
+      this.logger.log(`Resolved selected agent '${selectedAgent.name}' to model '${selectedAgent.modelId}'`);
+    }
+
     // Resolve complexity to a specific model mapping if model ID is not provided
     if (!request.model && request.complexity) {
       const config = await (this.modelsService as any).getConfig();
@@ -358,6 +366,28 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     res.setHeader('X-Accel-Buffering', 'no');
 
     return new Promise<void>((resolve) => {
+      // Stream inactivity timeout: if the agent goes silent for this long,
+      // force-close the stream so the frontend doesn't hang forever.
+      const STREAM_INACTIVITY_TIMEOUT_MS = 150_000; // 150s (> executor's 120s deadline)
+      let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const resetInactivityTimer = () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+          if (!streamClosed) {
+            this.logger.error(`[STREAM_TIMEOUT] No data received for ${STREAM_INACTIVITY_TIMEOUT_MS / 1000}s. Force-closing stream.`);
+            void finalize({
+              type: 'error',
+              error: 'stream_timeout',
+              message: 'The agent stopped responding. Please try again.',
+            });
+          }
+        }, STREAM_INACTIVITY_TIMEOUT_MS);
+      };
+
+      // Start the initial timer
+      resetInactivityTimer();
+
       const finalize = async (payload?: Record<string, unknown>) => {
         if (streamClosed) {
           this.logger.debug(`[STREAM_FINAL] Finalize called but stream already closed.`);
@@ -365,6 +395,12 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
         }
         this.logger.log(`[STREAM_FINAL] Finalizing stream for session ${request.session_id} (payload type: ${payload?.type || 'none'})`);
         streamClosed = true;
+
+        // Clear inactivity timer
+        if (inactivityTimer) {
+          clearTimeout(inactivityTimer);
+          inactivityTimer = null;
+        }
 
         // Ensure we persist whatever we have
         const citations = sources.length > 0 ? sources.map(url => ({ url, title: url })) : undefined;
@@ -493,6 +529,9 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       let processingPromise = Promise.resolve();
 
       agentStream.data.on('data', (chunk: Buffer) => {
+        // Reset inactivity timer on every data chunk
+        resetInactivityTimer();
+
         streamBuffer += chunk.toString('utf8');
         const lines = streamBuffer.split('\n');
         streamBuffer = lines.pop() || '';

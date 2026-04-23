@@ -13,7 +13,7 @@ import json
 import logging
 import os
 import time
-from typing import Dict, Literal
+from typing import Dict, Literal, Optional
 
 import httpx
 
@@ -41,6 +41,33 @@ class ConfirmationGate:
 
     def __init__(self, api_url: str = DEFAULT_API_URL) -> None:
         self.api_url = api_url.rstrip("/")
+        self.auth_secret = os.getenv("AUTH_SECRET", "")
+        self._token: Optional[str] = None
+
+    async def _get_auth_headers(self) -> Dict[str, str]:
+        """
+        Acquire a JWT for service-to-service confirmation requests.
+        Falls back to no auth only if token bootstrap fails.
+        """
+        if self._token:
+            return {"Authorization": f"Bearer {self._token}"}
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    f"{self.api_url}/api/auth/token",
+                    json={"secret": self.auth_secret},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                token = data.get("access_token")
+                if token:
+                    self._token = token
+                    return {"Authorization": f"Bearer {token}"}
+        except Exception as e:
+            logger.warning(f"Failed to obtain auth token for confirmation gate: {e}")
+
+        return {}
 
     async def request_confirmation(
         self,
@@ -57,9 +84,11 @@ class ConfirmationGate:
 
         # 1. Create confirmation request
         try:
+            headers = await self._get_auth_headers()
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.post(
                     f"{self.api_url}/api/tools/confirm/request",
+                    headers=headers,
                     json={
                         "sessionId": session_id,
                         "toolName": tool_name,
@@ -87,9 +116,11 @@ class ConfirmationGate:
             elapsed += POLL_INTERVAL
 
             try:
+                headers = await self._get_auth_headers()
                 async with httpx.AsyncClient(timeout=10) as client:
                     resp = await client.get(
-                        f"{self.api_url}/api/tools/confirm/{confirmation_id}"
+                        f"{self.api_url}/api/tools/confirm/{confirmation_id}",
+                        headers=headers,
                     )
                     resp.raise_for_status()
                     data = resp.json()

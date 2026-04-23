@@ -101,7 +101,8 @@ class SmartWebSearchTool(BaseTool):
                 sandboxed=False,
             )
 
-        # 3. Automatic Fetching of Top Results
+        # 3. Automatic Fetching of Top Results (with bounded timeout)
+        FETCH_TIMEOUT = 30  # seconds — hard deadline for all fetches combined
         top_results = results[:fetch_top]
         fetch_tasks = []
         for res in top_results:
@@ -109,7 +110,14 @@ class SmartWebSearchTool(BaseTool):
             if url:
                 fetch_tasks.append(self.fetch_tool.execute({"url": url}))
         
-        fetch_results = await asyncio.gather(*fetch_tasks) if fetch_tasks else []
+        try:
+            fetch_results = await asyncio.wait_for(
+                asyncio.gather(*fetch_tasks, return_exceptions=True),
+                timeout=FETCH_TIMEOUT,
+            ) if fetch_tasks else []
+        except asyncio.TimeoutError:
+            logger.warning(f"SmartWebSearch fetch timeout after {FETCH_TIMEOUT}s — returning results without full content")
+            fetch_results = []
         
         # 4. Consolidate Output
         enriched_results = []

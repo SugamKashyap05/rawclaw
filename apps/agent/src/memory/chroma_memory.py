@@ -6,6 +6,7 @@ vector store, with metadata filters for collection, source, and tags.
 """
 import json
 import logging
+import re
 import time
 from datetime import datetime
 from typing import Any, Optional
@@ -246,6 +247,87 @@ class ChromaMemory:
             )
 
         return formatted[:n_results]
+
+    def search_literal(
+        self,
+        query: str,
+        session_id: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        source: Optional[str] = None,
+        collection: Optional[str] = None,
+        n_results: int = 5,
+    ) -> list[dict]:
+        """
+        Deterministic lexical fallback for exact identifiers and other
+        high-signal queries that vector search may miss.
+        """
+        if self.collection is None:
+            return []
+
+        try:
+            results = self.collection.get(
+                where=self._build_where(session_id=session_id, collection=collection, source=source),
+                include=["documents", "metadatas"],
+            )
+        except Exception as error:
+            logger.warning("Literal memory search failed: %s", error)
+            return []
+
+        requested_tags = {tag.strip().lower() for tag in (tags or []) if tag and tag.strip()}
+        documents = results.get("documents") or []
+        metadatas = results.get("metadatas") or []
+
+        identifier_tokens = {
+            token.upper()
+            for token in re.findall(r"\b[A-Z][A-Z0-9_]{2,}\b", query or "")
+        }
+        query_lower = (query or "").lower()
+        query_words = [word for word in re.findall(r"\w+", query_lower) if len(word) > 2]
+
+        ranked: list[dict[str, Any]] = []
+        for index, document in enumerate(documents):
+            metadata = metadatas[index] if index < len(metadatas) else {}
+            entry_tags = self._parse_tags(metadata.get("tags"))
+            if requested_tags and not requested_tags.issubset({tag.lower() for tag in entry_tags}):
+                continue
+
+            doc_text = str(document or "")
+            haystack_lower = doc_text.lower()
+            haystack_upper = doc_text.upper()
+
+            score = 0.0
+            for token in identifier_tokens:
+                if token in haystack_upper:
+                    score += 10.0
+            if query_lower and query_lower in haystack_lower:
+                score += 6.0
+            for word in query_words:
+                if word in haystack_lower:
+                    score += 1.0
+
+            if score <= 0:
+                continue
+
+            ranked.append(
+                {
+                    "id": metadata.get("id") or f"literal-memory-{index}",
+                    "content": doc_text,
+                    "preview": doc_text[:217] + "..." if len(doc_text) > 220 else doc_text,
+                    "role": metadata.get("role", "knowledge"),
+                    "session_id": metadata.get("session_id", ""),
+                    "timestamp": metadata.get("timestamp", ""),
+                    "distance": 0.0,
+                    "score": round(score, 4),
+                    "source": metadata.get("source") or None,
+                    "collection": metadata.get("collection", "default"),
+                    "tags": entry_tags,
+                    "createdAt": metadata.get("timestamp", ""),
+                    "updatedAt": metadata.get("timestamp", ""),
+                }
+            )
+
+        ranked.sort(key=lambda item: item["score"], reverse=True)
+        return ranked[:n_results]
 
     def get_session_history(self, session_id: str, limit: int = 20) -> list[dict]:
         if self.collection is None:

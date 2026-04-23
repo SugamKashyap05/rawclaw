@@ -140,8 +140,35 @@ async def add_test_memory(token: str, content: str):
     except Exception:
         return False
 
-async def send_chat(session_id: str, message: str, agent_id: str, token: str) -> Dict[str, Any]:
+async def send_chat(
+    session_id: str, 
+    message: str, 
+    agent_id: str, 
+    token: str,
+    expect_approval: bool = False,
+    auto_approve: bool = False
+) -> Dict[str, Any]:
     """Send chat message and collect response."""
+    
+    async def auto_approve_poller():
+        headers = {"Authorization": f"Bearer {token}"}
+        try:
+            async with httpx.AsyncClient() as client:
+                while True:
+                    try:
+                        resp = await client.get(f"{API_BASE}/tools/confirm?sessionId={session_id}", headers=headers, timeout=5.0)
+                        if resp.status_code == 200:
+                            pending = resp.json()
+                            for p in pending:
+                                if p.get("status") == "pending":
+                                    await client.post(f"{API_BASE}/tools/confirm/{p['id']}/approve", headers=headers, timeout=5.0)
+                                    log_info(f"Auto-approved tool call: {p.get('toolName')}")
+                    except Exception:
+                        pass
+                    await asyncio.sleep(1.0)
+        except asyncio.CancelledError:
+            pass
+
     result = {
         "content": "",
         "thinking": [],
@@ -150,11 +177,16 @@ async def send_chat(session_id: str, message: str, agent_id: str, token: str) ->
         "ttft": 0,
         "total_time": 0,
         "success": False,
-        "error": None
+        "error": None,
+        "approval_requested": False
     }
     
     headers = {"Authorization": f"Bearer {token}"}
     start_time = time.time()
+    
+    poller_task = None
+    if auto_approve:
+        poller_task = asyncio.create_task(auto_approve_poller())
     
     try:
         async with httpx.AsyncClient(timeout=300.0) as client:
@@ -208,8 +240,22 @@ async def send_chat(session_id: str, message: str, agent_id: str, token: str) ->
                                 log_info(f"Tool Call: {data.get('tool_call', {}).get('name')}")
                                 
                             elif etype == "tool_result":
-                                result["tool_results"].append(data.get("tool_result"))
-                                log_info(f"Tool Result: {data.get('tool_result', {}).get('tool_call_id')}")
+                                tr = data.get("tool_result", {})
+                                result["tool_results"].append(tr)
+                                t_name = tr.get("tool_name", "Unknown")
+                                t_err = tr.get("error")
+                                if t_err:
+                                    log_info(f"Tool Result ({t_name}): Error - {t_err[:50]}")
+                                else:
+                                    out_len = len(str(tr.get("output", "")))
+                                    log_info(f"Tool Result ({t_name}): Success ({out_len} chars output)")
+                                    
+                            elif etype == "approval_required":
+                                result["approval_requested"] = True
+                                log_info(f"Tool approval requested: {data.get('reason', '')}")
+                                if expect_approval and not auto_approve:
+                                    result["success"] = True
+                                    return result
                                 
                             elif etype == "error":
                                 result["error"] = data.get("message")
@@ -221,6 +267,9 @@ async def send_chat(session_id: str, message: str, agent_id: str, token: str) ->
                             continue
     except Exception as e:
         result["error"] = f"{type(e).__name__}: {str(e)}"
+    finally:
+        if poller_task:
+            poller_task.cancel()
         
     result["total_time"] = time.time() - start_time
     return result
@@ -257,14 +306,14 @@ async def main():
         sys.exit(1)
         
     # Inject diverse memory types
-    await add_test_memory(token, "PROJECT_VANGUARD: The secret decryption key is 'X-DELTA-9-GHOST'.")
+    await add_test_memory(token, "PROJECT_VANGUARD: The project identifier is 'X-DELTA-9-GHOST'.")
     await add_test_memory(token, "RawClaw's system kernel was initialized by Operator-X on January 15th, 2026.")
     await add_test_memory(token, "The current mission objective for RawClaw is 'Autonomous Workspace Mastery'.")
-    
+
     session_id = f"eval-{uuid4().hex[:8]}"
     log_info(f"Session: {session_id}")
     log_info(f"Model:   {model_to_use}")
-    
+
     test_cases = [
         # Phase 1: Identity & System Awareness
         {
@@ -273,6 +322,112 @@ async def main():
             "msg": "Identify yourself. What is your name, your purpose, and which system do you reside in?",
             "check": ["rawclaw", "agent"]
         },
+        {
+            "phase": "Memory",
+            "title": "RAG Recall",
+            "msg": "According to your records, what is the identifier associated with PROJECT_VANGUARD?",
+            "check": ["X-DELTA-9-GHOST"]
+        },
+        # Short-Term Memory (Multi-turn)
+        {
+            "phase": "Memory",
+            "title": "Short-Term Memory",
+            "msg": "My favorite color is teal.",
+            "is_setup": True,
+            "check": []
+        },
+        {
+            "phase": "Memory",
+            "title": "Short-Term Recall",
+            "msg": "What color did I just say was my favorite?",
+            "check": ["teal"]
+        },
+        # Session Isolation
+        {
+            "phase": "Isolation",
+            "title": "Session A Setup",
+            "msg": "My codename is ORBIT-7.",
+            "new_session": "session-a",
+            "is_setup": True,
+            "check": []
+        },
+        {
+            "phase": "Isolation",
+            "title": "Session B Isolation",
+            "msg": "What is my codename?",
+            "new_session": "session-b",
+            "not_check": ["ORBIT-7"]
+        },
+        # System Awareness
+        {
+            "phase": "System",
+            "title": "Current Date/Time",
+            "msg": "What is the current local date and time?",
+            "tool": "get_datetime",
+            "check": ["2026-04-23"]
+        },
+        {
+            "phase": "System",
+            "title": "File Read",
+            "msg": "Read the contents of README.md and summarize it.",
+            "tool": "read_file",
+            "expect_approval": True,
+            "auto_approve": True
+        },
+        {
+            "phase": "System",
+            "title": "Directory Listing",
+            "msg": "List the top-level files and folders in the workspace.",
+            "tool": "list_dir"
+        },
+        # Advanced Reasoning
+        {
+            "phase": "Reasoning",
+            "title": "Sequential Thinking",
+            "msg": "Think step by step: how would you design a safe tool-execution agent?",
+            "tool_any": ["sequential_thinking"],
+            "require_thinking": True
+        },
+        # Web Tools
+        {
+            "phase": "Web",
+            "title": "Web Search",
+            "msg": "Search the web for the latest news about SpaceX Starship and summarize it.",
+            "tool_any": ["web_search", "duckduckgo_search"],
+            "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"]
+        },
+        {
+            "phase": "Web",
+            "title": "Web Fetch",
+            "msg": "Open https://auranixdigital.com/ and summarize the page.",
+            "tool": "web_fetch",
+            "require_non_trivial": True,
+            "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"]
+        },
+        # Multi-turn Tooling
+        {
+            "phase": "Continuity",
+            "title": "Tool Follow-Up",
+            "msg": "Search the web for the latest IPL news and then give me a 3-bullet summary.",
+            "tool_any": ["web_search", "duckduckgo_search"],
+            "require_non_empty": True,
+            "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"]
+        },
+        # Advanced RAG
+        {
+            "phase": "RAG",
+            "title": "Explicit RAG Fact",
+            "inject": "Operation NIGHTGLASS uses access token 'SIGMA-44'.",
+            "msg": "According to your records, what access token does Operation NIGHTGLASS use?",
+            "check": ["SIGMA-44"]
+        },
+        {
+            "phase": "RAG",
+            "title": "RAG vs General Knowledge",
+            "inject": "For internal testing, PROJECT_ATLAS launch date is 2031-01-01.",
+            "msg": "According to your records, when is PROJECT_ATLAS scheduled?",
+            "check": ["2031-01-01"]
+        },
     ]
 
     results = []
@@ -280,47 +435,114 @@ async def main():
     
     for i, tc in enumerate(test_cases, 1):
         log_step(i, tc["phase"], tc["title"], len(test_cases))
+
+        # Handle dynamic session IDs (Isolation tests)
+        current_session = session_id
+        if "new_session" in tc:
+            current_session = f"eval-{tc['new_session']}-{uuid4().hex[:4]}"
+            log_info(f"Switching to isolated session: {current_session}")
+
+        # Handle dynamic memory injection (Advanced RAG tests)
+        if "inject" in tc:
+            await add_test_memory(token, tc["inject"])
+
         log_send(tc["msg"])
-        
-        res = await send_chat(session_id, tc["msg"], agent_id, token)
-        
+
+        res = await send_chat(
+            current_session, 
+            tc["msg"], 
+            agent_id, 
+            token,
+            expect_approval=tc.get("expect_approval", False),
+            auto_approve=tc.get("auto_approve", False)
+        )
+
         if res["error"]:
             log_error(f"Error: {res['error']}")
             results.append({
-                "step": i, 
+                "step": i,
                 "phase": tc["phase"],
-                "title": tc["title"], 
-                "passed": False, 
+                "title": tc["title"],
+                "passed": False,
                 "error": res["error"]
             })
         else:
             log_recv(res["content"], res["total_time"])
-            
+
             passed = True
             reasons = []
-            
-            # Keyword check
-            if "check" in tc:
-                content_lower = res["content"].lower()
-                for keyword in tc["check"]:
-                    if keyword.lower() not in content_lower:
+
+            # Setup steps always pass
+            if tc.get("is_setup"):
+                log_success("Setup step completed.")
+            else:
+                # Positive Keyword check
+                if "check" in tc:
+                    content_lower = res["content"].lower()
+                    for keyword in tc["check"]:
+                        # Relax date validation: allow "April 23, 2026" or "2026-04-23"
+                        if keyword == "2026-04-23":
+                            if "2026-04-23" not in content_lower and "april 23, 2026" not in content_lower:
+                                passed = False
+                                reasons.append(f"Missing date: {keyword}")
+                        elif keyword.lower() not in content_lower:
+                            passed = False
+                            reasons.append(f"Missing keyword: {keyword}")
+
+                # Negative Keyword check (Banned strings / Isolation)
+                if "not_check" in tc:
+                    content_lower = res["content"].lower()
+                    for keyword in tc["not_check"]:
+                        if keyword.lower() in content_lower:
+                            passed = False
+                            reasons.append(f"Forbidden keyword found: {keyword}")
+
+                # Tool call check (Exact)
+                if "tool" in tc:
+                    tool_called = any(tc["tool"] == tc_item.get("name", "") for tc_item in res["tool_calls"])
+                    if not tool_called:
                         passed = False
-                        reasons.append(f"Missing keyword: {keyword}")
-            
-            # Tool call check
-            if "tool" in tc:
-                tool_called = any(tc["tool"] in tc_item.get("name", "") for tc_item in res["tool_calls"])
-                if not tool_called:
+                        reasons.append(f"Required tool '{tc['tool']}' not called")
+
+                # Tool call check (One-of-many)
+                if "tool_any" in tc:
+                    tool_called = any(
+                        any(t == tc_item.get("name", "") for t in tc["tool_any"])
+                        for tc_item in res["tool_calls"]
+                    )
+                    if not tool_called:
+                        passed = False
+                        reasons.append(f"None of required tools {tc['tool_any']} were called")
+
+                # Thinking event check
+                if tc.get("require_thinking"):
+                    if not res["thinking"] and not any(tc_item.get("name") == "sequential_thinking" for tc_item in res["tool_calls"]):
+                        passed = False
+                        reasons.append("No thinking events or sequential_thinking tool detected")
+
+                # Approval expectation check
+                if tc.get("expect_approval") and not tc.get("auto_approve") and not res.get("approval_requested"):
                     passed = False
-                    reasons.append(f"Tool '{tc['tool']}' not called")
-            
+                    reasons.append("Approval was expected but not requested")
+
+                # Content Quality checks
+                if tc.get("require_non_empty") and not res["content"].strip():
+                    if not (tc.get("expect_approval") and not tc.get("auto_approve")):
+                        passed = False
+                        reasons.append("Response content is empty")
+
+                if tc.get("require_non_trivial"):
+                    if len(res["content"].strip()) < 20 or "cannot access" in res["content"].lower():
+                        passed = False
+                        reasons.append("Response is trivial or a refusal")
+
             if passed:
                 log_success("Response validated.")
             else:
                 for r in reasons:
                     log_info(f"Validation Note: {r}")
                 log_info("Validation failed.")
-            
+
             results.append({
                 "step": i,
                 "phase": tc["phase"],
@@ -331,7 +553,7 @@ async def main():
                 "thinking": len(res["thinking"]),
                 "reasons": reasons
             })
-            
+
         # Give system time to settle
         await asyncio.sleep(1.5)
         

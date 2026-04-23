@@ -404,6 +404,7 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
   const consumeStream = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
     const decoder = new TextDecoder();
     let assistantText = '';
+    const toolCalls: any[] = [];
     const toolResults: ToolResult[] = [];
     let streamBuffer = '';
 
@@ -441,6 +442,10 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
                 }
                 return next;
               });
+            } else if ((data.type as string) === 'tool_call' && (data as any).tool_call) {
+              const incomingToolCall = (data as any).tool_call;
+              toolCalls.push({ name: incomingToolCall?.name || 'unknown' });
+              patchAssistant({ tool_calls: [...toolCalls.slice(-3)] });
             } else if (data.type === 'tool_result' && data.tool_result) {
               toolResults.push(data.tool_result);
               patchAssistant({ toolResults: [...toolResults] });
@@ -1416,12 +1421,39 @@ function MessageCard({
                   <span className="pulse-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', boxShadow: '0 0 10px currentColor' }} />
                 )}
                 <span style={{ fontSize: '0.9rem', fontStyle: 'italic' }}>
-                  {message.isDeepResearch ? 'Deep Researching...' : 'RawClaw is thinking...'}
+                  {message.approvalRequired
+                    ? 'Waiting for approval...'
+                    : message.tool_calls && message.tool_calls.length > 0
+                      ? `Running tool: ${message.tool_calls[message.tool_calls.length - 1]?.name || 'tool'}...`
+                      : message.isDeepResearch
+                        ? 'Deep Researching...'
+                        : 'RawClaw is thinking...'}
                 </span>
               </div>
             )}
           </div>
         ) : null}
+
+        {!isUser && message.tool_calls && message.tool_calls.length > 0 && (
+          <div style={{ marginTop: '0.8rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            {message.tool_calls.map((toolCall, index) => (
+              <div
+                key={`${toolCall?.name || 'tool'}-${index}`}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: '999px',
+                  background: 'rgba(0, 240, 255, 0.05)',
+                  border: '1px solid rgba(0, 240, 255, 0.12)',
+                  color: 'var(--neon-cyan)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                }}
+              >
+                Tool: {toolCall?.name || 'unknown'}
+              </div>
+            ))}
+          </div>
+        )}
 
         {message.harnessLogs && message.harnessLogs.length > 0 && !message.content && (
           <div style={{ 

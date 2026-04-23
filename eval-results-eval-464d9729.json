@@ -1,0 +1,152 @@
+{
+  "metadata": {
+    "session_id": "eval-464d9729",
+    "model": "gemma4:31b-cloud",
+    "timestamp": "2026-04-23 12:32:54"
+  },
+  "results": [
+    {
+      "step": 1,
+      "phase": "Identity",
+      "title": "System Role",
+      "passed": true,
+      "latency": 17.101306676864624,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 2,
+      "phase": "Memory",
+      "title": "RAG Recall",
+      "passed": true,
+      "latency": 0.45244932174682617,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 3,
+      "phase": "Memory",
+      "title": "Short-Term Memory",
+      "passed": true,
+      "latency": 38.3865020275116,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 4,
+      "phase": "Memory",
+      "title": "Short-Term Recall",
+      "passed": true,
+      "latency": 13.462762832641602,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 5,
+      "phase": "Isolation",
+      "title": "Session A Setup",
+      "passed": true,
+      "latency": 14.245719194412231,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 6,
+      "phase": "Isolation",
+      "title": "Session B Isolation",
+      "passed": true,
+      "latency": 14.56997275352478,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 7,
+      "phase": "System",
+      "title": "Current Date/Time",
+      "passed": true,
+      "latency": 22.457396268844604,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 8,
+      "phase": "System",
+      "title": "File Read",
+      "passed": false,
+      "error": "ReadTimeout: "
+    },
+    {
+      "step": 9,
+      "phase": "System",
+      "title": "Directory Listing",
+      "passed": false,
+      "error": "Ollama returned 400: {\"error\":\"registry.ollama.ai/library/phi3:3.8b does not support tools\"}"
+    },
+    {
+      "step": 10,
+      "phase": "Reasoning",
+      "title": "Sequential Thinking",
+      "passed": false,
+      "latency": 26.884870529174805,
+      "tool_calls": 0,
+      "thinking": 1,
+      "reasons": [
+        "None of required tools ['sequential_thinking'] were called"
+      ]
+    },
+    {
+      "step": 11,
+      "phase": "Web",
+      "title": "Web Search",
+      "passed": false,
+      "error": "ReadTimeout: "
+    },
+    {
+      "step": 12,
+      "phase": "Web",
+      "title": "Web Fetch",
+      "passed": true,
+      "latency": 20.65384006500244,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 13,
+      "phase": "Continuity",
+      "title": "Tool Follow-Up",
+      "passed": true,
+      "latency": 23.053302764892578,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 14,
+      "phase": "RAG",
+      "title": "Explicit RAG Fact",
+      "passed": true,
+      "latency": 0.44135141372680664,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    },
+    {
+      "step": 15,
+      "phase": "RAG",
+      "title": "RAG vs General Knowledge",
+      "passed": true,
+      "latency": 0.4571800231933594,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": []
+    }
+  ]
+}
