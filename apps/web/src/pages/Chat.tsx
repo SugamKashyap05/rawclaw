@@ -536,29 +536,36 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
-    try {
-      const token = localStorage.getItem(AUTH_TOKEN_KEY);
-      const isComplexity = selectedModel.startsWith('complexity:');
-      const response = await fetch('/api/chat/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      try {
+        const token = localStorage.getItem(AUTH_TOKEN_KEY);
+        const isComplexity = selectedModel.startsWith('complexity:');
+        const requestBody: any = {
           session_id: sessionId,
           messages: [{ role: 'user', content: prompt, attachments: currentAttachments.length > 0 ? currentAttachments : undefined }],
-          model: isComplexity ? undefined : selectedModel,
-          complexity: isComplexity ? selectedModel.split(':')[1] : undefined,
+          model: selectedModel,
           temperature,
           top_p,
           stream: true,
           agent_id: selectedAgentId || undefined,
           selection: !explicitEditRequest ? (activeSelection || undefined) : undefined,
           editRequest: explicitEditRequest,
-        }),
-        signal: abortController.signal,
-      });
+        };
+        
+        // Only send complexity when explicitly in complexity mode
+        if (isComplexity) {
+          delete requestBody.model;
+          requestBody.complexity = selectedModel.split(':')[1];
+        }
+        
+        const response = await fetch('/api/chat/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(requestBody),
+          signal: abortController.signal,
+        });
 
       if (!response.ok) {
         const text = await response.text();
@@ -631,22 +638,29 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
     try {
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
       const isComplexity = selectedModel.startsWith('complexity:');
+      const requestBody: any = {
+        sessionId,
+        messageId,
+        content,
+        model: selectedModel,
+        temperature,
+        top_p,
+        agentId: selectedAgentId || undefined,
+      };
+      
+      // Only send complexity when explicitly in complexity mode
+      if (isComplexity) {
+        delete requestBody.model;
+        requestBody.complexity = selectedModel.split(':')[1];
+      }
+      
       const response = await fetch('/api/chat/edit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          sessionId,
-          messageId,
-          content,
-          model: isComplexity ? undefined : selectedModel,
-          complexity: isComplexity ? selectedModel.split(':')[1] : undefined,
-          temperature,
-          top_p,
-          agentId: selectedAgentId || undefined,
-        }),
+        body: JSON.stringify(requestBody),
         signal: abortController.signal,
       });
 
@@ -688,21 +702,28 @@ export default function Chat({ selectedModel, temperature, top_p }: Props) {
     try {
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
       const isComplexity = selectedModel.startsWith('complexity:');
+      const requestBody: any = {
+        sessionId,
+        messageId,
+        model: selectedModel,
+        temperature,
+        top_p,
+        agentId: selectedAgentId || undefined,
+      };
+      
+      // Only send complexity when explicitly in complexity mode
+      if (isComplexity) {
+        delete requestBody.model;
+        requestBody.complexity = selectedModel.split(':')[1];
+      }
+      
       const response = await fetch('/api/chat/regenerate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          sessionId,
-          messageId,
-          model: isComplexity ? undefined : selectedModel,
-          complexity: isComplexity ? selectedModel.split(':')[1] : undefined,
-          temperature,
-          top_p,
-          agentId: selectedAgentId || undefined,
-        }),
+        body: JSON.stringify(requestBody),
         signal: abortController.signal,
       });
 

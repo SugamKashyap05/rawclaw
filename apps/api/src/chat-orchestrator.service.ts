@@ -46,7 +46,8 @@ export class ChatOrchestratorService {
       this.logger.log(`Resolved selected agent '${selectedAgent.name}' to model '${selectedAgent.modelId}'`);
     }
 
-    // Resolve complexity to a specific model mapping if model ID is not provided
+    // Resolve complexity to a specific model mapping ONLY if model ID is not provided
+    // Explicit model selection takes precedence over complexity routing
     if (!request.model && request.complexity) {
       const config = await (this.modelsService as any).getConfig();
       const resolvedModel = config.routing[request.complexity];
@@ -54,6 +55,8 @@ export class ChatOrchestratorService {
         request.model = resolvedModel;
         this.logger.log(`Resolved complexity '${request.complexity}' to model '${resolvedModel}'`);
       }
+    } else if (request.model) {
+      this.logger.log(`Using explicitly selected model: '${request.model}'`);
     }
 
     // Resolve output reviewer from config if not explicitly provided
@@ -298,7 +301,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     };
     
     this.logger.log(`[AGENT_REQ] Forwarding prompt to agent at ${agentUrl}/execute (${allMessages.length} msgs, session=${request.session_id})`);
-    this.logger.log(`[TOOL_TRACE] Sending request to agent with model=${agentRequest.model}, complexity=${agentRequest.complexity}, toolsCount=${toolsSchema?.length || 0}`);
+    this.logger.log(`[TOOL_TRACE] Sending request to agent with model=${agentRequest.model}, complexity=${agentRequest.complexity}, toolsCount=${toolsSchema?.length || 0}, explicitModelSelection=${!!request.model}`);
 
     const attemptRequest = async (): Promise<any> => {
       try {

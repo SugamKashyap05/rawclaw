@@ -26,6 +26,17 @@ RawClaw should support:
 - specialist agents
 - worker agents
 
+## Prompt assets
+
+RawClaw prompt assets live in [docs/prompts](/E:/2026%20final%20projects/rawclaw/docs/prompts/README.md) and should be treated as a layered stack:
+
+- core system prompt
+- tool-grounding prompt
+- review/correction prompt
+- task-specific prompts for research, planning, and review
+
+This keeps persistent behavior separate from workflow-specific instructions and makes prompt tuning easier to test and version.
+
 ## Session and routing expectations
 
 Compared with more mature gateway-native agent systems, RawClaw should also design for:

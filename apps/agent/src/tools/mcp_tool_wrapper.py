@@ -51,6 +51,8 @@ class MCPToolWrapper(BaseTool):
                 self._mcp_tool_name,
                 input,
             )
+            # Log the raw MCP tool result for debugging
+            logger.info(f"MCP tool '{self.name}' raw result: {result}")
             return ToolResult(
                 tool_name=self.name,
                 input=input,

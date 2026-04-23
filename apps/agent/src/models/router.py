@@ -155,7 +155,7 @@ class ModelRouter:
         if not target_model_id:
             target_model_id = settings.DEFAULT_LOW_MODEL
 
-        logger.info(f"[TOOL_TRACE] Router.complete called: model={target_model_id}, tools_count={len(tools) if tools else 0}")
+        logger.info(f"[TOOL_TRACE] Router.complete called: input_model={model}, input_complexity={complexity}, resolved_model={target_model_id}, tools_count={len(tools) if tools else 0}")
 
         # 2. Determine provider chain (Primary -> Fallbacks)
         # Normalize ALL models in the chain, not just the target

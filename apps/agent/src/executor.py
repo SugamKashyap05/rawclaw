@@ -71,7 +71,7 @@ class Executor:
 
         memory_recall_occurred = False
 
-        logger.info(f"[TOOL_TRACE] Executor received request: session={session_id}, model={request.model}, tools_in_request={len(request.tools) if request.tools else 0}, registry_tools={len(tools_schema)}")
+        logger.info(f"[TOOL_TRACE] Executor received request: session={session_id}, model={request.model}, complexity={request.complexity}, tools_in_request={len(request.tools) if request.tools else 0}, registry_tools={len(tools_schema)}")
 
         try:
             # 1. IMMEDIATE YIELD: Ensure the client knows we've started
@@ -471,7 +471,27 @@ class Executor:
                             "role": "tool",
                             "content": json.dumps(tool_result.model_dump()),
                             "name": tool_call.tool_name,
-                        })
+                        });
+                        
+                        # Add system prompt to force synthesis using tool results with truthfulness constraints
+                        # Check if the tool result includes quality assessment
+                        quality_note = ""
+                        if hasattr(tool_result, 'output') and isinstance(tool_result.output, dict):
+                            quality = tool_result.output.get('result_quality')
+                            if quality == "weak":
+                                quality_note = "\nNOTE: The search results appear incomplete or placeholder-like. Be extra cautious and only state what can be verified."
+                        
+                        messages.append({
+                            "role": "system",
+                            "content": "Synthesize a truthful answer using ONLY the tool results. Follow these strict rules:\n"
+                            "1. Only state what the tool results actually PROVE - do not make broader inferences\n"
+                            "2. If results are incomplete, placeholder-like, or conflicting, say you couldn't verify the information\n"
+                            "3. NEVER claim an event 'has not happened' or 'does not exist' based on incomplete search results\n"
+                            "4. Use epistemic language like 'I couldn't verify' or 'the sources appear incomplete' when evidence is weak\n"
+                            "5. Distinguish between 'no results found' and 'results were incomplete/placeholder-like'\n"
+                            "6. Do not use system date or memory to override uncertain tool evidence"
+                            f"{quality_note}"
+                        });
 
                         # Store tool result in memory
                         if chroma_memory and session_id:
@@ -902,7 +922,13 @@ class Executor:
         """
         review_prompt = (
             "You are a Quality Assurance Reviewer.\n"
-            "Review output for accuracy, safety, and helpfulness.\n\n"
+            "Review output for accuracy, safety, and truthfulness under uncertainty.\n\n"
+            "CRITICAL RULES FOR REJECTION:\n"
+            "- REJECT if answer makes stronger factual claims than the tool evidence supports\n"
+            "- REJECT if answer claims an event 'has not happened' based on incomplete search results\n"
+            "- REJECT if answer uses definitive language ('definitely', 'certainly') with weak evidence\n"
+            "- REJECT if answer infers broader conclusions than the tool results justify\n"
+            "- REJECT if answer uses system date/memory to override uncertain tool evidence\n\n"
             "OUTPUT:\n"
             f"{content}\n\n"
             "Respond ONLY with JSON:\n"
