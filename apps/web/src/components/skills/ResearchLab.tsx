@@ -51,6 +51,25 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
     }
   };
 
+  const handleInstallRepo = async (repoRoot: string) => {
+    try {
+      await api.post('/skills/install', { source_path: repoRoot });
+      alert('Skill library installed successfully!');
+      await fetchResearchedSkills();
+      onChanged?.();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to install skill library.');
+    }
+  };
+
+  const groupedByRepo = researchedSkills.reduce<Record<string, any[]>>((acc, skill) => {
+    const key = skill.repo || 'unknown';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(skill);
+    return acc;
+  }, {});
+
   return (
     <section className="glass-card">
       <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Research Lab</h2>
@@ -79,38 +98,77 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
         <p style={{ color: 'var(--text-secondary)' }}>No skills researched yet.</p>
       ) : (
         <div style={{ display: 'grid', gap: '1rem' }}>
-          {researchedSkills.map((skill, idx) => (
-            <div
-              key={idx}
-              style={{
-                border: '1px solid var(--border-glass)',
-                background: 'rgba(255,255,255,0.02)',
-                borderRadius: '14px',
-                padding: '1rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 700, marginBottom: '0.3rem' }}>{skill.name}</div>
-                <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                  {skill.description}
+          {Object.entries(groupedByRepo).map(([repo, repoSkills]) => {
+            const repoRoot = repoSkills[0]?.repo_root;
+            const allInstalled = repoSkills.every((skill) => skill.is_installed);
+            return (
+              <div
+                key={repo}
+                style={{
+                  border: '1px solid var(--border-glass)',
+                  background: 'rgba(255,255,255,0.02)',
+                  borderRadius: '14px',
+                  padding: '1rem',
+                  display: 'grid',
+                  gap: '0.9rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>{repo}</div>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                      {repoSkills.length} discovered skill{repoSkills.length === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  {repoRoot ? (
+                    <button
+                      className={allInstalled ? 'btn-ghost' : 'btn-primary'}
+                      onClick={() => handleInstallRepo(repoRoot)}
+                      disabled={allInstalled}
+                    >
+                      {allInstalled ? 'Library Installed' : 'Install All'}
+                    </button>
+                  ) : null}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Repo: <code>{skill.repo}</code>
+
+                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                  {repoSkills.map((skill, idx) => (
+                    <div
+                      key={`${repo}-${idx}`}
+                      style={{
+                        border: '1px solid var(--border-glass)',
+                        background: 'rgba(255,255,255,0.015)',
+                        borderRadius: '12px',
+                        padding: '0.85rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        gap: '1rem',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, marginBottom: '0.3rem' }}>{skill.name}</div>
+                        <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                          {skill.description}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                          Path: <code>{skill.source_path}</code>
+                        </div>
+                      </div>
+                      <button
+                        className={skill.is_installed ? 'btn-ghost' : 'btn-primary'}
+                        onClick={() => handleInstall(skill.source_path)}
+                        disabled={skill.is_installed}
+                        style={{ minWidth: '100px' }}
+                      >
+                        {skill.is_installed ? 'Installed' : 'Install'}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <button
-                className={skill.is_installed ? 'btn-ghost' : 'btn-primary'}
-                onClick={() => handleInstall(skill.source_path)}
-                disabled={skill.is_installed}
-                style={{ minWidth: '100px' }}
-              >
-                {skill.is_installed ? 'Installed' : 'Install'}
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

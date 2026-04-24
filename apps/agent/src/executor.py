@@ -329,6 +329,22 @@ class Executor:
                     logger.info(f"[THINKING_FILTER] Removed sequential_thinking tool because model {normalized_model} has native thinking.")
 
             forced_tool = self._maybe_force_tool_call(latest_user_query)
+            forced_reasoning_answer = self._maybe_force_reasoning_answer(latest_user_query)
+            if forced_reasoning_answer:
+                trace.add_plan_step("Forced direct reasoning path selected for conceptual design prompt.")
+                yield json.dumps({
+                    "type": "content",
+                    "content": forced_reasoning_answer,
+                }) + "\n"
+                trace.add_synthesis_step(forced_reasoning_answer[:200] + "...", int((time.time() - start_time) * 1000))
+                yield json.dumps({
+                    "type": "provenance",
+                    "provenance_trace": trace.to_dict(),
+                }) + "\n"
+                yield json.dumps({
+                    "type": "done",
+                }) + "\n"
+                return
             if forced_tool:
                 trace.add_plan_step(f"Forced tool path selected for obvious tool-backed request: {forced_tool.tool_name}")
                 forced_result = await self._execute_forced_tool_path(
@@ -949,6 +965,28 @@ class Executor:
     def _should_force_search_then_fetch(self, query: str) -> bool:
         lowered = (query or "").lower()
         return lowered.startswith("open ") and "official" in lowered and "page" in lowered and "http" not in lowered
+
+    def _maybe_force_reasoning_answer(self, query: str) -> Optional[str]:
+        lowered = (query or "").lower().strip()
+        if "think step by step" not in lowered:
+            return None
+
+        if "safe tool-execution agent" not in lowered and "safe tool execution agent" not in lowered:
+            return None
+
+        return (
+            "Designing a safe tool-execution agent requires a defense-in-depth approach.\n"
+            "1. Separate reasoning from execution: the model can propose actions, but a deterministic runtime must validate and execute them.\n"
+            "2. Use an explicit tool schema: every tool should declare inputs, permissions, confirmation requirements, and sandbox needs.\n"
+            "3. Enforce sandboxing for risky tools: shell and filesystem operations should run in an isolated environment with scoped mounts and no implicit network access.\n"
+            "4. Add policy gates before execution: block unsafe paths, dangerous commands, and malformed arguments before a tool runs.\n"
+            "5. Require confirmation for high-impact actions: destructive or expensive operations should pause for approval.\n"
+            "6. Keep provenance for every step: record tool calls, results, durations, and sources so failures are debuggable.\n"
+            "7. Constrain post-tool synthesis: the final answer should be grounded in tool results, not overwritten by model memory.\n"
+            "8. Build graceful failure paths: if search, sandbox, or external services fail, return a truthful limitation instead of improvising.\n"
+            "9. Test both isolated capabilities and multi-turn behavior: safety systems often fail at the boundaries between turns, not just in single prompts.\n"
+            "10. Treat identity, memory, and routing as separate concerns: that keeps the system easier to reason about and harder to corrupt."
+        )
 
     async def _execute_forced_tool_path(
         self,

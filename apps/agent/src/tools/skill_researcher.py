@@ -83,28 +83,62 @@ class SkillResearcher:
                 
         return skills
 
-    def install_skill(self, source_path_str: str) -> Dict[str, Any]:
-        """
-        Copies a skill from the research directory to the active skills directory.
-        """
-        source_path = Path(source_path_str)
+    def _install_skill_dir(self, source_path: Path) -> Dict[str, Any]:
         if not source_path.exists():
             return {"success": False, "error": "Source skill directory does not exist."}
-            
+
         skill_name = source_path.name
         target_path = ACTIVE_SKILLS_DIR / skill_name
-        
+
         try:
             if target_path.exists():
                 logger.warning(f"Overwriting existing skill at {target_path}")
                 shutil.rmtree(target_path)
-                
+
             shutil.copytree(source_path, target_path)
             logger.info(f"Successfully installed skill {skill_name} to {target_path}")
             return {"success": True, "installed_path": str(target_path), "skill_name": skill_name}
         except Exception as e:
             logger.error(f"Failed to install skill {skill_name}: {e}")
             return {"success": False, "error": str(e)}
+
+    def install_skill(self, source_path_str: str) -> Dict[str, Any]:
+        """
+        Installs a single skill directory or, if given a repo root, installs all nested skills.
+        """
+        source_path = Path(source_path_str)
+        if not source_path.exists():
+            return {"success": False, "error": "Source skill directory does not exist."}
+
+        if (source_path / "SKILL.md").exists():
+            return self._install_skill_dir(source_path)
+
+        skill_dirs = sorted({path.parent for path in source_path.rglob("SKILL.md")})
+        if not skill_dirs:
+            return {"success": False, "error": "No SKILL.md files found under the provided source path."}
+
+        installed = []
+        failures = []
+        for skill_dir in skill_dirs:
+            result = self._install_skill_dir(skill_dir)
+            if result.get("success"):
+                installed.append({
+                    "skill_name": result.get("skill_name"),
+                    "installed_path": result.get("installed_path"),
+                })
+            else:
+                failures.append({
+                    "source_path": str(skill_dir),
+                    "error": result.get("error", "Unknown error"),
+                })
+
+        return {
+            "success": len(installed) > 0 and len(failures) == 0,
+            "partial": bool(installed) and bool(failures),
+            "installed": installed,
+            "failures": failures,
+            "installed_count": len(installed),
+        }
 
     def build_skill(self, name: str, description: str, tags: List[str], instructions: str) -> Dict[str, Any]:
         """
@@ -167,7 +201,8 @@ class SkillResearcher:
                 "description": frontmatter.get("description", ""),
                 "tags": frontmatter.get("tags", []),
                 "source_path": str(filepath.parent),
-                "repo": repo_name
+                "repo": repo_name,
+                "repo_root": str(current),
             }
         except Exception as e:
             logger.warning(f"Failed to parse research skill {filepath}: {e}")
