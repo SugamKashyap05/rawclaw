@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 
-export function ResearchLab() {
+export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
   const [repoUrl, setRepoUrl] = useState('');
   const [cloning, setCloning] = useState(false);
   const [researchedSkills, setResearchedSkills] = useState<any[]>([]);
@@ -29,6 +29,7 @@ export function ResearchLab() {
     try {
       await api.post('/skills/clone', { repo_url: repoUrl });
       await fetchResearchedSkills();
+      onChanged?.();
       setRepoUrl('');
     } catch (e) {
       console.error(e);
@@ -43,6 +44,7 @@ export function ResearchLab() {
       await api.post('/skills/install', { source_path: sourcePath });
       alert('Skill installed successfully!');
       await fetchResearchedSkills();
+      onChanged?.();
     } catch (e) {
       console.error(e);
       alert('Failed to install skill.');

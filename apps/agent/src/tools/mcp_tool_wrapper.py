@@ -4,12 +4,15 @@ MCPToolWrapper — Wraps an MCP server tool as a RawClaw BaseTool.
 This allows MCP-discovered tools to be registered in the ToolRegistry
 and used by the agent loop just like built-in tools.
 """
+import logging
 import time
 from typing import Any, Dict, List
 
 from src.tools.base_tool import BaseTool
 from src.tools.mcp_gateway import MCPGateway, MCPError
 from src.contracts.tool import ToolResult
+
+logger = logging.getLogger("rawclaw.mcp.wrapper")
 
 
 class MCPToolWrapper(BaseTool):

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { AgentProfile, CreateAgentRequest, UpdateAgentRequest } from '@rawclaw/shared';
+import { AgentProfile, CreateAgentRequest, SkillDefinition, UpdateAgentRequest } from '@rawclaw/shared';
 import { api } from '../lib/api';
 
 const EMPTY_AGENT: CreateAgentRequest = {
@@ -25,11 +25,13 @@ Response style:
 - Clear, direct, and helpful.
 - Use structured output when it improves readability.
 - Do not expose hidden chain-of-thought.`,
+  skills: [],
   isDefault: false,
 };
 
 export default function Agents() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<SkillDefinition[]>([]);
   const [draft, setDraft] = useState<CreateAgentRequest>(EMPTY_AGENT);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -38,6 +40,7 @@ export default function Agents() {
 
   useEffect(() => {
     void loadAgents();
+    void loadSkills();
   }, []);
 
   const loadAgents = async () => {
@@ -47,6 +50,15 @@ export default function Agents() {
     } catch (loadError) {
       console.error('Failed to load agents', loadError);
       setError('Unable to load agent profiles right now.');
+    }
+  };
+
+  const loadSkills = async () => {
+    try {
+      const response = await api.get<SkillDefinition[]>('/skills');
+      setAvailableSkills(response.data);
+    } catch (loadError) {
+      console.error('Failed to load skills', loadError);
     }
   };
 
@@ -77,11 +89,22 @@ export default function Agents() {
 
   const editAgent = (agent: AgentProfile) => {
     setEditingId(agent.id);
-    setDraft({
-      name: agent.name,
-      description: agent.description || '',
-      systemPrompt: agent.systemPrompt,
-      isDefault: agent.isDefault,
+      setDraft({
+        name: agent.name,
+        description: agent.description || '',
+        systemPrompt: agent.systemPrompt,
+        skills: agent.skills || [],
+        isDefault: agent.isDefault,
+      });
+  };
+
+  const toggleSkill = (skillName: string) => {
+    setDraft((current) => {
+      const currentSkills = current.skills || [];
+      const nextSkills = currentSkills.includes(skillName)
+        ? currentSkills.filter((name) => name !== skillName)
+        : [...currentSkills, skillName];
+      return { ...current, skills: nextSkills };
     });
   };
 
@@ -149,6 +172,15 @@ export default function Agents() {
                 </div>
               </div>
               {agent.description ? <div style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>{agent.description}</div> : null}
+              {agent.skills?.length ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: '0.75rem' }}>
+                  {agent.skills.map((skill) => (
+                    <span key={skill} style={skillPillStyle}>
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <pre className="custom-scrollbar" style={{ margin: 0, whiteSpace: 'pre-wrap', overflowX: 'auto', maxHeight: '220px' }}>
                 {agent.systemPrompt}
               </pre>
@@ -182,6 +214,37 @@ export default function Agents() {
             />
             Set as default agent
           </label>
+          <div style={{ display: 'grid', gap: '0.55rem' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Injected Skills</div>
+            {availableSkills.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                No installed skills are available yet. Use the Skills page to build or install them first.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {availableSkills.map((skill) => {
+                  const selected = (draft.skills || []).includes(skill.name);
+                  return (
+                    <button
+                      key={skill.name}
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => toggleSkill(skill.name)}
+                      style={{
+                        ...skillPillStyle,
+                        cursor: 'pointer',
+                        background: selected ? 'rgba(0,240,255,0.12)' : 'rgba(255,255,255,0.04)',
+                        border: selected ? '1px solid rgba(0,240,255,0.3)' : '1px solid var(--border-glass)',
+                        color: selected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      }}
+                    >
+                      {skill.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <button className="btn-primary" disabled={saving || !draft.name.trim() || !draft.systemPrompt.trim()}>
               {saving ? 'Saving...' : editingId ? 'Update agent' : 'Create agent'}
@@ -225,4 +288,13 @@ const fieldStyle = {
   border: '1px solid var(--border-glass)',
   background: 'rgba(255,255,255,0.04)',
   color: 'var(--text-primary)',
+};
+
+const skillPillStyle = {
+  fontSize: '0.7rem',
+  padding: '0.24rem 0.55rem',
+  borderRadius: '999px',
+  border: '1px solid var(--border-glass)',
+  background: 'rgba(255,255,255,0.05)',
+  color: 'var(--text-secondary)',
 };

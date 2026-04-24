@@ -12,6 +12,7 @@ import logging
 import os
 import shutil
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -81,6 +82,19 @@ class SandboxRunner:
         self._docker_checked = False
         self._docker_ok = False
 
+    def _get_mount_specs(self) -> List[Dict[str, str]]:
+        from src.sandbox.sandbox_config import get_sandbox_config
+
+        config = get_sandbox_config()
+        specs: List[Dict[str, str]] = []
+        for idx, mount_path in enumerate(config.allowed_paths):
+            if not os.path.exists(mount_path):
+                continue
+            source = str(Path(mount_path).resolve())
+            target = "/workspace" if idx == 0 else f"/workspace_mount_{idx}"
+            specs.append({"source": source, "target": target})
+        return specs
+
     async def _ensure_docker(self) -> bool:
         """Lazy-check Docker availability once per session."""
         if not self._docker_checked:
@@ -126,6 +140,8 @@ class SandboxRunner:
                 duration_ms=round((time.time() - start) * 1000),
             )
 
+        mount_specs = self._get_mount_specs()
+
         # Build docker run command
         cmd: List[str] = [
             "docker", "run",
@@ -138,14 +154,14 @@ class SandboxRunner:
             "--user", "nobody",             # Non-root user
         ]
 
-        # Add volume mounts for allowed paths
-        from src.sandbox.sandbox_config import get_sandbox_config
-        config = get_sandbox_config()
-        for mount_path in config.allowed_paths:
-            if os.path.exists(mount_path):
-                # Map host path to same path in container
-                abs_mount = os.path.abspath(mount_path)
-                cmd.extend(["-v", f"{abs_mount}:{abs_mount}:ro"])
+        for spec in mount_specs:
+            cmd.extend([
+                "--mount",
+                f"type=bind,source={spec['source']},target={spec['target']},readonly",
+            ])
+
+        if mount_specs:
+            cmd.extend(["-w", mount_specs[0]["target"]])
 
         cmd.extend([
             "-i",                           # Accept stdin
@@ -212,6 +228,8 @@ class SandboxRunner:
                 duration_ms=round((time.time() - start) * 1000),
             )
 
+        mount_specs = self._get_mount_specs()
+
         cmd = [
             "docker", "run",
             "--rm",
@@ -223,13 +241,14 @@ class SandboxRunner:
             "--user", "nobody",
         ]
 
-        # Add volume mounts for allowed paths
-        from src.sandbox.sandbox_config import get_sandbox_config
-        config = get_sandbox_config()
-        for mount_path in config.allowed_paths:
-            if os.path.exists(mount_path):
-                abs_mount = os.path.abspath(mount_path)
-                cmd.extend(["-v", f"{abs_mount}:{abs_mount}:ro"])
+        for spec in mount_specs:
+            cmd.extend([
+                "--mount",
+                f"type=bind,source={spec['source']},target={spec['target']},readonly",
+            ])
+
+        if mount_specs:
+            cmd.extend(["-w", mount_specs[0]["target"]])
 
         cmd.extend([
             "-i",

@@ -22,8 +22,8 @@ class DateTimeTool(BaseTool):
         "properties": {
             "timezone": {
                 "type": "string",
-                "description": "IANA timezone name (e.g., 'America/New_York', 'Asia/Kolkata', 'UTC'). Defaults to UTC.",
-                "default": "UTC",
+                "description": "IANA timezone name (e.g., 'America/New_York', 'Asia/Kolkata', 'UTC') or 'local'. Defaults to local system timezone.",
+                "default": "local",
             }
         },
         "required": [],
@@ -34,19 +34,24 @@ class DateTimeTool(BaseTool):
 
     async def execute(self, input: Dict[str, Any]) -> ToolResult:
         start = _time.time()
-        tz_name = input.get("timezone", "UTC")
+        tz_name = input.get("timezone", "local")
 
         try:
-            if tz_name == "UTC":
+            if tz_name == "local":
+                now = datetime.now().astimezone()
+                effective_tz_name = getattr(now.tzinfo, "key", None) or str(now.tzinfo) or "local"
+            elif tz_name == "UTC":
                 tz = timezone.utc
+                now = datetime.now(tz)
+                effective_tz_name = tz_name
             else:
                 tz = ZoneInfo(tz_name)
-
-            now = datetime.now(tz)
+                now = datetime.now(tz)
+                effective_tz_name = tz_name
             result = {
                 "iso8601": now.isoformat(),
                 "unix_timestamp": int(now.timestamp()),
-                "timezone": tz_name,
+                "timezone": effective_tz_name,
                 "human_readable": now.strftime("%Y-%m-%d %H:%M:%S %Z"),
             }
             return ToolResult(

@@ -5,6 +5,7 @@ Read from environment on module load. Log status at startup.
 """
 import logging
 import os
+from pathlib import Path
 from typing import List
 
 logger = logging.getLogger("rawclaw.sandbox")
@@ -16,6 +17,7 @@ ENV_SANDBOX_TIMEOUT = "SANDBOX_TIMEOUT"
 ENV_SANDBOX_MEMORY_LIMIT = "SANDBOX_MEMORY_LIMIT"
 ENV_SANDBOX_NETWORK_DISABLED = "SANDBOX_NETWORK_DISABLED"
 ENV_ALLOWED_PATHS = "ALLOWED_PATHS"
+DEFAULT_WORKSPACE_ROOT = str(Path(__file__).resolve().parents[4])
 
 
 class SandboxConfig:
@@ -30,7 +32,7 @@ class SandboxConfig:
         self.timeout: int = self._parse_int(ENV_SANDBOX_TIMEOUT, 30)
         self.memory_limit: str = os.getenv(ENV_SANDBOX_MEMORY_LIMIT, "256m")
         self.network_disabled: bool = self._parse_bool(ENV_SANDBOX_NETWORK_DISABLED, True)
-        self.allowed_paths: List[str] = self._parse_list(ENV_ALLOWED_PATHS, [])
+        self.allowed_paths: List[str] = self._parse_list(ENV_ALLOWED_PATHS, [DEFAULT_WORKSPACE_ROOT])
 
     def _parse_bool(self, name: str, default: bool) -> bool:
         val = os.getenv(name)

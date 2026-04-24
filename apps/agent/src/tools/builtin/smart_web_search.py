@@ -2,6 +2,7 @@ import json
 import logging
 import time
 import asyncio
+import re
 from typing import Any, Dict, List, Optional
 
 from src.tools.base_tool import BaseTool
@@ -10,6 +11,14 @@ from src.tools.registry import TOOL_REGISTRY
 from src.tools.builtin.web_fetch import WebFetchTool
 
 logger = logging.getLogger("rawclaw.tools.web_search")
+AD_NOISE_PATTERNS = [
+    "viewing ad",
+    "tickets ad",
+    "ad ",
+    "buy tickets",
+    "ticket booking",
+    "sponsored",
+]
 
 class SmartWebSearchTool(BaseTool):
     name = "web_search"
@@ -148,6 +157,15 @@ class SmartWebSearchTool(BaseTool):
         enriched_results = []
         result_quality = "good"
         
+        filtered_results = []
+        for res in results:
+            if self._is_low_quality_result(query, res):
+                continue
+            filtered_results.append(res)
+
+        if filtered_results:
+            results = filtered_results
+
         for i, res in enumerate(results):
             enriched = {
                 "title": res.get("title"),
@@ -193,6 +211,24 @@ class SmartWebSearchTool(BaseTool):
                 "result_quality": result_quality
             }
         )
+
+    def _is_low_quality_result(self, query: str, result: Dict[str, Any]) -> bool:
+        title = str(result.get("title", "")).strip().lower()
+        snippet = str(result.get("snippet", "")).strip().lower()
+        combined = f"{title} {snippet}"
+        query_lower = (query or "").lower()
+
+        if any(pattern in combined for pattern in AD_NOISE_PATTERNS):
+            if "ticket" not in query_lower and "tickets" not in query_lower:
+                return True
+
+        if re.search(r"\bviewing\s+ad\b", combined):
+            return True
+
+        if title and snippet and title == snippet:
+            return True
+
+        return False
 
     def _is_placeholder_content(self, content: str) -> bool:
         """Check if content appears to be placeholder-like or incomplete."""

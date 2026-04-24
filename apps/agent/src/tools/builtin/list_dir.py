@@ -1,8 +1,10 @@
 import os
+from pathlib import Path
 from typing import Any, Dict
 from src.tools.base_tool import BaseTool
 from src.contracts.tool import ToolResult
 from src.sandbox.sandbox import SandboxRunner
+from src.sandbox.sandbox_config import get_sandbox_config
 
 class ListDirTool(BaseTool):
     """
@@ -36,10 +38,26 @@ class ListDirTool(BaseTool):
 
     def __init__(self) -> None:
         self.runner = SandboxRunner()
+        self._config = get_sandbox_config()
+
+    def _resolve_container_path(self, raw_path: str) -> str:
+        workspace_root = Path(self._config.allowed_paths[0]).resolve() if self._config.allowed_paths else Path(".").resolve()
+        requested = Path(raw_path or ".")
+
+        if raw_path in ("", "."):
+            return "/workspace"
+
+        host_path = requested.resolve() if requested.is_absolute() else (workspace_root / requested).resolve()
+        try:
+            relative = host_path.relative_to(workspace_root)
+        except ValueError:
+            return "/workspace"
+        return str(Path("/workspace") / relative).replace("\\", "/")
 
     async def execute(self, input: Dict[str, Any]) -> ToolResult:
         path = input.get("path", ".")
         recursive = input.get("recursive", False)
+        path = self._resolve_container_path(path)
 
         # Sanitize path to avoid command injection in the shell command
         # Although it's sandboxed, we still want to be safe

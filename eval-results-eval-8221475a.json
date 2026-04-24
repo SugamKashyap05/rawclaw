@@ -1,0 +1,342 @@
+{
+  "metadata": {
+    "session_id": "eval-8221475a",
+    "model": "gemma4:31b-cloud",
+    "timestamp": "2026-04-24 09:14:08"
+  },
+  "results": [
+    {
+      "step": 1,
+      "phase": "Identity",
+      "title": "System Role",
+      "passed": true,
+      "latency": 12.956100940704346,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-identity-core-9812",
+      "content": "IamRawClaw,anAIagentintheRawClawsystem.Mypurposeistoprovidehighlycapableintelligencewithafocusonlocal-firstoperations,securetoolexecution,anddeterministicrouting."
+    },
+    {
+      "step": 2,
+      "phase": "Memory",
+      "title": "RAG Recall",
+      "passed": true,
+      "latency": 0.44980287551879883,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-8221475a",
+      "content": "According to my records, the identifier is X-DELTA-9-GHOST."
+    },
+    {
+      "step": 3,
+      "phase": "Memory",
+      "title": "Short-Term Memory",
+      "passed": true,
+      "latency": 12.941088199615479,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-8221475a",
+      "content": "Ihavenotedthatyourfavoritecoloristeal."
+    },
+    {
+      "step": 4,
+      "phase": "Memory",
+      "title": "Short-Term Recall",
+      "passed": true,
+      "latency": 11.985028505325317,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-8221475a",
+      "content": "Yourfavoritecoloristeal."
+    },
+    {
+      "step": 5,
+      "phase": "Knowledge",
+      "title": "General Knowledge: Ada Lovelace",
+      "passed": true,
+      "latency": 14.96664834022522,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-knowledge-ada-fd92",
+      "content": "AdaLovelace(bornAugustaAdaByron)wasanEnglishmathematicianandwriter,bestknownforherworkonCharlesBabbage'searlymechanicalgeneral-purposecomputer,theAnalyticalEngine.SheiswidelyregardedasthefirstcomputerprogrammerbecauseshewasthefirsttorecognizethattheAnalyticalEnginehadapplicationsbeyondsimplecalculationandcreatedanalgorithmintendedtobeprocessedbythemachine.Lovelacedescribedherapproachas\"poeticalscience,\"blendingmathematicallogicwithacreativevisionofhowtechnologycouldbeusedinthefuture."
+    },
+    {
+      "step": 6,
+      "phase": "Knowledge",
+      "title": "Wikipedia-Style Summary: Alan Turing",
+      "passed": true,
+      "latency": 27.835450172424316,
+      "tool_calls": 1,
+      "thinking": 1,
+      "reasons": [],
+      "session_id": "eval-knowledge-turing-4f98",
+      "content": "AlanMathisonTuringwasanEnglishmathematician,computerscientist,logician,cryptanalyst,philosopher,andtheoreticalbiologist,widelyregardedasthefatherofartificialintelligenceandtheoreticalcomputerscience.Heisrenownedforformalizingtheconceptsofcomputationandalgorithmsthroughthe**Turingmachine**,atheoreticalmodelforageneral-purposecomputer.Keyhighlightsofhislifeandworkinclude:***WorldWarII:**TuringplayedapivotalroleatBletchleyPark,whereheledHut8andwasinstrumentalincrackingGermannavalciphers,includingthosefromtheEnigmamachine,significantlyaidingtheAlliedwareffort.***Computing&AI:**HedesignedtheAutomaticComputingEngine(anearlystored-programcomputer)andintroducedthe\"imitationgame\"(nowknownasthe**TuringTest**)inhis1950paper,\"ComputingMachineryandIntelligence.\"***PersonalStruggles&Legacy:**In1952,Turingwasprosecutedforhomosexualactsandacceptedchemicalcastrationinsteadofprison.HediedonJune7,1954,fromcyanidepoisoning.Hereceivedaposthumousroyalpardonin2013,andapublicapologywasissuedin2009.Turing'slegacyishonoredthroughthe\"AlanTuringlaw\"(retroactivepardonsformenconvictedofhomosexualacts),anannualawardforcomputinginnovation,andhisportraitontheBankofEngland's\u00a350note."
+    },
+    {
+      "step": 7,
+      "phase": "Isolation",
+      "title": "Session A Setup",
+      "passed": true,
+      "latency": 15.208929300308228,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-session-a-a8bb",
+      "content": "Understood.YourcodenameisORBIT-7."
+    },
+    {
+      "step": 8,
+      "phase": "Isolation",
+      "title": "Session B Isolation",
+      "passed": true,
+      "latency": 14.048481702804565,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-session-b-647c",
+      "content": "Idonothavearecordofaspecificcodenameassignedtoyouinmymemory.Ifyouhaveoneyou'dlikemetoremember,feelfreetotellme!"
+    },
+    {
+      "step": 9,
+      "phase": "System",
+      "title": "Current Date/Time",
+      "passed": true,
+      "latency": 10.72555661201477,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-system-datetime-1b00",
+      "content": "The current local date and time is 2026-04-24 09:08:45 India Standard Time."
+    },
+    {
+      "step": 10,
+      "phase": "System",
+      "title": "File Read",
+      "passed": true,
+      "latency": 7.772439241409302,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-system-file-read-a050",
+      "content": "I attempted to read `README.md`, but encountered an error: No filesystem paths configured as allowed. Set ALLOWED_PATHS environment variable with comma-separated directories."
+    },
+    {
+      "step": 11,
+      "phase": "System",
+      "title": "Directory Listing",
+      "passed": true,
+      "latency": 11.137624979019165,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-system-list-dir-3519",
+      "content": "The top-level files and folders in the workspace are: `bin@`, `boot/`, `dev/`, `etc/`, `home/`, `lib@`, `lib64@`, `media/`, `mnt/`, `opt/`, `proc/`, `root/`, `run/`, `sbin@`, `srv/`, `sys/`, `tmp/`, `usr/`, `var/`."
+    },
+    {
+      "step": 12,
+      "phase": "Reasoning",
+      "title": "Sequential Thinking",
+      "passed": false,
+      "latency": 42.43034911155701,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [
+        "None of required tools ['sequential_thinking'] were called",
+        "No thinking events or sequential_thinking tool detected"
+      ],
+      "session_id": "eval-reasoning-sequential-1f3b",
+      "content": "Designingasafetool-executionagentrequiresa\"defense-in-depth\"architecture.Thegoalistomaximizetheagent'sutilitywhileensuringthatamodelhallucinationoramaliciouspromptcannotcompromisethehostsystem,leaksensitivedata,orcauseirreversibledamage.Hereisastep-by-stepdesignframeworkforasafetool-executionagent:###1.SandboxIsolation(ThePrimaryBarrier)Themostcriticalsafetymeasureisensuringtheagentneverexecutescodedirectlyonthehostmachine.***Containerization:**Runalltoolexecutions(especiallyshellorpythonscripts)insidealightweight,ephemeralcontainer(e.g.,DockerorgVisor).***ResourceLimits:**SetstrictCPU,memory,anddiskquotastoprevent\"denial-of-service\"attacks(e.g.,aloopthatconsumesallRAM).***NetworkAir-gapping:**Disablenetworkaccessbydefault.Ifatoolneedstheinternet,useaproxywithastrict\"allow-list\"ofdomainstopreventdataexfiltrationorunauthorizedAPIcalls.***EphemeralState:**Ensuretheenvironmentisdestroyedafterthetaskiscomplete,preventingpersistentmalwareorstatecorruption.###2.StrictToolDefinitionandSchemaSafetybeginswithhowtoolsarepresentedtotheLLM.***StrongTyping:**UseJSONSchematodefineexactlywhatargumentsatoolaccepts.Thispreventstheagentfrompassingarbitrarystringswhereintegersareexpected.***InputValidation:**ImplementavalidationlayerbetweentheLLMandthetool.Beforethetoolruns,a\"validator\"checksforcommonattackpatterns(e.g.,shellinjectioncharacterslike`;`,`&&`,or`|`).***LeastPrivilege:**Givetheagent\"read-only\"accessbydefault.Ifitneedstowriteafile,restrictittoaspecific`/workspace`directory.###3.Human-in-the-Loop(HITL)OrchestrationFor\"high-stakes\"tools,theagentshouldnotbefullyautonomous.***PermissionTiers:**Categorizetoolsbyrisk:**LowRisk:*(e.g.,`get_datetime`,`search_web`)$\\rightarrow$Auto-execute.**MediumRisk:*(e.g.,`read_file`,`list_dir`)$\\rightarrow$Logandnotify.**HighRisk:*(e.g.,`shell_execute`,`delete_file`)$\\rightarrow$Requireexplicituserconfirmation.***PlanReview:**Forcomplextasks,requiretheagenttooutputitsintended\"PlanofAction\"andseekuserapprovalbeforeexecutingthefirststepofthesequence.###4.DeterministicRoutingandMonitoringAvoidlettingtheLLMdecide*how*toexecuteatool;letitonlydecide*which*tooltocall.***SeparationofConcerns:**TheLLMgeneratesthetoolcall;adeterministic\"Executor\"handlestheactualsystemcall.TheLLMshouldneverhaveaccesstotheunderlyingsystemAPI.***AuditLogging:**Recordeverytoolcall,theargumentspassed,thesystem'sresponse,andtheLLM'ssubsequentreaction.Thisallowsforforensicanalysisifsomethinggoeswrong.***TimeoutEnforcement:**Implementhardtimeoutsforeverytoolexecutiontopreventtheagentfromhangingthesystem.###5.OutputSanitizationThedatareturningfromatooltotheLLMcanalsobeavectorforattack(e.g.,\"IndirectPromptInjection\").***ContentFiltering:**SanitizetooloutputstoremovepotentiallymaliciousinstructionsthatmighttricktheLLMintoignoringitssystemprompt.***Truncation:**LimittheamountofdatareturnedtotheLLMtopreventcontextwindowoverflowor\"denial-of-service\"viamassivelogfiles.###SummaryArchitectureFlow**UserPrompt**$\\rightarrow$**LLM(Plan)**$\\rightarrow$**HumanApproval(ifHighRisk)**$\\rightarrow$**InputValidator**$\\rightarrow$**IsolatedSandbox(Execution)**$\\rightarrow$**OutputSanitizer**$\\rightarrow$**LLM(FinalResponse)**"
+    },
+    {
+      "step": 13,
+      "phase": "Web",
+      "title": "Web Search",
+      "passed": true,
+      "latency": 12.576069355010986,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-web-starship-summary-120a",
+      "content": "I attempted to search the web for that, but the search failed: Underlying search failed: DuckDuckGo search failed (may be rate limited or network issue)."
+    },
+    {
+      "step": 14,
+      "phase": "Web",
+      "title": "Web Fetch",
+      "passed": true,
+      "latency": 4.39957070350647,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-web-auranix-summary-14dd",
+      "content": "The page titled `Performance Marketing &amp; IT Solutions India | Auranix Digital` contains the following main content: Performance Marketing & IT Solutions India | Auranix Digital"
+    },
+    {
+      "step": 15,
+      "phase": "Web",
+      "title": "Web Search Grounding",
+      "passed": true,
+      "latency": 6.942394971847534,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-web-ipl-grounding-4ea8",
+      "content": "Based on the search results, here are the key takeaways:\n- IPL 2026 | Chennai Super Kings | Latest News, Team Updates and more: Get the latest news and updates on Chennai Super Kings, including announcements, match reports, team previews, and more on the IPL Website.\n- IPL 2026 Points Table Today - The Indian Express: IPL 2026 Points Table Update, MI vs CSK Match: Check latest standings after Mumbai Indians vs Chennai Super Kings match, orange cap holders list, purple cap holder 2026, most runs and most wickets in IPL 2026.\n- Chennai Super Kings News: Scores, Schedules, Stats & More | Cricket News: News, schedules, team details, and performance stats for Chennai Super Kings in the IPL."
+    },
+    {
+      "step": 16,
+      "phase": "Web",
+      "title": "Official Page Fetch Classification",
+      "passed": false,
+      "latency": 6.537103652954102,
+      "tool_calls": 2,
+      "thinking": 0,
+      "reasons": [
+        "None of expected interpretations found: ['placeholder', 'incomplete', 'standings', 'table']"
+      ],
+      "session_id": "eval-web-ipl-table-9108",
+      "content": "The page titled `IPL T20 | Indian Premier League Official Website` contains the following main content: IPL T20 | Indian Premier League Official Website Video I felt the intensity of MI-CSK rivalry: Sanju Samson 24 Apr, 2026 | 01:47 mins | 644 Play Copy Video 101*(54): Sanju Samson shines with 2nd ton of TATA IPL 2026 23 Apr, 2026 | 05:15 mins | 76.8k Play Copy Video Akeal Hosein masks his trickery with fantastic 4/17 23 Apr, 2026 | 01:56 mins | 39.6k Play Copy Video Joy, jubilation, respect: Ft. Sanju, Hardik, SKY, Bumrah 23 Apr, 2026 | 02:38 mins | 43.9k Play Copy Video Two in two! Noor joins wicket-taking party 23 Apr, 2026 | 01:35 mins | 25.8k Play Copy Video 4, 6, 4, 4! Samson wins mini-battle vs Hardik 23 Apr, 2026 | 02:00 mins | 88.5k Play Copy prev next Good Morning! Curated shorts for..."
+    },
+    {
+      "step": 17,
+      "phase": "Web",
+      "title": "Clean Fetch Rendering",
+      "passed": true,
+      "latency": 4.301800012588501,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-web-clean-fetch-5851",
+      "content": "The page titled `Performance Marketing &amp; IT Solutions India | Auranix Digital` contains the following main content: Performance Marketing & IT Solutions India | Auranix Digital"
+    },
+    {
+      "step": 18,
+      "phase": "Continuity",
+      "title": "Tool Follow-Up",
+      "passed": true,
+      "latency": 5.751583814620972,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-continuity-ipl-bullets-4802",
+      "content": "Based on the search results, here are the key takeaways:\n- IPL T20 | Indian Premier League Official Website: The official IPL website with live scores, match updates, team rankings, all the latest news, and videos . Follow your favorite teams and players!\n- ESPNcricinfo: IPL 2026 | Live Scores, Cricket News, Match Details & Updates: Get live cricket scores, ball-by-ball commentary, and exclusive video highlights. Stay updated on IPL 2026, international and domestic series with ESPNcricinfo\n- IPL News | Latest Indian Premier League News - NewsNow: About our Indian Premier League / IPL news Latest news on the IPL, providing comprehensive coverage of the men's Indian Premier League season, including match updates, player performances, team standings, and off-field d"
+    },
+    {
+      "step": 19,
+      "phase": "Continuity",
+      "title": "Search Then Follow-Up",
+      "passed": false,
+      "latency": 51.265939235687256,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [
+        "Turn 2: Follow-up drifted off topic",
+        "Turn 3: Follow-up drifted off topic"
+      ],
+      "session_id": "eval-spaceX-follow-up-4c20"
+    },
+    {
+      "step": 20,
+      "phase": "Tasks",
+      "title": "Task Creation",
+      "passed": true,
+      "latency": 15.662785530090332,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-tasks-create-4df4",
+      "content": "Ihavenotedthetasktoreviewtheworkspacestatustomorrow.SinceIdonothaveadedicatedcalendarortask-managementtoolconfiguredinthissession,Icanrecordthisinareminderfilewithinyourworkspacetoensureitisn'tlost.Wouldyoulikemetocreatea`tasks.txt`or`todo.md`filetotrackthis,orshouldIsimplykeepitinourcurrentconversationcontext?"
+    },
+    {
+      "step": 21,
+      "phase": "Agents",
+      "title": "Agent Creation",
+      "passed": true,
+      "latency": 29.85394310951233,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-agents-create-6643",
+      "content": "Ihavecreatedthe**ResearchAgent**,anAIagentwithintheRawClawsystemdesignedspecificallyforhigh-fidelitywebresearchandevidence-basedsynthesis.###AgentProfile:ResearchAgent**Role:**SpecializedIntelligenceAnalyst**PrimaryObjective:**Totransformrawwebdataintohighlyaccurate,groundedsummariesandcomprehensiveresearchreports,minimizinghallucinationsthroughstrictadherencetosourcematerial.---###1.CoreDirectives(SystemPrompt)TheResearchAgentoperatesunderthesemandatoryconstraints:***GroundingFirst:**Everyclaimmustbelinkedtoaspecificsource.Ifthesearchresultsdonotcontaintheanswer,theagentmustexplicitlystate:*\"Theprovidedsourcesdonotcontaininformationregarding[X].\"****VerificationLoop:**Forcomplexqueries,theagentemploysa\"Search$\\rightarrow$Fetch$\\rightarrow$Cross-Reference\"workflow.Itdoesnotrelyonsearchsnippetsalonebutfetchesfullpagecontenttoensurenuanceiscaptured.***SynthesisoverSummary:**Insteadofsimplylistingfindings,theagentsynthesizesinformationbyidentifyingpatterns,contradictions,andconsensusacrossmultiplehigh-authoritysources.***CitationStandard:**Allsummariesmustincludeinlinecitations(e.g.,`[Source1]`)andafullbibliographyattheend.---###2.SpecializedToolsetToachieveitsgoals,theResearchAgentutilizes:***`web_search`/`smart_search`**:Forbroaddiscoveryanddeep-divereporting.***`web_fetch`/`fetch_content`**:Toextractthefulltextofarticlesanddocumentsforrigorousanalysis.***`sequential_thinking`**:Toplanmulti-stepresearchpaths(e.g.,identifyingacompany$\\rightarrow$findingcompetitors$\\rightarrow$comparingquarterlyreports).***`iask-search`/`monica-search`**:ToleverageAI-poweredsynthesisforinitialhypothesisgeneration.---###3.OperationalWorkflowWhenassignedatask,theResearchAgentfollowsthissequence:1.**Planning:**Uses`sequential_thinking`tobreaktherequestintokeymilestones(e.g.,identifyingkeyplayers,technicalbottlenecks,andtimelines).2.**Discovery:**Executes`web_search`tofindthelatestindustrynewsandwhitepapers.3.**DeepDive:**Uses`web_fetch`toreadactualtechnicalspecificationsorpressreleases.4.**Grounding:**Comparesdataacrosssourcesandnotesanydiscrepancies.5.**Output:**Producesastructuredreportfeaturing\"KeyFindings,\"\"DetailedAnalysis,\"anda\"Sources\"list.---###4.ExampleOutputFormat**Topic:**[TopicName]**ConfidenceScore:**[High/Medium/Lowbasedonsourceavailability]**ExecutiveSummary:**[A3-sentencegroundedoverview]**DetailedAnalysis:*****PointA:**[Finding]$\\rightarrow$`[Source1,Source3]`***PointB:**[Finding]$\\rightarrow$`[Source2]`**Contradictions/Gaps:***[Noteanyconflictingdatafoundduringresearch]**Sources:**1.[URL/Title]2.[URL/Title]"
+    },
+    {
+      "step": 22,
+      "phase": "Agents",
+      "title": "Agent Use After Creation",
+      "passed": true,
+      "latency": 51.92080211639404,
+      "tool_calls": 1,
+      "thinking": 1,
+      "reasons": [],
+      "session_id": "eval-agents-use-after-create-a855",
+      "content": "AsanAIagentintheRawClawsystem,IhaveconductedresearchonthelatestOpenAIAPIupdatesbasedontheavailablesearchresults.###**ModelUpdates*****GPT-5Family:**TheAPInowincludestheGPT-5familyofmodels:`gpt-5`,`gpt-5-mini`,and`gpt-5-nano`.***GPT-5.4&GPT-5.4Pro:**Thesemodelsfeaturea**1.05Mcontextwindow**.Forpromptsexceeding272Kinputtokens,pricingissetat2xinputand1.5xoutputforthefullsession(standard,batch,andflex).***ReasoningOptimization:**A\"minimalreasoningeffort\"valuehasbeenintroducedtooptimizeforfasterresponsesinGPT-5modelsthatsupportreasoning.###**AgentsSDK&Tooling*****AgentsSDK:**OpenAIhasexpandeditsagent-buildingtoolkit.Akeyfeatureisa**provider-agnosticdesign**,allowingtheSDKtoworkwithover100non-OpenAILLMsviatheChatCompletionsAPI.***WorkspaceAgents:**(viaChatGPTBusiness)NewagentsforautomatingrepeatableworkacrossconnectedappssuchasGoogleDrive,GoogleCalendar,Slack,andSharePoint.Thesesupportscheduling,templates,andadmincontrols.***MCPIntegration:**Pluginsarenowdescribedaspackagingunitsthatcancombineskills,appintegrations,andMCPservers.###**CodexDesktopApp(April16Update)**AmajorexpansionoftheCodexappintroducedseveralnewcapabilities:***ComputerUse:**BackgroundcomputeruseallowstheagenttointeractwithMacapps(clickingandtyping)whilemultipleagentsruninparallel.***In-AppBrowser&ImageGeneration:**Includesanin-appbrowserfordirectpagecommentingandthe`gpt-image-1.5`modelforgeneratingandeditingimages.***PluginExpansion:**Over90additionalpluginswereadded,includingintegrationswithAtlassianRovo,CircleCI,CodeRabbit,GitLabIssues,MicrosoftSuite,andRender.###**OtherUpdates*****FastAnswers:**ChatGPThasrolledouta\"Fastanswers\"featureforhigh-confidence,commoninformation-seekingquestions,availablegloballyacrossweb,iOS,andAndroid.As an AI agent in the RawClaw system, I have synthesized the following information from the provided search results. Please note that some of the source material appears to be from third-party tracking sites or blogs and may be incomplete or placeholder-like.\n\n### **Model Updates**\n*   **GPT-5 Family:** Search results mention the release of a GPT-5 family in the API, specifically `gpt-5`, `gpt-5-mini`, and `gpt-5-nano`.\n*   **GPT-5.4 and GPT-5.4 Pro:** These models are listed with a **1.05M context window**. Pricing for prompts exceeding 272K input tokens is reported as 2x input and 1.5x output for the full session (standard, batch, and flex).\n*   **Reasoning Effort:** A \"minimal reasoning effort\" value has been introduced to optimize for fast responses in GPT-5 models that support reasoning.\n\n### **Agents SDK & Tooling**\n*   **Provider-Agnostic Design:** The Agents SDK has been updated to work with over 100 non-OpenAI LLMs via the Chat Completions API.\n*   **Workspace Agents:** Introduced for ChatGPT Business to automate repeatable work across connected apps like Google Drive, Google Calendar, Slack, and SharePoint, featuring scheduling and admin controls.\n*   **MCP Integration:** Plugins are now described as packaging units that can combine skills, app integrations, and MCP servers.\n\n### **Codex Desktop App (April 16 Update)**\nA major expansion of the Codex app introduced the following:\n*   **Computer Use:** Ability to look at apps on a Mac, click, and type while running multiple agents in parallel.\n*   **Enhanced Features:** An in-app browser for commenting on pages and `gpt-image-1.5` for image generation and editing.\n*   **Plugin Expansion:** More than 90 additional plugins were added, including integrations with Atlassian Rovo, CircleCI, CodeRabbit, GitLab Issues, Microsoft Suite, and Render.\n\n### **Additional Features**\n*   **Fast Answers:** A feature for quicker, high-confidence responses to common questions, rolled out globally on web, iOS, and Android."
+    },
+    {
+      "step": 23,
+      "phase": "RAG",
+      "title": "Explicit RAG Fact",
+      "passed": true,
+      "latency": 0.515362024307251,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-rag-nightglass-49f2",
+      "content": "According to my records, Operation NIGHTGLASS uses access token 'SIGMA-44'."
+    },
+    {
+      "step": 24,
+      "phase": "RAG",
+      "title": "RAG vs General Knowledge",
+      "passed": true,
+      "latency": 0.5705549716949463,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-rag-atlas-ced6",
+      "content": "According to my records, For internal testing, PROJECT_ATLAS launch date is 2031-01-01."
+    },
+    {
+      "step": 25,
+      "phase": "Isolation",
+      "title": "Session Isolation Repeat A",
+      "passed": true,
+      "latency": 14.334327697753906,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-session-repeat-a-a06b",
+      "content": "Acknowledged.Yourcodenameis**ORBIT-7**."
+    },
+    {
+      "step": 26,
+      "phase": "Isolation",
+      "title": "Session Isolation Repeat B",
+      "passed": true,
+      "latency": 13.192444324493408,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-session-repeat-b-999c",
+      "content": "Idonothavearecordofaspecificcodenameassignedtoyouinmymemory.Ifyouhaveone,pleasefeelfreetotellme!"
+    },
+    {
+      "step": 27,
+      "phase": "Memory",
+      "title": "Memory Scope Check",
+      "passed": true,
+      "latency": 13.43619704246521,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [
+        "Observed cross-session memory scope; review content manually against desired product behavior."
+      ],
+      "session_id": "eval-memory-scope-8589",
+      "content": "I'msorry,butIdon'thavethatinformationinmyrecords.Couldyoutellmewhatyourfavoritecoloris?"
+    }
+  ]
+}

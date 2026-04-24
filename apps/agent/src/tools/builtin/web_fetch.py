@@ -213,8 +213,9 @@ def _extract_meaningful_content(html: str) -> str:
     
     # identify if the page is primarily placeholders
     placeholder_terms = ['tbd', 'to be determined', 'qualifier', 'eliminator', 'final']
-    has_placeholders = any(term in clean_text.lower() for term in placeholder_terms)
-    has_actual_data = bool(re.search(r'\b\d+\s+(?:won|lost|points|pts|nrr|matches)\b', clean_text.lower()))
+    normalized_text = ' '.join(meaningful_lines).strip()
+    has_placeholders = any(term in normalized_text.lower() for term in placeholder_terms)
+    has_actual_data = bool(re.search(r'\b\d+\s+(?:won|lost|points|pts|nrr|matches)\b', normalized_text.lower()))
     
     if has_placeholders and not has_actual_data:
         # Instead of a loud "PLACEHOLDER DETECTED" label, we just return 

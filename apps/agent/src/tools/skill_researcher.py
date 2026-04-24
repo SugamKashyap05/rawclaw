@@ -9,8 +9,9 @@ import yaml
 
 logger = logging.getLogger("rawclaw.skills.research")
 
-RESEARCH_DIR = Path(os.getenv("SKILLS_RESEARCH_DIR", "./skills_research"))
-ACTIVE_SKILLS_DIR = Path(os.getenv("SKILLS_DIR", "./skills"))
+AGENT_ROOT = Path(__file__).resolve().parents[2]
+RESEARCH_DIR = Path(os.getenv("SKILLS_RESEARCH_DIR", str(AGENT_ROOT / "skills_research"))).resolve()
+ACTIVE_SKILLS_DIR = Path(os.getenv("SKILLS_DIR", str(AGENT_ROOT / "skills"))).resolve()
 
 class SkillResearcher:
     """
@@ -20,6 +21,8 @@ class SkillResearcher:
 
     def __init__(self):
         # Ensure directories exist
+        self.research_dir = RESEARCH_DIR
+        self.active_skills_dir = ACTIVE_SKILLS_DIR
         RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
         ACTIVE_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
 

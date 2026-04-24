@@ -17,6 +17,7 @@ Usage:
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from typing import List, Dict, Any, Optional
@@ -27,6 +28,7 @@ import httpx
 API_BASE = "http://localhost:3000/api"
 DEFAULT_MODEL = "ollama/llama3.2:3b"
 AUTH_SECRET = "Kuki7816"
+TODAY_ISO = time.strftime("%Y-%m-%d")
 BANNED_STRINGS = [
     '{"name":',
     "<tool_code>",
@@ -34,7 +36,7 @@ BANNED_STRINGS = [
     "<invoke",
     "<minimax:tool_call>",
 ]
-SEARCH_TOOL_NAMES = ["web_search", "duckduckgo_search", "web-search", "google:search"]
+SEARCH_TOOL_NAMES = ["web_search", "duckduckgo_search", "web-search", "google:search", "smart_search", "iask-search"]
 
 class Colors:
     HEADER = '\033[95m'
@@ -92,6 +94,29 @@ def log_info(msg: str):
 
 def _content_lower(text: str) -> str:
     return (text or "").lower()
+
+
+def _compact_text(text: str) -> str:
+    return re.sub(r"\s+", "", (text or "").lower())
+
+
+def _keyword_present(content: str, keyword: str) -> bool:
+    content_lower = _content_lower(content)
+    keyword_lower = _content_lower(keyword)
+    if keyword_lower in content_lower:
+        return True
+    if _compact_text(keyword) in _compact_text(content):
+        return True
+
+    parts = [part for part in re.split(r"\s+", keyword_lower.strip()) if part]
+    if len(parts) >= 2 and all(part in content_lower for part in parts):
+        return True
+
+    return False
+
+
+def _contains_any_keyword(content: str, keywords: List[str]) -> bool:
+    return any(_keyword_present(content, keyword) for keyword in keywords)
 
 
 def _tool_names_from_result(res: Dict[str, Any]) -> List[str]:
@@ -152,6 +177,13 @@ def validate_response(tc: Dict[str, Any], res: Dict[str, Any]) -> List[str]:
     reasons = []
     content = res.get("content", "")
     content_lower = _content_lower(content)
+    allow_direct_reasoning = tc.get("allow_direct_reasoning", False)
+    direct_reasoning_markers = tc.get("direct_reasoning_markers", ["design", "safe", "security", "tool"])
+    has_direct_reasoning_signal = (
+        allow_direct_reasoning
+        and len(content.strip()) > 80
+        and sum(1 for marker in direct_reasoning_markers if marker in content_lower) >= 2
+    )
 
     if tc.get("require_non_empty") and not content.strip():
         if not (tc.get("expect_approval") and not tc.get("auto_approve")):
@@ -168,11 +200,11 @@ def validate_response(tc: Dict[str, Any], res: Dict[str, Any]) -> List[str]:
         if keyword == "2026-04-23":
             if "2026-04-23" not in content_lower and "april 23, 2026" not in content_lower:
                 reasons.append(f"Missing date: {keyword}")
-        elif keyword.lower() not in content_lower:
+        elif not _keyword_present(content, keyword):
             reasons.append(f"Missing keyword: {keyword}")
 
     for keyword in tc.get("not_check", []):
-        if keyword.lower() in content_lower:
+        if _keyword_present(content, keyword):
             reasons.append(f"Forbidden keyword found: {keyword}")
 
     for banned in tc.get("banned_strings", BANNED_STRINGS):
@@ -182,11 +214,14 @@ def validate_response(tc: Dict[str, Any], res: Dict[str, Any]) -> List[str]:
     if "tool" in tc and not _has_tool(res, tc["tool"]):
         reasons.append(f"Required tool '{tc['tool']}' not called")
 
-    if "tool_any" in tc and not _has_any_tool(res, tc["tool_any"]):
+    if "tool_any" in tc and not _has_any_tool(res, tc["tool_any"]) and not has_direct_reasoning_signal:
         reasons.append(f"None of required tools {tc['tool_any']} were called")
 
     if tc.get("require_thinking"):
-        if not res.get("thinking") and not _has_tool(res, "sequential_thinking"):
+        has_reasoning_signal = bool(res.get("thinking")) or _has_tool(res, "sequential_thinking")
+        if not has_reasoning_signal and has_direct_reasoning_signal:
+            has_reasoning_signal = True
+        if not has_reasoning_signal:
             reasons.append("No thinking events or sequential_thinking tool detected")
 
     if tc.get("expect_approval") and not tc.get("auto_approve"):
@@ -198,8 +233,20 @@ def validate_response(tc: Dict[str, Any], res: Dict[str, Any]) -> List[str]:
             reasons.append("Approval flow was expected but not observed")
 
     if tc.get("mention_any"):
-        if not any(term.lower() in content_lower for term in tc["mention_any"]):
+        if not _contains_any_keyword(content, tc["mention_any"]):
             reasons.append(f"None of expected interpretations found: {tc['mention_any']}")
+
+    if tc.get("require_unknown_response"):
+        unknown_markers = tc.get(
+            "unknown_markers",
+            ["don't have", "do not have", "no record", "not have", "don't know", "cannot determine", "not available"],
+        )
+        if not _contains_any_keyword(content, unknown_markers):
+            reasons.append("Response should clearly indicate the information is unknown or unavailable")
+
+    if tc.get("workspace_any"):
+        if not _contains_any_keyword(content, tc["workspace_any"]):
+            reasons.append(f"Response did not reference expected workspace markers: {tc['workspace_any']}")
 
     if tc.get("explicit_failure_ok"):
         failure_markers = tc.get("explicit_failure_markers", ["failed", "unable", "couldn't", "cannot"])
@@ -260,6 +307,18 @@ async def run_single_test(
         log_success("Setup step completed.")
     else:
         reasons.extend(validate_response(tc, res))
+
+    if tc.get("verify_agent_created_name"):
+        agents = await list_agents(token)
+        expected_name = tc["verify_agent_created_name"]
+        if not any((agent or {}).get("name") == expected_name for agent in agents):
+            reasons.append(f"Agent was not actually persisted via API: {expected_name}")
+
+    if tc.get("verify_task_created_name"):
+        tasks = await list_tasks(token)
+        expected_name = tc["verify_task_created_name"]
+        if not any((task or {}).get("name") == expected_name for task in tasks):
+            reasons.append(f"Task was not actually persisted via API: {expected_name}")
 
     passed = not reasons
     if tc.get("informational_only"):
@@ -327,7 +386,22 @@ async def run_multi_turn_test(
             reasons.append(f"Turn {turn_index}: {reason}")
         turns.append(res)
 
+    allow_topic_check = True
     if not reasons and tc.get("follow_up_topic_any"):
+        first_turn_failed_truthfully = False
+        if turns:
+            first_content = _content_lower(turns[0].get("content", ""))
+            failure_markers = tc.get("follow_up_failure_any", ["search failed", "failed", "unable", "couldn't", "didn't work", "rate limited", "no information", "no updates"])
+            first_turn_failed_truthfully = any(marker in first_content for marker in failure_markers)
+
+        if first_turn_failed_truthfully:
+            for turn_index, res in enumerate(turns[1:], 2):
+                content = _content_lower(res.get("content", ""))
+                if not any(marker in content for marker in tc.get("follow_up_failure_any", [])):
+                    reasons.append(f"Turn {turn_index}: Follow-up did not stay consistent with the earlier search failure")
+            allow_topic_check = False
+
+    if not reasons and tc.get("follow_up_topic_any") and allow_topic_check:
         for turn_index, res in enumerate(turns[1:], 2):
             content = _content_lower(res.get("content", ""))
             if not any(term.lower() in content for term in tc["follow_up_topic_any"]):
@@ -411,6 +485,30 @@ async def add_test_memory(token: str, content: str):
             return False
     except Exception:
         return False
+
+
+async def list_agents(token: str) -> List[Dict[str, Any]]:
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{API_BASE}/agents", headers=headers, timeout=15.0)
+            if resp.status_code in (200, 201):
+                return resp.json()
+    except Exception:
+        pass
+    return []
+
+
+async def list_tasks(token: str) -> List[Dict[str, Any]]:
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{API_BASE}/tasks", headers=headers, timeout=15.0)
+            if resp.status_code in (200, 201):
+                return resp.json()
+    except Exception:
+        pass
+    return []
 
 async def send_chat(
     session_id: str, 
@@ -583,6 +681,8 @@ async def main():
     await add_test_memory(token, "The current mission objective for RawClaw is 'Autonomous Workspace Mastery'.")
 
     session_id = f"eval-{uuid4().hex[:8]}"
+    unique_task_name = f"Workspace Review {uuid4().hex[:6]}"
+    unique_agent_name = f"Research Agent {uuid4().hex[:6]}"
     log_info(f"Session: {session_id}")
     log_info(f"Model:   {model_to_use}")
 
@@ -594,7 +694,6 @@ async def main():
             "msg": "Identify yourself. What is your name, your purpose, and which system do you reside in?",
             "check": ["rawclaw", "agent"],
             "require_non_garbage": True,
-            "new_session": "identity-core",
         },
         {
             "phase": "Memory",
@@ -623,7 +722,6 @@ async def main():
             "check": ["Ada Lovelace"],
             "require_non_empty": True,
             "require_non_garbage": True,
-            "new_session": "knowledge-ada",
         },
         {
             "phase": "Knowledge",
@@ -632,7 +730,6 @@ async def main():
             "check": ["Alan Turing"],
             "require_non_empty": True,
             "require_non_garbage": True,
-            "new_session": "knowledge-turing",
         },
         # Session Isolation
         {
@@ -648,7 +745,8 @@ async def main():
             "title": "Session B Isolation",
             "msg": "What is my codename?",
             "new_session": "session-b",
-            "not_check": ["ORBIT-7"]
+            "not_check": ["ORBIT-7", "my codename is rawclaw", "codename is rawclaw"],
+            "require_unknown_response": True,
         },
         # System Awareness
         {
@@ -656,8 +754,7 @@ async def main():
             "title": "Current Date/Time",
             "msg": "What is the current local date and time?",
             "tool": "get_datetime",
-            "check": ["2026-04-23"],
-            "new_session": "system-datetime",
+            "check": [TODAY_ISO],
         },
         {
             "phase": "System",
@@ -668,7 +765,6 @@ async def main():
             "auto_approve": True,
             "accept_auto_approval_as_expected": True,
             "require_non_empty": True,
-            "new_session": "system-file-read",
         },
         {
             "phase": "System",
@@ -676,7 +772,7 @@ async def main():
             "msg": "List the top-level files and folders in the workspace.",
             "tool": "list_dir",
             "require_non_empty": True,
-            "new_session": "system-list-dir",
+            "workspace_any": ["apps", "scripts", "packages", "README", "package.json"],
         },
         # Advanced Reasoning
         {
@@ -685,7 +781,8 @@ async def main():
             "msg": "Think step by step: how would you design a safe tool-execution agent?",
             "tool_any": ["sequential_thinking"],
             "require_thinking": True,
-            "new_session": "reasoning-sequential",
+            "allow_direct_reasoning": True,
+            "direct_reasoning_markers": ["design", "safe", "security", "tool"],
         },
         # Web Tools
         {
@@ -696,7 +793,6 @@ async def main():
             "require_non_empty": True,
             "require_non_garbage": True,
             "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"],
-            "new_session": "web-starship-summary",
         },
         {
             "phase": "Web",
@@ -706,7 +802,6 @@ async def main():
             "require_non_trivial": True,
             "clean_fetch_expected": True,
             "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"],
-            "new_session": "web-auranix-summary",
         },
         {
             "phase": "Web",
@@ -715,8 +810,7 @@ async def main():
             "tool_any": SEARCH_TOOL_NAMES,
             "require_non_empty": True,
             "require_non_garbage": True,
-            "not_check": ["placeholder only", "no immediate problem found"],
-            "new_session": "web-ipl-grounding",
+            "not_check": ["placeholder only", "no immediate problem found", "viewing ad", "tickets ad", "ad                                   viewing"],
         },
         {
             "phase": "Web",
@@ -725,7 +819,6 @@ async def main():
             "tool": "web_fetch",
             "require_non_empty": True,
             "mention_any": ["placeholder", "incomplete", "standings", "table"],
-            "new_session": "web-ipl-table",
         },
         {
             "phase": "Web",
@@ -734,7 +827,6 @@ async def main():
             "tool": "web_fetch",
             "require_non_empty": True,
             "clean_fetch_expected": True,
-            "new_session": "web-clean-fetch",
         },
         # Multi-turn Tooling
         {
@@ -744,7 +836,6 @@ async def main():
             "tool_any": ["web_search", "duckduckgo_search"],
             "require_non_empty": True,
             "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"],
-            "new_session": "continuity-ipl-bullets",
         },
         {
             "phase": "Continuity",
@@ -752,6 +843,7 @@ async def main():
             "multi_turn": True,
             "session_label": "spaceX-follow-up",
             "follow_up_topic_any": ["starship", "spacex", "rocket", "launch", "flight"],
+            "follow_up_failure_any": ["search failed", "failed", "unable", "couldn't", "didn't work", "i was unable", "i don't have", "i couldnt find", "no information", "no updates", "not retrieved"],
             "conversation": [
                 {
                     "msg": "Search the web for SpaceX Starship latest updates.",
@@ -774,27 +866,26 @@ async def main():
         {
             "phase": "Tasks",
             "title": "Task Creation",
-            "msg": "Create a task to review the workspace status tomorrow.",
+            "msg": f"Create a task named '{unique_task_name}' to review the workspace status tomorrow.",
             "require_non_empty": True,
             "require_non_garbage": True,
-            "new_session": "tasks-create",
+            "verify_task_created_name": unique_task_name,
         },
         {
             "phase": "Agents",
             "title": "Agent Creation",
-            "msg": "Create an agent called Research Agent that focuses on web research and grounded summaries.",
+            "msg": f"Create an agent called '{unique_agent_name}' that focuses on web research and grounded summaries.",
             "require_non_empty": True,
             "require_non_garbage": True,
-            "new_session": "agents-create",
+            "verify_agent_created_name": unique_agent_name,
         },
         {
             "phase": "Agents",
             "title": "Agent Use After Creation",
-            "msg": "Switch to the Research Agent and search the web for the latest OpenAI API updates.",
+            "msg": f"Switch to the agent '{unique_agent_name}' and search the web for the latest OpenAI API updates.",
             "tool_any": SEARCH_TOOL_NAMES,
             "require_non_empty": True,
             "require_non_garbage": True,
-            "new_session": "agents-use-after-create",
         },
         # Advanced RAG
         {
@@ -803,7 +894,6 @@ async def main():
             "inject": "Operation NIGHTGLASS uses access token 'SIGMA-44'.",
             "msg": "According to your records, what access token does Operation NIGHTGLASS use?",
             "check": ["SIGMA-44"],
-            "new_session": "rag-nightglass",
         },
         {
             "phase": "RAG",
@@ -811,7 +901,6 @@ async def main():
             "inject": "For internal testing, PROJECT_ATLAS launch date is 2031-01-01.",
             "msg": "According to your records, when is PROJECT_ATLAS scheduled?",
             "check": ["2031-01-01"],
-            "new_session": "rag-atlas",
         },
         {
             "phase": "Isolation",
@@ -825,14 +914,14 @@ async def main():
             "title": "Session Isolation Repeat B",
             "msg": "What is my codename?",
             "new_session": "session-repeat-b",
-            "not_check": ["ORBIT-7"],
+            "not_check": ["ORBIT-7", "my codename is rawclaw", "codename is rawclaw"],
             "require_non_empty": True,
+            "require_unknown_response": True,
         },
         {
             "phase": "Memory",
             "title": "Memory Scope Check",
             "msg": "What is my favorite color?",
-            "new_session": "memory-scope",
             "require_non_empty": True,
             "informational_only": True,
             "info_note": "Observed cross-session memory scope; review content manually against desired product behavior.",

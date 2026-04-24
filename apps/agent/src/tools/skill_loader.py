@@ -24,7 +24,8 @@ from src.contracts.tool import ToolResult
 
 logger = logging.getLogger("rawclaw.skills")
 
-DEFAULT_SKILLS_DIR = os.getenv("SKILLS_DIR", "./skills")
+AGENT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_SKILLS_DIR = Path(os.getenv("SKILLS_DIR", str(AGENT_ROOT / "skills"))).resolve()
 
 
 class SkillTool(BaseTool):
@@ -117,8 +118,8 @@ def _parse_skill_md(filepath: Path) -> Optional[Dict[str, Any]]:
 class SkillLoader:
     """Discovers and loads SKILL.md files from the skills directory."""
 
-    def __init__(self, skills_dir: str = DEFAULT_SKILLS_DIR) -> None:
-        self.skills_dir = Path(skills_dir)
+    def __init__(self, skills_dir: str | Path = DEFAULT_SKILLS_DIR) -> None:
+        self.skills_dir = Path(skills_dir).resolve()
         self._skills: List[SkillTool] = []
 
     def discover(self) -> List[SkillTool]:
@@ -177,4 +178,3 @@ class SkillLoader:
     @property
     def count(self) -> int:
         return len(self._skills)
-

@@ -12,6 +12,7 @@ import { DocumentProcessorService } from './document-processor.service';
 import { PrismaService } from './prisma.service';
 import { ProvenanceSanitizer } from './common/provenance-sanitizer';
 import { SettingsService } from './settings.service';
+import { TasksService } from './tasks/tasks.service';
 
 @Injectable()
 export class ChatOrchestratorService {
@@ -27,16 +28,161 @@ export class ChatOrchestratorService {
     private readonly documentProcessor: DocumentProcessorService,
     private readonly prisma: PrismaService,
     private readonly settingsService: SettingsService,
+    private readonly tasksService: TasksService,
   ) {}
 
   private readonly MAX_TOTAL_PROMPT_CHARS = 180000;
   private readonly MAX_ATTACHMENT_INLINE_CHARS = 50000;
   private readonly MAX_TOOL_RESULT_CHARS = 20000;
 
+  private shouldEnableOutputReview(request: ChatRequest, latestUserContent: string): boolean {
+    if (request.output_reviewer_id) {
+      return true;
+    }
+
+    const query = (latestUserContent || '').toLowerCase();
+    const reviewSignals = [
+      'search the web',
+      'search web',
+      'latest',
+      'current',
+      'news',
+      'open http',
+      'https://',
+      'http://',
+      'summarize the page',
+      'official page',
+      'points table',
+      'standings',
+      'fetch a webpage',
+    ];
+
+    return reviewSignals.some((signal) => query.includes(signal));
+  }
+
+  private tryExtractQuotedName(text: string, entity: 'agent' | 'task'): string | null {
+    const patterns = [
+      new RegExp(`(?:create|make)\\s+(?:an?\\s+)?${entity}\\s+(?:called|named)\\s+['"]([^'"]+)['"]`, 'i'),
+      new RegExp(`switch\\s+to\\s+(?:the\\s+)?${entity}\\s+['"]([^'"]+)['"]`, 'i'),
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match?.[1]) return match[1].trim();
+    }
+    return null;
+  }
+
+  private buildAgentPrompt(name: string, requestText: string): string {
+    const focusMatch = requestText.match(/focuses?\s+on\s+(.+?)(?:\.|$)/i);
+    const focus = focusMatch?.[1]?.trim() || 'reliable, grounded task execution';
+    return [
+      `You are ${name}, a specialized RawClaw agent.`,
+      `Primary focus: ${focus}.`,
+      `Operating rules:`,
+      `- Prefer tool-backed, grounded answers over unsupported memory.`,
+      `- Be concise, accurate, and explicit about uncertainty.`,
+      `- Use web or fetch tools when current information is required.`,
+    ].join('\n');
+  }
+
+  private tryExtractTaskDescription(text: string): { name: string; description: string; schedule?: string } | null {
+    const namedMatch = text.match(/create\s+a\s+task\s+named\s+['"]([^'"]+)['"]\s+to\s+(.+?)(?:\.|$)/i);
+    if (namedMatch?.[1] && namedMatch?.[2]) {
+      const rawDescription = namedMatch[2].trim();
+      const schedule = /\btomorrow\b/i.test(rawDescription) ? 'tomorrow' : undefined;
+      const description = rawDescription.replace(/\btomorrow\b/i, '').replace(/\s+/g, ' ').trim().replace(/\s+$/, '');
+      return {
+        name: namedMatch[1].trim(),
+        description: description || rawDescription,
+        schedule,
+      };
+    }
+    return null;
+  }
+
+  private async maybeResolveAgentFromPrompt(latestUserContent: string) {
+    const requestedName = this.tryExtractQuotedName(latestUserContent, 'agent');
+    if (!requestedName || !/switch\s+to/i.test(latestUserContent)) return null;
+    const agents = await this.agentsService.list();
+    return agents.find((agent) => agent.name === requestedName) || null;
+  }
+
+  private async handleDirectActionIfApplicable(request: ChatRequest, res: Response, latestUserContent: string): Promise<boolean> {
+    const lower = (latestUserContent || '').toLowerCase();
+
+    if (lower.startsWith('create a task')) {
+      const parsed = this.tryExtractTaskDescription(latestUserContent);
+      if (!parsed) {
+        return false;
+      }
+
+      const task = await this.tasksService.createDefinition({
+        name: parsed.name,
+        description: parsed.description,
+        schedule: parsed.schedule,
+        workspaceId: 'default',
+        toolIds: [],
+      });
+
+      await this.chatService.createMessage(request.session_id, 'assistant', `I created the task '${task.name}' to ${parsed.description}${parsed.schedule ? ` (${parsed.schedule})` : ''}.`, {
+        agentId: request.agent_id,
+      });
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.write(`data: ${JSON.stringify({ type: 'content', content: `I created the task '${task.name}' to ${parsed.description}${parsed.schedule ? ` (${parsed.schedule})` : ''}.` })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      res.end();
+      return true;
+    }
+
+    if (lower.startsWith('create an agent') || lower.startsWith('create a agent') || lower.startsWith('create agent')) {
+      const name = this.tryExtractQuotedName(latestUserContent, 'agent');
+      if (!name) {
+        return false;
+      }
+
+      const existingAgents = await this.agentsService.list();
+      const existing = existingAgents.find((agent) => agent.name === name);
+      const agent = existing || await this.agentsService.create({
+        name,
+        description: `Agent created from chat for ${name}`,
+        systemPrompt: this.buildAgentPrompt(name, latestUserContent),
+        isDefault: false,
+        skills: [],
+      });
+
+      const content = existing
+        ? `The agent '${agent.name}' already exists and is available to use.`
+        : `I created the agent '${agent.name}' and saved it to the agent registry.`;
+
+      await this.chatService.createMessage(request.session_id, 'assistant', content, {
+        agentId: request.agent_id,
+      });
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      res.end();
+      return true;
+    }
+
+    return false;
+  }
+
   async processAndStreamChat(request: ChatRequest, res: Response, options: { skipPromptPersistence?: boolean } = {}): Promise<void> {
     const agentUrl = this.configService.get<string>('agentUrl');
     const systemContext = await this.docsService.getSystemContext();
-    const selectedAgent = await this.agentsService.getOptional(request.agent_id);
+    const latestUserContent = (request.messages || []).filter(m => m.role === 'user').slice(-1)[0]?.content || '';
+    const promptedAgent = !request.agent_id ? await this.maybeResolveAgentFromPrompt(latestUserContent) : null;
+    if (promptedAgent && !request.agent_id) {
+      request.agent_id = promptedAgent.id;
+      this.logger.log(`Resolved agent switch from prompt to '${promptedAgent.name}' (${promptedAgent.id})`);
+    }
+    const selectedAgent = promptedAgent || await this.agentsService.getOptional(request.agent_id);
 
     // Respect the selected agent's preferred model when the request itself
     // did not explicitly choose one. Without this, agent-bound modelIds are
@@ -59,8 +205,8 @@ export class ChatOrchestratorService {
       this.logger.log(`Using explicitly selected model: '${request.model}'`);
     }
 
-    // Resolve output reviewer from config if not explicitly provided
-    if (!request.output_reviewer_id) {
+    // Resolve output reviewer from config only for prompts that benefit from truthfulness review.
+    if (!request.output_reviewer_id && this.shouldEnableOutputReview(request, latestUserContent)) {
       const config = await this.modelsService.getConfig();
       if (config.routing.outputReviewer) {
         request.output_reviewer_id = config.routing.outputReviewer;
@@ -108,6 +254,7 @@ export class ChatOrchestratorService {
 
     // Fetch available tools from agent and pass them to the model
     let toolsSchema: any[] | undefined;
+    let availableSkills: Array<{ name: string; description: string; capabilityTags: string[] }> = [];
     try {
       const toolsRes = await firstValueFrom(
         this.httpService.get(`${agentUrl}/api/tools`)
@@ -124,10 +271,18 @@ export class ChatOrchestratorService {
           parameters: t.parameters,
         }
       }));
+      availableSkills = tools
+        .filter((t: any) => typeof t.name === 'string' && t.name.startsWith('skill_'))
+        .map((t: any) => ({
+          name: String(t.name).replace(/^skill_/, ''),
+          description: t.description || '',
+          capabilityTags: Array.isArray(t.capability_tags) ? t.capability_tags : [],
+        }));
       this.logger.log(`[TOOL_TRACE] Converted to OpenAI format, passing ${tools?.length || 0} tools to agent`);
     } catch (e: any) {
       this.logger.warn('[TOOL_TRACE] Could not fetch tools from agent:', e?.message || String(e));
       toolsSchema = undefined;
+      availableSkills = [];
     }
 
     // Add tool-selection guidance when tools are available
@@ -146,6 +301,34 @@ export class ChatOrchestratorService {
         role: 'system',
         content: `You are now operating as the ${selectedAgent.name} agent.\n${selectedAgent.systemPrompt}`
       });
+
+      if (selectedAgent.skills?.length) {
+        const installedSelectedSkills = selectedAgent.skills
+          .map((skillName) => {
+            const matched = availableSkills.find((skill) => skill.name === skillName);
+            if (!matched) return null;
+            const tags = matched.capabilityTags?.length ? ` [${matched.capabilityTags.join(', ')}]` : '';
+            return `- skill_${matched.name}: ${matched.description}${tags}`;
+          })
+          .filter(Boolean);
+
+        if (installedSelectedSkills.length) {
+          systemMessages.push({
+            role: 'system',
+            content:
+              `ACTIVE AGENT SKILLS\n` +
+              `This agent has the following installed skills assigned. Prefer these skill tools when they are relevant before falling back to generic tool usage.\n` +
+              `${installedSelectedSkills.join('\n')}`,
+          });
+        } else {
+          systemMessages.push({
+            role: 'system',
+            content:
+              `ACTIVE AGENT SKILLS\n` +
+              `This agent was assigned skills (${selectedAgent.skills.join(', ')}), but those skills are not currently installed in the agent runtime. Do not invent them.`,
+          });
+        }
+      }
     }
 
     // Add edit request system prompt if present
@@ -251,6 +434,10 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           });
         }
       }
+    }
+
+    if (await this.handleDirectActionIfApplicable(request, res, latestUserContent)) {
+      return;
     }
 
     // 3. Apply budgeting heuristic for the PROMPT only

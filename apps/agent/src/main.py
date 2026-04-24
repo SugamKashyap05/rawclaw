@@ -546,6 +546,38 @@ async def list_skills():
     return {"skills": skills}
 
 
+@app.get("/api/skills/status")
+async def get_skills_status():
+    """Return runtime status for the skills subsystem."""
+    active_dir = str(getattr(skill_loader, "skills_dir", "")) if skill_loader else ""
+    research_dir = ""
+    if skill_researcher:
+        research_dir = str(getattr(skill_researcher, "research_dir", "") or "")
+
+    skill_files = []
+    if skill_loader:
+        try:
+            skill_files = [str(path) for path in skill_loader.skills_dir.rglob("SKILL.md")]
+        except Exception:
+            skill_files = []
+
+    researched_count = 0
+    if skill_researcher:
+        try:
+            researched_count = len(skill_researcher.list_researched_skills())
+        except Exception:
+            researched_count = 0
+
+    return {
+        "status": "ok",
+        "activeSkillsDir": active_dir,
+        "researchDir": research_dir,
+        "installedCount": len(skill_files),
+        "installedSkillFiles": skill_files,
+        "researchedCount": researched_count,
+    }
+
+
 @app.post("/api/skills/{name}/run")
 async def run_skill(name: str, request: Request):
     """Execute a skill tool directly and return its output payload."""

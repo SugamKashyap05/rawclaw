@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../../lib/api';
 
-export function SkillBuilder() {
+export function SkillBuilder({ onChanged }: { onChanged?: () => void }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
@@ -31,6 +31,7 @@ export function SkillBuilder() {
         setDescription('');
         setTags('');
         setInstructions('');
+        onChanged?.();
       } else {
         alert(`Failed to build skill: ${res.data.error || 'Unknown error'}`);
       }
