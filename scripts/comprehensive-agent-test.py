@@ -27,6 +27,14 @@ import httpx
 API_BASE = "http://localhost:3000/api"
 DEFAULT_MODEL = "ollama/llama3.2:3b"
 AUTH_SECRET = "Kuki7816"
+BANNED_STRINGS = [
+    '{"name":',
+    "<tool_code>",
+    "</think>",
+    "<invoke",
+    "<minimax:tool_call>",
+]
+SEARCH_TOOL_NAMES = ["web_search", "duckduckgo_search", "web-search", "google:search"]
 
 class Colors:
     HEADER = '\033[95m'
@@ -80,6 +88,270 @@ def log_info(msg: str):
         print(f"  {Colors.YELLOW}[i] {msg}{Colors.ENDC}")
     except UnicodeEncodeError:
         print(f"  [i] {msg.encode('ascii', 'ignore').decode('ascii')}")
+
+
+def _content_lower(text: str) -> str:
+    return (text or "").lower()
+
+
+def _tool_names_from_result(res: Dict[str, Any]) -> List[str]:
+    names = []
+    for item in res.get("tool_calls", []):
+        name = (item or {}).get("name")
+        if name:
+            names.append(name)
+    for item in res.get("tool_results", []):
+        if not isinstance(item, dict):
+            continue
+        name = item.get("tool_name") or item.get("name")
+        if name:
+            names.append(name)
+    return names
+
+
+def _has_any_tool(res: Dict[str, Any], expected: List[str]) -> bool:
+    names = set(_tool_names_from_result(res))
+    return any(name in names for name in expected)
+
+
+def _has_tool(res: Dict[str, Any], expected: str) -> bool:
+    return _has_any_tool(res, [expected])
+
+
+def _contains_repeated_noise(text: str) -> bool:
+    lowered = _content_lower(text)
+    noisy_markers = [
+        "click here to follow all the live action",
+        "what are cookies",
+        "privacy policy",
+        "terms & conditions",
+        "official digital streaming partner",
+        "related videos",
+        "view all",
+    ]
+    return sum(1 for marker in noisy_markers if marker in lowered) >= 2
+
+
+def _looks_like_raw_html_dump(text: str) -> bool:
+    lowered = _content_lower(text)
+    html_markers = ["<html", "<body", "<div", "<script", "</html>", "</body>"]
+    return any(marker in lowered for marker in html_markers)
+
+
+def _looks_like_generic_filler(text: str) -> bool:
+    lowered = _content_lower(text).strip()
+    generic_fillers = [
+        "what can i help you with today?",
+        "please rephrase your request",
+        "let me know if you'd like",
+    ]
+    return any(phrase in lowered for phrase in generic_fillers)
+
+
+def validate_response(tc: Dict[str, Any], res: Dict[str, Any]) -> List[str]:
+    reasons = []
+    content = res.get("content", "")
+    content_lower = _content_lower(content)
+
+    if tc.get("require_non_empty") and not content.strip():
+        if not (tc.get("expect_approval") and not tc.get("auto_approve")):
+            reasons.append("Response content is empty")
+
+    if tc.get("require_non_trivial"):
+        if len(content.strip()) < 20 or "cannot access" in content_lower:
+            reasons.append("Response is trivial or a refusal")
+
+    if tc.get("require_non_garbage") and _looks_like_generic_filler(content):
+        reasons.append("Response reset into generic filler")
+
+    for keyword in tc.get("check", []):
+        if keyword == "2026-04-23":
+            if "2026-04-23" not in content_lower and "april 23, 2026" not in content_lower:
+                reasons.append(f"Missing date: {keyword}")
+        elif keyword.lower() not in content_lower:
+            reasons.append(f"Missing keyword: {keyword}")
+
+    for keyword in tc.get("not_check", []):
+        if keyword.lower() in content_lower:
+            reasons.append(f"Forbidden keyword found: {keyword}")
+
+    for banned in tc.get("banned_strings", BANNED_STRINGS):
+        if banned.lower() in content_lower:
+            reasons.append(f"RAW LEAKAGE DETECTED: Found {banned}")
+
+    if "tool" in tc and not _has_tool(res, tc["tool"]):
+        reasons.append(f"Required tool '{tc['tool']}' not called")
+
+    if "tool_any" in tc and not _has_any_tool(res, tc["tool_any"]):
+        reasons.append(f"None of required tools {tc['tool_any']} were called")
+
+    if tc.get("require_thinking"):
+        if not res.get("thinking") and not _has_tool(res, "sequential_thinking"):
+            reasons.append("No thinking events or sequential_thinking tool detected")
+
+    if tc.get("expect_approval") and not tc.get("auto_approve"):
+        if not res.get("approval_requested"):
+            reasons.append("Approval was expected but not requested")
+
+    if tc.get("accept_auto_approval_as_expected") and tc.get("expect_approval"):
+        if not (res.get("approval_requested") or tc.get("auto_approve")):
+            reasons.append("Approval flow was expected but not observed")
+
+    if tc.get("mention_any"):
+        if not any(term.lower() in content_lower for term in tc["mention_any"]):
+            reasons.append(f"None of expected interpretations found: {tc['mention_any']}")
+
+    if tc.get("explicit_failure_ok"):
+        failure_markers = tc.get("explicit_failure_markers", ["failed", "unable", "couldn't", "cannot"])
+        if not content.strip() and not any(marker in content_lower for marker in failure_markers):
+            reasons.append("Expected a truthful explicit failure, but response was empty")
+
+    if tc.get("clean_fetch_expected"):
+        if _looks_like_raw_html_dump(content):
+            reasons.append("Response appears to contain raw HTML dump")
+        if _contains_repeated_noise(content):
+            reasons.append("Response appears dominated by navigation/footer noise")
+
+    return reasons
+
+
+async def run_single_test(
+    index: int,
+    total_steps: int,
+    tc: Dict[str, Any],
+    token: str,
+    agent_id: str,
+    default_session_id: str,
+) -> Dict[str, Any]:
+    log_step(index, tc["phase"], tc["title"], total_steps)
+
+    current_session = default_session_id
+    if "new_session" in tc:
+        current_session = f"eval-{tc['new_session']}-{uuid4().hex[:4]}"
+        log_info(f"Switching to isolated session: {current_session}")
+
+    if "inject" in tc:
+        await add_test_memory(token, tc["inject"])
+
+    log_send(tc["msg"])
+    res = await send_chat(
+        current_session,
+        tc["msg"],
+        agent_id,
+        token,
+        expect_approval=tc.get("expect_approval", False),
+        auto_approve=tc.get("auto_approve", False),
+    )
+
+    if res["error"]:
+        log_error(f"Error: {res['error']}")
+        return {
+            "step": index,
+            "phase": tc["phase"],
+            "title": tc["title"],
+            "passed": False,
+            "error": res["error"],
+        }
+
+    log_recv(res["content"], res["total_time"])
+    reasons = []
+
+    if tc.get("is_setup"):
+        log_success("Setup step completed.")
+    else:
+        reasons.extend(validate_response(tc, res))
+
+    passed = not reasons
+    if tc.get("informational_only"):
+        passed = True
+        note = tc.get("info_note")
+        if note:
+            reasons.insert(0, note)
+
+    if passed:
+        log_success("Response validated." if not tc.get("informational_only") else "Informational check completed.")
+    else:
+        for reason in reasons:
+            log_info(f"Validation Note: {reason}")
+        log_info("Validation failed.")
+
+    return {
+        "step": index,
+        "phase": tc["phase"],
+        "title": tc["title"],
+        "passed": passed,
+        "latency": res["total_time"],
+        "tool_calls": len(res["tool_calls"]),
+        "thinking": len(res["thinking"]),
+        "reasons": reasons,
+        "session_id": current_session,
+        "content": res["content"],
+    }
+
+
+async def run_multi_turn_test(
+    index: int,
+    total_steps: int,
+    tc: Dict[str, Any],
+    token: str,
+    agent_id: str,
+) -> Dict[str, Any]:
+    log_step(index, tc["phase"], tc["title"], total_steps)
+    current_session = f"eval-{tc.get('session_label', 'multi-turn')}-{uuid4().hex[:4]}"
+    log_info(f"Using multi-turn session: {current_session}")
+
+    turns = []
+    reasons = []
+    total_latency = 0.0
+
+    for turn_index, turn in enumerate(tc["conversation"], 1):
+        log_send(turn["msg"])
+        res = await send_chat(
+            current_session,
+            turn["msg"],
+            agent_id,
+            token,
+            expect_approval=turn.get("expect_approval", False),
+            auto_approve=turn.get("auto_approve", False),
+        )
+        if res["error"]:
+            log_error(f"Error: {res['error']}")
+            reasons.append(f"Turn {turn_index} error: {res['error']}")
+            turns.append({"content": "", "error": res["error"], "tool_calls": [], "tool_results": [], "thinking": []})
+            break
+
+        total_latency += res["total_time"]
+        log_recv(res["content"], res["total_time"])
+        turn_reasons = validate_response(turn, res)
+        for reason in turn_reasons:
+            reasons.append(f"Turn {turn_index}: {reason}")
+        turns.append(res)
+
+    if not reasons and tc.get("follow_up_topic_any"):
+        for turn_index, res in enumerate(turns[1:], 2):
+            content = _content_lower(res.get("content", ""))
+            if not any(term.lower() in content for term in tc["follow_up_topic_any"]):
+                reasons.append(f"Turn {turn_index}: Follow-up drifted off topic")
+
+    passed = not reasons
+    if passed:
+        log_success("Response validated.")
+    else:
+        for reason in reasons:
+            log_info(f"Validation Note: {reason}")
+        log_info("Validation failed.")
+
+    return {
+        "step": index,
+        "phase": tc["phase"],
+        "title": tc["title"],
+        "passed": passed,
+        "latency": total_latency,
+        "tool_calls": sum(len(turn.get("tool_calls", [])) for turn in turns),
+        "thinking": sum(len(turn.get("thinking", [])) for turn in turns),
+        "reasons": reasons,
+        "session_id": current_session,
+    }
 
 async def get_token() -> str:
     """Get auth token using secret."""
@@ -320,7 +592,9 @@ async def main():
             "phase": "Identity",
             "title": "System Role",
             "msg": "Identify yourself. What is your name, your purpose, and which system do you reside in?",
-            "check": ["rawclaw", "agent"]
+            "check": ["rawclaw", "agent"],
+            "require_non_garbage": True,
+            "new_session": "identity-core",
         },
         {
             "phase": "Memory",
@@ -341,6 +615,24 @@ async def main():
             "title": "Short-Term Recall",
             "msg": "What color did I just say was my favorite?",
             "check": ["teal"]
+        },
+        {
+            "phase": "Knowledge",
+            "title": "General Knowledge: Ada Lovelace",
+            "msg": "Who is Ada Lovelace?",
+            "check": ["Ada Lovelace"],
+            "require_non_empty": True,
+            "require_non_garbage": True,
+            "new_session": "knowledge-ada",
+        },
+        {
+            "phase": "Knowledge",
+            "title": "Wikipedia-Style Summary: Alan Turing",
+            "msg": "Use Wikipedia to give me a short summary of Alan Turing.",
+            "check": ["Alan Turing"],
+            "require_non_empty": True,
+            "require_non_garbage": True,
+            "new_session": "knowledge-turing",
         },
         # Session Isolation
         {
@@ -364,7 +656,8 @@ async def main():
             "title": "Current Date/Time",
             "msg": "What is the current local date and time?",
             "tool": "get_datetime",
-            "check": ["2026-04-23"]
+            "check": ["2026-04-23"],
+            "new_session": "system-datetime",
         },
         {
             "phase": "System",
@@ -372,13 +665,18 @@ async def main():
             "msg": "Read the contents of README.md and summarize it.",
             "tool": "read_file",
             "expect_approval": True,
-            "auto_approve": True
+            "auto_approve": True,
+            "accept_auto_approval_as_expected": True,
+            "require_non_empty": True,
+            "new_session": "system-file-read",
         },
         {
             "phase": "System",
             "title": "Directory Listing",
             "msg": "List the top-level files and folders in the workspace.",
-            "tool": "list_dir"
+            "tool": "list_dir",
+            "require_non_empty": True,
+            "new_session": "system-list-dir",
         },
         # Advanced Reasoning
         {
@@ -386,7 +684,8 @@ async def main():
             "title": "Sequential Thinking",
             "msg": "Think step by step: how would you design a safe tool-execution agent?",
             "tool_any": ["sequential_thinking"],
-            "require_thinking": True
+            "require_thinking": True,
+            "new_session": "reasoning-sequential",
         },
         # Web Tools
         {
@@ -394,7 +693,10 @@ async def main():
             "title": "Web Search",
             "msg": "Search the web for the latest news about SpaceX Starship and summarize it.",
             "tool_any": ["web_search", "duckduckgo_search"],
-            "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"]
+            "require_non_empty": True,
+            "require_non_garbage": True,
+            "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"],
+            "new_session": "web-starship-summary",
         },
         {
             "phase": "Web",
@@ -402,7 +704,37 @@ async def main():
             "msg": "Open https://auranixdigital.com/ and summarize the page.",
             "tool": "web_fetch",
             "require_non_trivial": True,
-            "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"]
+            "clean_fetch_expected": True,
+            "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"],
+            "new_session": "web-auranix-summary",
+        },
+        {
+            "phase": "Web",
+            "title": "Web Search Grounding",
+            "msg": "Search the web for the latest IPL 2026 Chennai Super Kings news and summarize it in 3 bullets.",
+            "tool_any": SEARCH_TOOL_NAMES,
+            "require_non_empty": True,
+            "require_non_garbage": True,
+            "not_check": ["placeholder only", "no immediate problem found"],
+            "new_session": "web-ipl-grounding",
+        },
+        {
+            "phase": "Web",
+            "title": "Official Page Fetch Classification",
+            "msg": "Open the official IPL points table page and tell me whether it contains actual standings or placeholder data.",
+            "tool": "web_fetch",
+            "require_non_empty": True,
+            "mention_any": ["placeholder", "incomplete", "standings", "table"],
+            "new_session": "web-ipl-table",
+        },
+        {
+            "phase": "Web",
+            "title": "Clean Fetch Rendering",
+            "msg": "Fetch a webpage and show me the main content only, not navigation or footer noise. Use https://auranixdigital.com/.",
+            "tool": "web_fetch",
+            "require_non_empty": True,
+            "clean_fetch_expected": True,
+            "new_session": "web-clean-fetch",
         },
         # Multi-turn Tooling
         {
@@ -411,7 +743,58 @@ async def main():
             "msg": "Search the web for the latest IPL news and then give me a 3-bullet summary.",
             "tool_any": ["web_search", "duckduckgo_search"],
             "require_non_empty": True,
-            "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"]
+            "not_check": ["<tool_code>", "<invoke", "<minimax:tool_call>"],
+            "new_session": "continuity-ipl-bullets",
+        },
+        {
+            "phase": "Continuity",
+            "title": "Search Then Follow-Up",
+            "multi_turn": True,
+            "session_label": "spaceX-follow-up",
+            "follow_up_topic_any": ["starship", "spacex", "rocket", "launch", "flight"],
+            "conversation": [
+                {
+                    "msg": "Search the web for SpaceX Starship latest updates.",
+                    "tool_any": SEARCH_TOOL_NAMES,
+                    "require_non_empty": True,
+                    "require_non_garbage": True,
+                },
+                {
+                    "msg": "Now give me only the most important takeaway from what you just found.",
+                    "require_non_empty": True,
+                    "require_non_garbage": True,
+                },
+                {
+                    "msg": "Summarize that in one sentence for a non-technical person.",
+                    "require_non_empty": True,
+                    "require_non_garbage": True,
+                },
+            ],
+        },
+        {
+            "phase": "Tasks",
+            "title": "Task Creation",
+            "msg": "Create a task to review the workspace status tomorrow.",
+            "require_non_empty": True,
+            "require_non_garbage": True,
+            "new_session": "tasks-create",
+        },
+        {
+            "phase": "Agents",
+            "title": "Agent Creation",
+            "msg": "Create an agent called Research Agent that focuses on web research and grounded summaries.",
+            "require_non_empty": True,
+            "require_non_garbage": True,
+            "new_session": "agents-create",
+        },
+        {
+            "phase": "Agents",
+            "title": "Agent Use After Creation",
+            "msg": "Switch to the Research Agent and search the web for the latest OpenAI API updates.",
+            "tool_any": SEARCH_TOOL_NAMES,
+            "require_non_empty": True,
+            "require_non_garbage": True,
+            "new_session": "agents-use-after-create",
         },
         # Advanced RAG
         {
@@ -419,14 +802,40 @@ async def main():
             "title": "Explicit RAG Fact",
             "inject": "Operation NIGHTGLASS uses access token 'SIGMA-44'.",
             "msg": "According to your records, what access token does Operation NIGHTGLASS use?",
-            "check": ["SIGMA-44"]
+            "check": ["SIGMA-44"],
+            "new_session": "rag-nightglass",
         },
         {
             "phase": "RAG",
             "title": "RAG vs General Knowledge",
             "inject": "For internal testing, PROJECT_ATLAS launch date is 2031-01-01.",
             "msg": "According to your records, when is PROJECT_ATLAS scheduled?",
-            "check": ["2031-01-01"]
+            "check": ["2031-01-01"],
+            "new_session": "rag-atlas",
+        },
+        {
+            "phase": "Isolation",
+            "title": "Session Isolation Repeat A",
+            "msg": "My codename is ORBIT-7.",
+            "new_session": "session-repeat-a",
+            "is_setup": True,
+        },
+        {
+            "phase": "Isolation",
+            "title": "Session Isolation Repeat B",
+            "msg": "What is my codename?",
+            "new_session": "session-repeat-b",
+            "not_check": ["ORBIT-7"],
+            "require_non_empty": True,
+        },
+        {
+            "phase": "Memory",
+            "title": "Memory Scope Check",
+            "msg": "What is my favorite color?",
+            "new_session": "memory-scope",
+            "require_non_empty": True,
+            "informational_only": True,
+            "info_note": "Observed cross-session memory scope; review content manually against desired product behavior.",
         },
     ]
 
@@ -434,125 +843,12 @@ async def main():
     log_header("Running Test Suite")
     
     for i, tc in enumerate(test_cases, 1):
-        log_step(i, tc["phase"], tc["title"], len(test_cases))
-
-        # Handle dynamic session IDs (Isolation tests)
-        current_session = session_id
-        if "new_session" in tc:
-            current_session = f"eval-{tc['new_session']}-{uuid4().hex[:4]}"
-            log_info(f"Switching to isolated session: {current_session}")
-
-        # Handle dynamic memory injection (Advanced RAG tests)
-        if "inject" in tc:
-            await add_test_memory(token, tc["inject"])
-
-        log_send(tc["msg"])
-
-        res = await send_chat(
-            current_session, 
-            tc["msg"], 
-            agent_id, 
-            token,
-            expect_approval=tc.get("expect_approval", False),
-            auto_approve=tc.get("auto_approve", False)
-        )
-
-        if res["error"]:
-            log_error(f"Error: {res['error']}")
-            results.append({
-                "step": i,
-                "phase": tc["phase"],
-                "title": tc["title"],
-                "passed": False,
-                "error": res["error"]
-            })
+        if tc.get("multi_turn"):
+            result = await run_multi_turn_test(i, len(test_cases), tc, token, agent_id)
         else:
-            log_recv(res["content"], res["total_time"])
+            result = await run_single_test(i, len(test_cases), tc, token, agent_id, session_id)
 
-            passed = True
-            reasons = []
-
-            # Setup steps always pass
-            if tc.get("is_setup"):
-                log_success("Setup step completed.")
-            else:
-                # Positive Keyword check
-                if "check" in tc:
-                    content_lower = res["content"].lower()
-                    for keyword in tc["check"]:
-                        # Relax date validation: allow "April 23, 2026" or "2026-04-23"
-                        if keyword == "2026-04-23":
-                            if "2026-04-23" not in content_lower and "april 23, 2026" not in content_lower:
-                                passed = False
-                                reasons.append(f"Missing date: {keyword}")
-                        elif keyword.lower() not in content_lower:
-                            passed = False
-                            reasons.append(f"Missing keyword: {keyword}")
-
-                # Negative Keyword check (Banned strings / Isolation)
-                if "not_check" in tc:
-                    content_lower = res["content"].lower()
-                    for keyword in tc["not_check"]:
-                        if keyword.lower() in content_lower:
-                            passed = False
-                            reasons.append(f"Forbidden keyword found: {keyword}")
-
-                # Tool call check (Exact)
-                if "tool" in tc:
-                    tool_called = any(tc["tool"] == tc_item.get("name", "") for tc_item in res["tool_calls"])
-                    if not tool_called:
-                        passed = False
-                        reasons.append(f"Required tool '{tc['tool']}' not called")
-
-                # Tool call check (One-of-many)
-                if "tool_any" in tc:
-                    tool_called = any(
-                        any(t == tc_item.get("name", "") for t in tc["tool_any"])
-                        for tc_item in res["tool_calls"]
-                    )
-                    if not tool_called:
-                        passed = False
-                        reasons.append(f"None of required tools {tc['tool_any']} were called")
-
-                # Thinking event check
-                if tc.get("require_thinking"):
-                    if not res["thinking"] and not any(tc_item.get("name") == "sequential_thinking" for tc_item in res["tool_calls"]):
-                        passed = False
-                        reasons.append("No thinking events or sequential_thinking tool detected")
-
-                # Approval expectation check
-                if tc.get("expect_approval") and not tc.get("auto_approve") and not res.get("approval_requested"):
-                    passed = False
-                    reasons.append("Approval was expected but not requested")
-
-                # Content Quality checks
-                if tc.get("require_non_empty") and not res["content"].strip():
-                    if not (tc.get("expect_approval") and not tc.get("auto_approve")):
-                        passed = False
-                        reasons.append("Response content is empty")
-
-                if tc.get("require_non_trivial"):
-                    if len(res["content"].strip()) < 20 or "cannot access" in res["content"].lower():
-                        passed = False
-                        reasons.append("Response is trivial or a refusal")
-
-            if passed:
-                log_success("Response validated.")
-            else:
-                for r in reasons:
-                    log_info(f"Validation Note: {r}")
-                log_info("Validation failed.")
-
-            results.append({
-                "step": i,
-                "phase": tc["phase"],
-                "title": tc["title"],
-                "passed": passed,
-                "latency": res["total_time"],
-                "tool_calls": len(res["tool_calls"]),
-                "thinking": len(res["thinking"]),
-                "reasons": reasons
-            })
+        results.append(result)
 
         # Give system time to settle
         await asyncio.sleep(1.5)

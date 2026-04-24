@@ -774,20 +774,52 @@ class Executor:
         return name
 
     def _strip_tool_tags(self, content: str) -> str:
-        """Removes tool calling tags from text to avoid leaking them to the UI."""
+        """Removes tool calling tags and thinking tags from text to avoid leaking them to the UI."""
         if not content:
             return content
         patterns = [
-            r'<tool_code>.*?</tool_code>',
-            r'<minimax:tool_call>.*?</minimax:tool_call>',
-            r'<invoke.*?>.*?</invoke>',
-            r'<tool_call>.*?</tool_call>',
-            r'<tool>.*?</tool>'
+            r'<tool_<tool_codecode>.*?</tool_code>',
+            r'<<minminimax:tool_call>.*?</minimax:tool_call>',
+            r'<<invokeinvoke.*?>.*?</invoke>',
+            r'<tool<tool>>.*?</tool>',
+            r'<tool_call<tool_call>>.*?</tool_call>',
+            r'<<thinkthink>.*?</think>',
+            r'<<thinkingthinking>.*?</thinking>',
         ]
         cleaned = content
         for p in patterns:
             cleaned = re.sub(p, "", cleaned, flags=re.DOTALL)
         return cleaned.strip()
+
+    def _try_parse_raw_tool_call(self, content: str) -> Optional[Dict[str, Any]]:
+        """
+        Attempts to parse raw JSON that looks like a tool call.
+        Models sometimes output raw JSON without proper tags.
+        """
+        if not content or not isinstance(content, str):
+            return None
+        
+        content = content.strip()
+        if not content.startswith('{'):
+            return None
+        
+        tool_keywords = ['"name"', '"tool"', '"function"']
+        if not any(kw in content for kw in tool_keywords):
+            return None
+        
+        try:
+            data = json.loads(content)
+            if isinstance(data, dict) and "name" in data:
+                return {"name": data.get("name", ""), "arguments": data.get("arguments", {})}
+            if isinstance(data, dict) and "function" in data:
+                func = data["function"]
+                if isinstance(func, dict) and "name" in func:
+                    return {"name": func.get("name", ""), "arguments": func.get("arguments", {})}
+            if isinstance(data, dict) and "tool" in data:
+                return {"name": data.get("tool", ""), "arguments": data.get("args", {})}
+        except json.JSONDecodeError:
+            pass
+        return None
 
     def _maybe_answer_from_direct_memory(
         self,

@@ -1,0 +1,221 @@
+{
+  "metadata": {
+    "session_id": "eval-1691b0b7",
+    "model": "gemma4:31b-cloud",
+    "timestamp": "2026-04-23 22:39:43"
+  },
+  "results": [
+    {
+      "step": 1,
+      "phase": "Identity",
+      "title": "System Role",
+      "passed": false,
+      "error": "'Executor' object has no attribute '_try_parse_raw_tool_call'"
+    },
+    {
+      "step": 2,
+      "phase": "Memory",
+      "title": "RAG Recall",
+      "passed": true,
+      "latency": 0.5389933586120605,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1691b0b7",
+      "content": "According to my records, the identifier is X-DELTA-9-GHOST."
+    },
+    {
+      "step": 3,
+      "phase": "Memory",
+      "title": "Short-Term Memory",
+      "passed": false,
+      "error": "'Executor' object has no attribute '_try_parse_raw_tool_call'"
+    },
+    {
+      "step": 4,
+      "phase": "Memory",
+      "title": "Short-Term Recall",
+      "passed": false,
+      "error": "'Executor' object has no attribute '_try_parse_raw_tool_call'"
+    },
+    {
+      "step": 5,
+      "phase": "Knowledge",
+      "title": "General Knowledge: Ada Lovelace",
+      "passed": false,
+      "error": "'Executor' object has no attribute '_try_parse_raw_tool_call'"
+    },
+    {
+      "step": 6,
+      "phase": "Knowledge",
+      "title": "Wikipedia-Style Summary: Alan Turing",
+      "passed": false,
+      "error": "'Executor' object has no attribute '_try_parse_raw_tool_call'"
+    },
+    {
+      "step": 7,
+      "phase": "Isolation",
+      "title": "Session A Setup",
+      "passed": false,
+      "error": "'Executor' object has no attribute '_try_parse_raw_tool_call'"
+    },
+    {
+      "step": 8,
+      "phase": "Isolation",
+      "title": "Session B Isolation",
+      "passed": false,
+      "error": "'Executor' object has no attribute '_try_parse_raw_tool_call'"
+    },
+    {
+      "step": 9,
+      "phase": "System",
+      "title": "Current Date/Time",
+      "passed": false,
+      "error": "'Executor' object has no attribute '_try_parse_raw_tool_call'"
+    },
+    {
+      "step": 10,
+      "phase": "System",
+      "title": "File Read",
+      "passed": false,
+      "error": "'Executor' object has no attribute '_try_parse_raw_tool_call'"
+    },
+    {
+      "step": 11,
+      "phase": "System",
+      "title": "Directory Listing",
+      "passed": false,
+      "error": "The agent stopped responding. Please try again."
+    },
+    {
+      "step": 12,
+      "phase": "Reasoning",
+      "title": "Sequential Thinking",
+      "passed": false,
+      "error": "ReadError: "
+    },
+    {
+      "step": 13,
+      "phase": "Web",
+      "title": "Web Search",
+      "passed": false,
+      "error": "ConnectError: All connection attempts failed"
+    },
+    {
+      "step": 14,
+      "phase": "Web",
+      "title": "Web Fetch",
+      "passed": false,
+      "error": "ConnectError: All connection attempts failed"
+    },
+    {
+      "step": 15,
+      "phase": "Web",
+      "title": "Web Search Grounding",
+      "passed": false,
+      "error": "ConnectError: All connection attempts failed"
+    },
+    {
+      "step": 16,
+      "phase": "Web",
+      "title": "Official Page Fetch Classification",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 17,
+      "phase": "Web",
+      "title": "Clean Fetch Rendering",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 18,
+      "phase": "Continuity",
+      "title": "Tool Follow-Up",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 19,
+      "phase": "Continuity",
+      "title": "Search Then Follow-Up",
+      "passed": false,
+      "latency": 0.0,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [
+        "Turn 1 error: The RawClaw agent is currently unreachable. Please check if the agent service is running."
+      ],
+      "session_id": "eval-spaceX-follow-up-655d"
+    },
+    {
+      "step": 20,
+      "phase": "Tasks",
+      "title": "Task Creation",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 21,
+      "phase": "Agents",
+      "title": "Agent Creation",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 22,
+      "phase": "Agents",
+      "title": "Agent Use After Creation",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 23,
+      "phase": "RAG",
+      "title": "Explicit RAG Fact",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 24,
+      "phase": "RAG",
+      "title": "RAG vs General Knowledge",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 25,
+      "phase": "Isolation",
+      "title": "Session Isolation Repeat A",
+      "passed": false,
+      "error": "The RawClaw agent is currently unreachable. Please check if the agent service is running."
+    },
+    {
+      "step": 26,
+      "phase": "Isolation",
+      "title": "Session Isolation Repeat B",
+      "passed": true,
+      "latency": 21.069408893585205,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-session-repeat-b-3258",
+      "content": "Idonothavearecordofaspecificcodenameassignedtoyouinmycurrentmemoryorsessioncontext."
+    },
+    {
+      "step": 27,
+      "phase": "Memory",
+      "title": "Memory Scope Check",
+      "passed": true,
+      "latency": 29.64713954925537,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [
+        "Observed cross-session memory scope; review content manually against desired product behavior."
+      ],
+      "session_id": "eval-memory-scope-0e5f",
+      "content": "I'msorry,butIdon'thavearecordofyourfavoritecolorinmymemory.Ifyoutellmewhatitis,I'llbehappytorememberitforyou!"
+    }
+  ]
+}
