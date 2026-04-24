@@ -551,8 +551,10 @@ async def get_skills_status():
     """Return runtime status for the skills subsystem."""
     active_dir = str(getattr(skill_loader, "skills_dir", "")) if skill_loader else ""
     research_dir = ""
+    active_plugins_dir = ""
     if skill_researcher:
         research_dir = str(getattr(skill_researcher, "research_dir", "") or "")
+        active_plugins_dir = str(getattr(skill_researcher, "active_plugins_dir", "") or "")
 
     skill_files = []
     if skill_loader:
@@ -562,19 +564,27 @@ async def get_skills_status():
             skill_files = []
 
     researched_count = 0
+    plugin_bundles = []
     if skill_researcher:
         try:
             researched_count = len(skill_researcher.list_researched_skills())
         except Exception:
             researched_count = 0
+        try:
+            plugin_bundles = [path.name for path in skill_researcher.active_plugins_dir.iterdir() if path.is_dir()]
+        except Exception:
+            plugin_bundles = []
 
     return {
         "status": "ok",
         "activeSkillsDir": active_dir,
         "researchDir": research_dir,
+        "activePluginsDir": active_plugins_dir,
         "installedCount": len(skill_files),
         "installedSkillFiles": skill_files,
         "researchedCount": researched_count,
+        "installedPluginBundleCount": len(plugin_bundles),
+        "installedPluginBundles": plugin_bundles,
     }
 
 

@@ -85,6 +85,49 @@ export class ChatOrchestratorService {
     ].join('\n');
   }
 
+  private async fetchInstalledSkills(): Promise<Array<{ name: string; description: string; capabilityTags: string[] }>> {
+    const agentUrl = this.configService.get<string>('agentUrl');
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get<{ skills: Array<{ name: string; description: string; capabilityTags: string[] }> }>(`${agentUrl}/api/skills`),
+      );
+      return response.data.skills || [];
+    } catch (error) {
+      this.logger.warn(`Failed to fetch installed skills for agent inference: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
+  }
+
+  private inferRelevantSkills(requestText: string, skills: Array<{ name: string; description: string; capabilityTags: string[] }>): string[] {
+    const lower = requestText.toLowerCase();
+    const chosen = new Set<string>();
+
+    if (
+      skills.some((skill) => skill.name === 'grounded-web-summary') &&
+      ['web', 'search', 'fetch', 'latest', 'summar', 'ground', 'official page'].some((needle) => lower.includes(needle))
+    ) {
+      chosen.add('grounded-web-summary');
+    }
+
+    if (
+      skills.some((skill) => skill.name === 'repo-explainer') &&
+      ['repo', 'repository', 'codebase', 'workspace', 'module', 'file', 'implementation', 'walkthrough', 'structure'].some((needle) => lower.includes(needle))
+    ) {
+      chosen.add('repo-explainer');
+    }
+
+    const tokens = (lower.match(/[a-z0-9-]+/g) || []).filter((token) => token.length > 2);
+    for (const skill of skills) {
+      const haystack = `${skill.name} ${skill.description} ${(skill.capabilityTags || []).join(' ')}`.toLowerCase();
+      const overlap = tokens.filter((token) => haystack.includes(token)).length;
+      if (overlap >= 2) {
+        chosen.add(skill.name);
+      }
+    }
+
+    return [...chosen];
+  }
+
   private tryExtractTaskDescription(text: string): { name: string; description: string; schedule?: string } | null {
     const namedMatch = text.match(/create\s+a\s+task\s+named\s+['"]([^'"]+)['"]\s+to\s+(.+?)(?:\.|$)/i);
     if (namedMatch?.[1] && namedMatch?.[2]) {
@@ -145,17 +188,19 @@ export class ChatOrchestratorService {
 
       const existingAgents = await this.agentsService.list();
       const existing = existingAgents.find((agent) => agent.name === name);
+      const installedSkills = await this.fetchInstalledSkills();
+      const inferredSkills = this.inferRelevantSkills(latestUserContent, installedSkills);
       const agent = existing || await this.agentsService.create({
         name,
         description: `Agent created from chat for ${name}`,
         systemPrompt: this.buildAgentPrompt(name, latestUserContent),
         isDefault: false,
-        skills: [],
+        skills: inferredSkills,
       });
 
       const content = existing
         ? `The agent '${agent.name}' already exists and is available to use.`
-        : `I created the agent '${agent.name}' and saved it to the agent registry.`;
+        : `I created the agent '${agent.name}' and saved it to the agent registry${inferredSkills.length ? ` with skills: ${inferredSkills.join(', ')}` : ''}.`;
 
       await this.chatService.createMessage(request.session_id, 'assistant', content, {
         agentId: request.agent_id,
@@ -292,6 +337,14 @@ export class ChatOrchestratorService {
       systemMessages.push({
         role: 'system',
         content: toolGuidance
+      });
+    }
+
+    const skillGuidance = this.buildSkillGuidance(availableSkills, selectedAgent);
+    if (skillGuidance) {
+      systemMessages.push({
+        role: 'system',
+        content: skillGuidance,
       });
     }
 
@@ -987,5 +1040,34 @@ DO NOT provide explanatory text before or after a tool call. Output ONLY the too
 - Never claim to have performed an action if the tool was not actually invoked`;
 
     return toolGuidance;
+  }
+
+  private buildSkillGuidance(
+    availableSkills: Array<{ name: string; description: string; capabilityTags: string[] }>,
+    selectedAgent?: { skills?: string[]; name?: string } | null,
+  ): string | null {
+    if (!availableSkills.length) {
+      return null;
+    }
+
+    const skillLines = availableSkills
+      .map((skill) => {
+        const tags = skill.capabilityTags?.length ? ` [${skill.capabilityTags.join(', ')}]` : '';
+        return `- \`skill_${skill.name}\`: ${skill.description}${tags}`;
+      })
+      .join('\n');
+
+    const assigned = selectedAgent?.skills?.length
+      ? `Assigned to current agent: ${selectedAgent.skills.map((skill) => `skill_${skill}`).join(', ')}.\n`
+      : '';
+
+    return (
+      `=== INSTALLED SKILLS ===\n` +
+      `Treat installed skills as best-practice playbooks. Before answering, check whether one of these skills directly matches the user request.\n` +
+      `If a skill is relevant, invoke the corresponding \`skill_<name>\` tool before falling back to generic reasoning.\n` +
+      `${assigned}` +
+      `${skillLines}\n\n` +
+      `Use skill tools especially for repository walkthroughs, grounded web summaries, structured debugging, planning, and any workflow that clearly matches an installed skill.`
+    );
   }
 }

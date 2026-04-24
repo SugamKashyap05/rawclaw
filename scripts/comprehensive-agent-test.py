@@ -143,6 +143,17 @@ def _has_tool(res: Dict[str, Any], expected: str) -> bool:
     return _has_any_tool(res, [expected])
 
 
+def _has_all_tools(res: Dict[str, Any], expected_groups: List[List[str] | str]) -> bool:
+    for group in expected_groups:
+        if isinstance(group, str):
+            if not _has_tool(res, group):
+                return False
+        else:
+            if not _has_any_tool(res, group):
+                return False
+    return True
+
+
 def _contains_repeated_noise(text: str) -> bool:
     lowered = _content_lower(text)
     noisy_markers = [
@@ -216,6 +227,9 @@ def validate_response(tc: Dict[str, Any], res: Dict[str, Any]) -> List[str]:
 
     if "tool_any" in tc and not _has_any_tool(res, tc["tool_any"]) and not has_direct_reasoning_signal:
         reasons.append(f"None of required tools {tc['tool_any']} were called")
+
+    if "tool_all" in tc and not _has_all_tools(res, tc["tool_all"]):
+        reasons.append(f"Not all required tool groups were called: {tc['tool_all']}")
 
     if tc.get("require_thinking"):
         has_reasoning_signal = bool(res.get("thinking")) or _has_tool(res, "sequential_thinking")
@@ -313,6 +327,11 @@ async def run_single_test(
         expected_name = tc["verify_agent_created_name"]
         if not any((agent or {}).get("name") == expected_name for agent in agents):
             reasons.append(f"Agent was not actually persisted via API: {expected_name}")
+        if tc.get("verify_agent_has_skill"):
+            expected_skill = tc["verify_agent_has_skill"]
+            matched = next(((agent or {}) for agent in agents if (agent or {}).get("name") == expected_name), None)
+            if not matched or expected_skill not in (matched.get("skills") or []):
+                reasons.append(f"Agent '{expected_name}' was not assigned expected skill: {expected_skill}")
 
     if tc.get("verify_task_created_name"):
         tasks = await list_tasks(token)
@@ -451,7 +470,7 @@ async def create_test_agent(token: str, model_id: str) -> Optional[str]:
         "description": "Temporary agent for comprehensive evaluation",
         "modelId": model_id,
         "systemPrompt": "You are RawClaw Eval Agent. You are a high-performance assistant capable of memory recall, web research, and browser automation. Always use your tools when needed to be precise.",
-        "skills": ["web_search", "browser", "filesystem", "research", "sequential_thinking"],
+        "skills": ["grounded-web-summary", "repo-explainer"],
         "isDefault": False
     }
     try:
@@ -774,6 +793,15 @@ async def main():
             "require_non_empty": True,
             "workspace_any": ["apps", "scripts", "packages", "README", "package.json"],
         },
+        {
+            "phase": "Skills",
+            "title": "Skill Use: Repository Explanation",
+            "msg": "Give me a concise repository walkthrough of this workspace and call out the most important modules.",
+            "tool": "skill_repo-explainer",
+            "require_non_empty": True,
+            "require_non_garbage": True,
+            "workspace_any": ["apps", "api", "agent", "web"],
+        },
         # Advanced Reasoning
         {
             "phase": "Reasoning",
@@ -878,12 +906,13 @@ async def main():
             "require_non_empty": True,
             "require_non_garbage": True,
             "verify_agent_created_name": unique_agent_name,
+            "verify_agent_has_skill": "grounded-web-summary",
         },
         {
             "phase": "Agents",
             "title": "Agent Use After Creation",
             "msg": f"Switch to the agent '{unique_agent_name}' and search the web for the latest OpenAI API updates.",
-            "tool_any": SEARCH_TOOL_NAMES,
+            "tool_all": [SEARCH_TOOL_NAMES, ["skill_grounded-web-summary"]],
             "require_non_empty": True,
             "require_non_garbage": True,
         },

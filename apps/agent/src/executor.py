@@ -330,6 +330,7 @@ class Executor:
 
             forced_tool = self._maybe_force_tool_call(latest_user_query)
             forced_reasoning_answer = self._maybe_force_reasoning_answer(latest_user_query)
+            forced_skill_tool = self._maybe_force_skill_tool_call(latest_user_query, tools_schema)
             if forced_reasoning_answer:
                 trace.add_plan_step("Forced direct reasoning path selected for conceptual design prompt.")
                 yield json.dumps({
@@ -345,6 +346,44 @@ class Executor:
                     "type": "done",
                 }) + "\n"
                 return
+            if forced_skill_tool:
+                trace.add_plan_step(f"Forced skill path selected for request: {forced_skill_tool.tool_name}")
+                trace.add_tool_call(forced_skill_tool.tool_name, forced_skill_tool.input)
+                yield json.dumps({
+                    "type": "tool_call",
+                    "tool_call": {
+                        "name": forced_skill_tool.tool_name,
+                        "arguments": forced_skill_tool.input,
+                    },
+                }) + "\n"
+                forced_skill_result = await self._execute_tool_with_confirmation(
+                    request.session_id,
+                    forced_skill_tool,
+                    trace,
+                    knowledge_brain=knowledge_brain,
+                )
+                trace.add_tool_result(forced_skill_result, int(forced_skill_result.duration_ms))
+                tool_calls_made.append(forced_skill_tool)
+                yield json.dumps({
+                    "type": "tool_result",
+                    "tool_call": {
+                        "name": forced_skill_tool.tool_name,
+                        "arguments": forced_skill_tool.input,
+                    },
+                    "tool_result": forced_skill_result.model_dump(),
+                }) + "\n"
+                messages.append({
+                    "role": "tool",
+                    "content": json.dumps(forced_skill_result.model_dump()),
+                    "name": forced_skill_tool.tool_name,
+                })
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "A matching skill has already been selected because it directly fits the user's request. "
+                        "Use the skill instructions, then continue with any additional tools needed to complete the task."
+                    ),
+                })
             if forced_tool:
                 trace.add_plan_step(f"Forced tool path selected for obvious tool-backed request: {forced_tool.tool_name}")
                 forced_result = await self._execute_forced_tool_path(
@@ -959,6 +998,29 @@ class Executor:
             url_match = re.search(r"(https?://[^\s]+)", query, flags=re.IGNORECASE)
             if url_match:
                 return ToolCall(tool_name="web_fetch", input={"url": url_match.group(1).rstrip(").,!?"), "extract_text": True})
+
+        return None
+
+    def _maybe_force_skill_tool_call(self, query: str, tools_schema: List[Dict[str, Any]]) -> Optional[ToolCall]:
+        lowered = (query or "").lower()
+        available_tools = {
+            tool.get("function", {}).get("name")
+            for tool in (tools_schema or [])
+            if isinstance(tool, dict)
+        }
+
+        if (
+            "skill_repo-explainer" in available_tools
+            and any(token in lowered for token in ["repo", "repository", "codebase", "workspace", "module", "file", "implementation"])
+            and any(token in lowered for token in ["explain", "walkthrough", "structure", "summary", "summarize"])
+        ):
+            return ToolCall(tool_name="skill_repo-explainer", input={"task": query})
+
+        if (
+            "skill_grounded-web-summary" in available_tools
+            and any(token in lowered for token in ["web", "search", "fetch", "latest", "official page", "summary", "summarize"])
+        ):
+            return ToolCall(tool_name="skill_grounded-web-summary", input={"task": query})
 
         return None
 

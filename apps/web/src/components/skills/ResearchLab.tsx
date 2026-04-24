@@ -1,10 +1,62 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 
+type Compatibility = {
+  status: 'compatible' | 'partial' | 'incompatible';
+  score: number;
+  reasons: string[];
+};
+
+type PluginSystem = {
+  platform: string;
+  name: string;
+  version?: string;
+  description?: string;
+  is_installed?: boolean;
+};
+
+type Marketplace = {
+  platform: string;
+  name: string;
+  plugin_count: number;
+};
+
+type AgentTemplate = {
+  name: string;
+  description?: string;
+};
+
+type ResearchedSkill = {
+  kind?: 'skill' | 'plugin_bundle';
+  name: string;
+  description: string;
+  source_path: string;
+  repo?: string;
+  repo_root?: string;
+  is_installed?: boolean;
+  plugin_bundle_installed?: boolean;
+  compatibility?: Compatibility;
+  plugin_systems?: PluginSystem[];
+  marketplaces?: Marketplace[];
+  agent_templates?: AgentTemplate[];
+};
+
+type InstallResponse = {
+  success?: boolean;
+  installed?: Array<{ skill_name: string }>;
+  skill_name?: string;
+  plugin_bundle?: { bundle_name?: string; platforms?: string[]; success?: boolean };
+  autoAssignment?: {
+    strategy?: string;
+    compatibleSkills?: string[];
+    agents?: Array<{ name: string; mode: string }>;
+  };
+};
+
 export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
   const [repoUrl, setRepoUrl] = useState('');
   const [cloning, setCloning] = useState(false);
-  const [researchedSkills, setResearchedSkills] = useState<any[]>([]);
+  const [researchedSkills, setResearchedSkills] = useState<ResearchedSkill[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -14,7 +66,7 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
   const fetchResearchedSkills = async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ skills: any[] }>('/skills/research');
+      const res = await api.get<{ skills: ResearchedSkill[] }>('/skills/research');
       setResearchedSkills(res.data.skills);
     } catch (e) {
       console.error(e);
@@ -41,8 +93,8 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
 
   const handleInstall = async (sourcePath: string) => {
     try {
-      await api.post('/skills/install', { source_path: sourcePath });
-      alert('Skill installed successfully!');
+      const response = await api.post<InstallResponse>('/skills/install', { source_path: sourcePath });
+      alert(formatInstallMessage(response.data));
       await fetchResearchedSkills();
       onChanged?.();
     } catch (e) {
@@ -53,8 +105,8 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
 
   const handleInstallRepo = async (repoRoot: string) => {
     try {
-      await api.post('/skills/install', { source_path: repoRoot });
-      alert('Skill library installed successfully!');
+      const response = await api.post<InstallResponse>('/skills/install', { source_path: repoRoot });
+      alert(formatInstallMessage(response.data));
       await fetchResearchedSkills();
       onChanged?.();
     } catch (e) {
@@ -63,7 +115,7 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
     }
   };
 
-  const groupedByRepo = researchedSkills.reduce<Record<string, any[]>>((acc, skill) => {
+  const groupedByRepo = researchedSkills.reduce<Record<string, ResearchedSkill[]>>((acc, skill) => {
     const key = skill.repo || 'unknown';
     if (!acc[key]) acc[key] = [];
     acc[key].push(skill);
@@ -101,6 +153,10 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
           {Object.entries(groupedByRepo).map(([repo, repoSkills]) => {
             const repoRoot = repoSkills[0]?.repo_root;
             const allInstalled = repoSkills.every((skill) => skill.is_installed);
+            const repoPlugins = uniqueByPlatform(repoSkills.flatMap((skill) => skill.plugin_systems || []));
+            const repoMarketplaces = uniqueByKey(repoSkills.flatMap((skill) => skill.marketplaces || []), (entry) => `${entry.platform}:${entry.name}`);
+            const repoAgents = uniqueByKey(repoSkills.flatMap((skill) => skill.agent_templates || []), (entry) => entry.name);
+            const repoCompatibility = deriveRepoCompatibility(repoSkills);
             return (
               <div
                 key={repo}
@@ -119,6 +175,24 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                       {repoSkills.length} discovered skill{repoSkills.length === 1 ? '' : 's'}
                     </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginTop: '0.55rem' }}>
+                      <CompatibilityBadge compatibility={repoCompatibility} />
+                      {repoPlugins.map((plugin) => (
+                        <span key={`${repo}-${plugin.platform}`} className="mono" style={pillStyle}>
+                          {plugin.platform} plugin
+                        </span>
+                      ))}
+                      {repoMarketplaces.map((marketplace) => (
+                        <span key={`${repo}-${marketplace.platform}-${marketplace.name}`} className="mono" style={pillStyle}>
+                          {marketplace.platform} marketplace
+                        </span>
+                      ))}
+                      {repoAgents.length ? (
+                        <span className="mono" style={pillStyle}>
+                          {repoAgents.length} agent template{repoAgents.length === 1 ? '' : 's'}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                   {repoRoot ? (
                     <button
@@ -130,6 +204,26 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
                     </button>
                   ) : null}
                 </div>
+
+                {repoPlugins.length || repoMarketplaces.length || repoAgents.length ? (
+                  <div style={{ display: 'grid', gap: '0.45rem', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
+                    {repoPlugins.length ? (
+                      <div>
+                        Plugin systems: {repoPlugins.map((plugin) => `${plugin.platform}${plugin.version ? ` ${plugin.version}` : ''}`).join(', ')}
+                      </div>
+                    ) : null}
+                    {repoMarketplaces.length ? (
+                      <div>
+                        Marketplace metadata: {repoMarketplaces.map((marketplace) => `${marketplace.name} (${marketplace.platform})`).join(', ')}
+                      </div>
+                    ) : null}
+                    {repoAgents.length ? (
+                      <div>
+                        Agent templates: {repoAgents.map((agent) => agent.name).join(', ')}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div style={{ display: 'grid', gap: '0.75rem' }}>
                   {repoSkills.map((skill, idx) => (
@@ -151,6 +245,24 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
                         <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
                           {skill.description}
                         </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: '0.55rem' }}>
+                          <CompatibilityBadge compatibility={skill.compatibility} />
+                          {(skill.plugin_systems || []).map((plugin) => (
+                            <span key={`${skill.name}-${plugin.platform}`} className="mono" style={pillStyle}>
+                              {plugin.platform}
+                            </span>
+                          ))}
+                          {skill.plugin_bundle_installed ? (
+                            <span className="mono" style={pillStyle}>
+                              plugin bundle installed
+                            </span>
+                          ) : null}
+                        </div>
+                        {skill.compatibility?.reasons?.length ? (
+                          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.45rem' }}>
+                            {skill.compatibility.reasons.join(' ')}
+                          </div>
+                        ) : null}
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                           Path: <code>{skill.source_path}</code>
                         </div>
@@ -174,3 +286,68 @@ export function ResearchLab({ onChanged }: { onChanged?: () => void }) {
     </section>
   );
 }
+
+function formatInstallMessage(response: InstallResponse) {
+  const skillNames = [
+    ...(typeof response.skill_name === 'string' ? [response.skill_name] : []),
+    ...((response.installed || []).map((entry) => entry.skill_name).filter(Boolean)),
+  ];
+  const dedupedSkills = [...new Set(skillNames)];
+  const bundle = response.plugin_bundle;
+  const assignedAgents = response.autoAssignment?.agents || [];
+
+  const lines = [];
+  if (dedupedSkills.length) {
+    lines.push(`Installed skills: ${dedupedSkills.join(', ')}`);
+  }
+  if (bundle?.success && bundle.bundle_name) {
+    lines.push(`Imported plugin bundle: ${bundle.bundle_name}${bundle.platforms?.length ? ` (${bundle.platforms.join(', ')})` : ''}`);
+  }
+  if (assignedAgents.length) {
+    lines.push(`Auto-assigned to agents: ${assignedAgents.map((agent) => `${agent.name} (${agent.mode})`).join(', ')}`);
+  }
+  return lines.length ? lines.join('\n') : 'Install completed successfully.';
+}
+
+function CompatibilityBadge({ compatibility }: { compatibility?: Compatibility }) {
+  if (!compatibility) return null;
+  const color =
+    compatibility.status === 'compatible'
+      ? 'rgba(37, 99, 235, 0.18)'
+      : compatibility.status === 'partial'
+        ? 'rgba(245, 158, 11, 0.18)'
+        : 'rgba(220, 38, 38, 0.18)';
+  return (
+    <span className="mono" style={{ ...pillStyle, background: color }}>
+      {compatibility.status} {compatibility.score}
+    </span>
+  );
+}
+
+function uniqueByPlatform<T extends { platform: string }>(entries: T[]) {
+  return uniqueByKey(entries, (entry) => entry.platform);
+}
+
+function uniqueByKey<T>(entries: T[], getKey: (entry: T) => string) {
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    const key = getKey(entry);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function deriveRepoCompatibility(skills: ResearchedSkill[]): Compatibility | undefined {
+  const candidates = skills.map((skill) => skill.compatibility).filter(Boolean) as Compatibility[];
+  if (!candidates.length) return undefined;
+  return candidates.reduce((current, candidate) => (candidate.score < current.score ? candidate : current));
+}
+
+const pillStyle = {
+  fontSize: '0.72rem',
+  padding: '0.22rem 0.55rem',
+  borderRadius: '999px',
+  background: 'rgba(255,255,255,0.06)',
+  color: 'var(--text-secondary)',
+};

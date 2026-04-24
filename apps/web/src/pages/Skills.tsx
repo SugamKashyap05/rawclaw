@@ -10,9 +10,12 @@ type SkillStatus = {
   status: string;
   activeSkillsDir: string;
   researchDir: string;
+  activePluginsDir?: string;
   installedCount: number;
   installedSkillFiles: string[];
   researchedCount: number;
+  installedPluginBundleCount?: number;
+  installedPluginBundles?: string[];
 };
 
 export default function Skills() {
@@ -50,13 +53,18 @@ export default function Skills() {
 
   return (
     <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <section className="glass-card" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1rem' }}>
+      <section className="glass-card" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '1rem' }}>
         <StatusMetric label="Installed skills" value={String(status?.installedCount ?? skills.length)} />
         <StatusMetric label="Researched skills" value={String(status?.researchedCount ?? 0)} />
+        <StatusMetric label="Plugin bundles" value={String(status?.installedPluginBundleCount ?? 0)} />
         <StatusMetric label="Runtime" value={status?.status || (error ? 'degraded' : 'loading')} />
         <div style={{ gridColumn: '1 / -1', color: 'var(--text-secondary)', fontSize: '0.84rem', lineHeight: 1.6 }}>
           <div>Active skills directory: <code>{status?.activeSkillsDir || 'Unavailable'}</code></div>
+          <div>Active plugin imports: <code>{status?.activePluginsDir || 'Unavailable'}</code></div>
           <div>Research directory: <code>{status?.researchDir || 'Unavailable'}</code></div>
+          {status?.installedPluginBundles?.length ? (
+            <div>Installed plugin bundles: <code>{status.installedPluginBundles.join(', ')}</code></div>
+          ) : null}
           {error ? <div style={{ color: 'var(--error)' }}>{error}</div> : null}
         </div>
       </section>
