@@ -1,7 +1,7 @@
 import { Controller, Post, Body, Get, Param, Res, UseGuards } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ChatService, SessionWithMessages } from './chat.service';
-import { ChatRequest, ModelInfo } from '@rawclaw/shared';
+import { ChatControlState, ChatRequest, ModelInfo } from '@rawclaw/shared';
 import { firstValueFrom } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
@@ -36,6 +36,15 @@ export class ChatController {
   @Post('sessions/:id/delete')
   async deleteSession(@Param('id') id: string): Promise<{ success: boolean }> {
     await this.chatService.deleteSession(id);
+    return { success: true };
+  }
+
+  @Post('sessions/:id/preferences')
+  async saveSessionPreferences(
+    @Param('id') id: string,
+    @Body() body: ChatControlState,
+  ): Promise<{ success: boolean }> {
+    await this.chatService.upsertSessionControls(id, body);
     return { success: true };
   }
 

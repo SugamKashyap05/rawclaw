@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AgentProfile, ChatStreamChunk, ToolResult, SystemStatusSnapshot } from '@rawclaw/shared';
+import { AdvisoryEvent, AgentProfile, ChatControlState, ChatStreamChunk, MemoryEvent, PermissionMode, PreferredWebMode, ReviewEvent, SettingsPayload, ToolInfo, ToolResult, ToolUseMode, WorkflowState, SystemStatusSnapshot } from '@rawclaw/shared';
 import { api } from '../lib/api';
 import { AUTH_TOKEN_KEY } from '../lib/auth';
 import { ChatSidebar } from '../components/ChatSidebar';
@@ -14,7 +14,7 @@ import {
   FiEdit2, FiRotateCw, FiDatabase, FiGlobe, FiHome, 
   FiCopy, FiFolder, FiFileText, FiX, FiPlus, 
   FiMessageSquare, FiSquare, FiEye, FiAlertTriangle, FiActivity, FiShield,
-  FiChevronDown, FiChevronUp, FiCpu, FiUser, FiGitBranch
+  FiChevronDown, FiChevronUp, FiCpu, FiUser
 } from 'react-icons/fi';
 import { WebSearchResult } from '../components/chat/WebSearchResult';
 import { BrowserResult } from '../components/chat/BrowserResult';
@@ -101,6 +101,14 @@ interface SessionMessage {
   createdAt?: string | Date;
   durationMs?: number;
   runIds?: string[];
+  promptPackId?: string;
+  promptVersionHash?: string;
+  reviewerPromptVersionHash?: string;
+  workflowPromptIds?: string[];
+  reviewEvents?: ReviewEvent[];
+  workflowState?: WorkflowState;
+  memoryEvents?: MemoryEvent[];
+  advisoryEvents?: AdvisoryEvent[];
   id?: string;
   thinking?: string;
   harnessLogs?: any[];
@@ -122,6 +130,113 @@ interface SessionMessage {
     message: string;
     details?: string;
   };
+}
+
+interface ChatSessionPayload {
+  messages: SessionMessage[];
+  chatControls?: ChatControlState;
+}
+
+interface SkillRuntimeStatus {
+  installedPluginBundles?: string[];
+}
+
+const DEFAULT_CHAT_CONTROLS: ChatControlState = {
+  planMode: false,
+  preferredWebMode: 'auto',
+  toolUseMode: 'auto',
+  permissionMode: 'workspace_default',
+  selectedPlugins: [],
+  selectedTools: [],
+};
+
+function normalizeAssistantDisplayText(content?: string): string {
+  if (!content) return '';
+
+  let normalized = content
+    .replace(/<\/think>/gi, '')
+    .replace(/<\/thinking>/gi, '')
+    .replace(/<think>/gi, '')
+    .replace(/<thinking>/gi, '')
+    .replace(/<\/?skill_[a-z0-9-]+>/gi, '')
+    .replace(/<\/?skill>/gi, '');
+
+  normalized = normalized.replace(
+    /^\s*>?\s*(?:\{[\s\S]*?"(?:tool|args|thought)"[\s\S]*?\}\s*)+/i,
+    '',
+  );
+
+  const transcriptMatch = normalized.match(/<turn\|>|<\|(?:user|assistant|system|model)\|>|\|>(?:user|assistant|model)|<start_of_turn>|<end_of_turn>/i);
+  if (transcriptMatch?.index !== undefined) {
+    normalized = normalized.slice(0, transcriptMatch.index);
+  }
+
+  const rawLeakMatch = normalized.match(/>?\s*(?:\{"name":|>\{"tool":|>sequential_thinking\{|<\/skill>|<tool_code>|<invoke|minimax:tool_call)/i);
+  if (rawLeakMatch?.index !== undefined) {
+    normalized = normalized.slice(0, rawLeakMatch.index);
+  }
+
+  normalized = normalized
+    .replace(/\r\n/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\bIam(?=[A-Z])/g, 'I am ')
+    .replace(/\bIve(?=[A-Z])/g, "I've ")
+    .replace(/\bIll(?=[A-Z])/g, "I'll ")
+    .replace(/\bId(?=[A-Z])/g, "I'd ")
+    .replace(/\bYouve(?=[A-Z])/g, "You've ")
+    .replace(/\bYoure(?=[A-Z])/g, "You're ")
+    .replace(/\bDont(?=[A-Z])/g, "Don't ")
+    .replace(/\bCant(?=[A-Z])/g, "Can't ")
+    .replace(/\bWont(?=[A-Z])/g, "Won't ")
+    .replace(/([,:;!?])([A-Za-z])/g, '$1 $2');
+
+  normalized = collapseRepeatedAssistantContent(normalized);
+
+  const alphaCount = (normalized.match(/[A-Za-z]/g) || []).length;
+  const whitespaceCount = (normalized.match(/\s/g) || []).length;
+  if (alphaCount >= 40 && whitespaceCount / Math.max(alphaCount, 1) < 0.08) {
+    const boundaryWords = [
+      'including', 'answering', 'questions', 'information', 'repository', 'workspace',
+      'favorite', 'summary', 'provide', 'assist', 'variety', 'latest', 'results',
+      'because', 'about', 'would', 'could', 'should', 'with', 'your', 'just', 'know',
+      'this', 'that', 'have', 'from', 'into', 'task', 'agent', 'search', 'read',
+      'list', 'help', 'what', 'mind', 'can', 'you', 'for', 'the', 'and',
+    ];
+    for (const word of boundaryWords) {
+      const regex = new RegExp(`(?<=[A-Za-z])(${word})(?=[A-Za-z])`, 'gi');
+      normalized = normalized.replace(regex, ' $1 ');
+    }
+    normalized = normalized
+      .replace(/\bI(?=[a-z]{4,})/g, 'I ')
+      .replace(/\bYou(?=[a-z]{4,})/g, 'You ')
+      .replace(/\bYour(?=[a-z]{4,})/g, 'Your ');
+  }
+
+  return normalized.replace(/[ \t]{2,}/g, ' ').trim();
+}
+
+function collapseRepeatedAssistantContent(content: string): string {
+  let collapsed = content.replace(/(.{50,180}?)(?:\s+\1){2,}/gis, '$1 ...');
+
+  const words = collapsed.split(/\s+/).filter(Boolean);
+  if (words.length < 40) return collapsed;
+
+  const maxWindow = Math.min(24, Math.floor(words.length / 3));
+  for (let size = maxWindow; size >= 10; size--) {
+    const tail = words.slice(-size).join(' ').toLowerCase();
+    if (tail.length < 60) continue;
+
+    const body = words.slice(0, -size).join(' ').toLowerCase();
+    const firstIndex = body.indexOf(tail);
+    if (firstIndex === -1) continue;
+
+    const secondIndex = body.indexOf(tail, firstIndex + tail.length);
+    if (secondIndex === -1) continue;
+
+    return `${words.slice(0, -size).join(' ')} ...`;
+  }
+
+  return collapsed;
 }
 
 export function parseEditSuggestion(content?: string): { suggestion: string | null; textContent: string } {
@@ -259,7 +374,36 @@ async function processFileForAttachment(file: File): Promise<{ attachment?: Chat
   }
 }
 
-export default function Chat({ selectedModel, temperature, top_p, systemStatus }: Props) {
+function normalizeChatControls(controls?: Partial<ChatControlState> | null): ChatControlState {
+  return {
+    planMode: Boolean(controls?.planMode),
+    preferredWebMode: controls?.preferredWebMode || 'auto',
+    toolUseMode: controls?.toolUseMode || 'auto',
+    permissionMode: controls?.permissionMode || 'workspace_default',
+    selectedPlugins: Array.isArray(controls?.selectedPlugins) ? controls.selectedPlugins : [],
+    selectedTools: Array.isArray(controls?.selectedTools) ? controls.selectedTools : [],
+  };
+}
+
+function isBrowserToolInfo(tool: ToolInfo): boolean {
+  const name = tool.name.toLowerCase();
+  const tags = (tool.capability_tags || []).map((tag) => tag.toLowerCase());
+  const description = (tool.description || '').toLowerCase();
+  return (
+    name.startsWith('browser_') ||
+    tags.some((tag) => ['browser', 'ui', 'localhost', 'playwright'].includes(tag)) ||
+    description.includes('browser') ||
+    description.includes('localhost')
+  );
+}
+
+function getToolGroup(tool: ToolInfo): 'built_in' | 'mcp' | 'plugin' {
+  if (isBrowserToolInfo(tool)) return 'plugin';
+  if (tool.name.includes(':')) return 'mcp';
+  return 'built_in';
+}
+
+export default function Chat({ selectedModel, temperature, top_p, systemStatus: _systemStatus }: Props) {
   const { sessionId: routeSessionId } = useParams();
   const navigate = useNavigate();
   const [localSessionId] = useState(() => cryptoRandom());
@@ -272,12 +416,20 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
   const abortControllerRef = useRef<AbortController | null>(null);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
+  const [agentsError, setAgentsError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const loadedSessionId = useRef<string | null>(null);
   const isNewChatNavigating = useRef(false);
 
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showComposerMenu, setShowComposerMenu] = useState(false);
+  const [toolInventory, setToolInventory] = useState<ToolInfo[]>([]);
+  const [availablePluginBundles, setAvailablePluginBundles] = useState<string[]>([]);
+  const [workspaceDefaults, setWorkspaceDefaults] = useState<ChatControlState>(DEFAULT_CHAT_CONTROLS);
+  const [chatControls, setChatControls] = useState<ChatControlState>(DEFAULT_CHAT_CONTROLS);
+  const [controlMessage, setControlMessage] = useState<string | null>(null);
   const [showWorkspace, setShowWorkspace] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
@@ -323,6 +475,7 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
 
   useEffect(() => {
     void loadAgents();
+    void loadChatControlsRuntime();
   }, []);
 
   useEffect(() => {
@@ -332,6 +485,7 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
 
     if (!routeSessionId) {
       if (messages.length > 0) setMessages([]);
+      setChatControls(workspaceDefaults);
       loadedSessionId.current = null;
       return;
     }
@@ -340,29 +494,163 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
     if (routeSessionId !== loadedSessionId.current) {
       void loadHistory(routeSessionId);
     }
-  }, [routeSessionId, sending]);
+  }, [routeSessionId, sending, workspaceDefaults]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!routeSessionId) return;
+    void persistChatControls(chatControls);
+  }, [routeSessionId]);
 
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) || null,
     [agents, selectedAgentId],
   );
 
+  const toolGroups = useMemo(() => ({
+    built_in: toolInventory.filter((tool) => getToolGroup(tool) === 'built_in'),
+    mcp: toolInventory.filter((tool) => getToolGroup(tool) === 'mcp'),
+    plugin: toolInventory.filter((tool) => getToolGroup(tool) === 'plugin'),
+  }), [toolInventory]);
+
+  const activeControlChips = useMemo(() => {
+    const chips: string[] = [];
+    if (chatControls.planMode) chips.push('Plan mode');
+    if (chatControls.preferredWebMode && chatControls.preferredWebMode !== 'auto') {
+      const labelMap: Record<PreferredWebMode, string> = {
+        auto: 'Auto web',
+        search: 'Web: Search',
+        read_page: 'Web: Read page',
+        browser: 'Web: Browser',
+      };
+      chips.push(labelMap[chatControls.preferredWebMode]);
+    }
+    if (chatControls.toolUseMode && chatControls.toolUseMode !== 'auto') {
+      const toolUseLabels: Record<ToolUseMode, string> = {
+        auto: 'Tools: Auto',
+        limited: 'Tools: Limited',
+        manual: 'Tools: Manual',
+      };
+      chips.push(toolUseLabels[chatControls.toolUseMode]);
+    }
+    if (chatControls.permissionMode && chatControls.permissionMode !== 'workspace_default') {
+      const permissionLabels: Record<PermissionMode, string> = {
+        ask_every_time: 'Permissions: Ask',
+        allow_safe_tools: 'Permissions: Safe',
+        workspace_default: 'Permissions: Default',
+      };
+      chips.push(permissionLabels[chatControls.permissionMode]);
+    }
+    if ((chatControls.selectedPlugins || []).length > 0) {
+      chips.push(`Plugins: ${chatControls.selectedPlugins!.length}`);
+    }
+    if ((chatControls.selectedTools || []).length > 0) {
+      chips.push(`Tools: ${chatControls.selectedTools!.length}`);
+    }
+    return chips;
+  }, [chatControls]);
+
   const loadAgents = async () => {
-    const response = await api.get<AgentProfile[]>('/agents');
-    setAgents(response.data);
-    const defaultAgent = response.data.find((agent) => agent.isDefault);
-    if (defaultAgent) setSelectedAgentId(defaultAgent.id);
+    try {
+      const response = await api.get<AgentProfile[]>('/agents');
+      setAgents(response.data);
+      setAgentsError(null);
+      setSelectedAgentId((current) => {
+        if (current && response.data.some((agent) => agent.id === current)) {
+          return current;
+        }
+        const defaultAgent = response.data.find((agent) => agent.isDefault);
+        return defaultAgent?.id || '';
+      });
+    } catch (loadError) {
+      console.error('Failed to load agents', loadError);
+      setAgents([]);
+      setSelectedAgentId('');
+      setAgentsError('Agent profiles are temporarily unavailable.');
+    }
+  };
+
+  const loadChatControlsRuntime = async () => {
+    try {
+      const [settingsResponse, toolsResponse, skillsStatusResponse] = await Promise.all([
+        api.get<SettingsPayload>('/settings'),
+        api.get<{ tools: ToolInfo[] }>('/tools/info'),
+        api.get<SkillRuntimeStatus>('/skills/status'),
+      ]);
+      const defaults = normalizeChatControls(settingsResponse.data?.settings?.chatDefaults || DEFAULT_CHAT_CONTROLS);
+      setWorkspaceDefaults(defaults);
+      setChatControls((current) => normalizeChatControls({
+        ...defaults,
+        ...current,
+        selectedPlugins: current.selectedPlugins?.length ? current.selectedPlugins : defaults.selectedPlugins,
+        selectedTools: current.selectedTools?.length ? current.selectedTools : defaults.selectedTools,
+      }));
+      setToolInventory(toolsResponse.data?.tools || []);
+      setAvailablePluginBundles(skillsStatusResponse.data?.installedPluginBundles || []);
+    } catch (error) {
+      console.error('Failed to load chat controls runtime', error);
+    }
+  };
+
+  const persistChatControls = async (nextControls: ChatControlState) => {
+    if (!routeSessionId) return;
+    try {
+      await api.post(`/chat/sessions/${routeSessionId}/preferences`, nextControls);
+    } catch (error) {
+      console.error('Failed to persist chat controls', error);
+    }
+  };
+
+  const updateChatControls = (patch: Partial<ChatControlState>) => {
+    setChatControls((current) => {
+      const next = normalizeChatControls({
+        ...current,
+        ...patch,
+        selectedPlugins: patch.selectedPlugins ?? current.selectedPlugins,
+        selectedTools: patch.selectedTools ?? current.selectedTools,
+      });
+      void persistChatControls(next);
+      return next;
+    });
+  };
+
+  const toggleSelectedValue = (currentValues: string[] | undefined, value: string): string[] => {
+    const values = currentValues || [];
+    return values.includes(value)
+      ? values.filter((item) => item !== value)
+      : [...values, value];
+  };
+
+  const saveCurrentControlsAsWorkspaceDefaults = async () => {
+    try {
+      const response = await api.post<SettingsPayload>('/settings', {
+        settings: {
+          chatDefaults: chatControls,
+        },
+      });
+      const defaults = normalizeChatControls(response.data.settings.chatDefaults);
+      setWorkspaceDefaults(defaults);
+      setControlMessage('Saved current chat controls as workspace defaults.');
+      window.setTimeout(() => setControlMessage(null), 2500);
+    } catch (error) {
+      console.error('Failed to save workspace chat defaults', error);
+      setControlMessage('Could not save workspace defaults right now.');
+      window.setTimeout(() => setControlMessage(null), 2500);
+    }
   };
 
   const loadHistory = async (id: string, soft = false) => {
     if (!soft) setLoadingHistory(true);
     try {
-      const response = await api.get<{ messages: SessionMessage[] }>(`/chat/sessions/${id}`);
-      const serverMessages = response.data?.messages || [];
+      const response = await api.get<ChatSessionPayload>(`/chat/sessions/${id}`);
+      const serverMessages = (response.data?.messages || []).map((message) => (
+        message.role === 'assistant'
+          ? { ...message, content: normalizeAssistantDisplayText(message.content) }
+          : message
+      ));
       
       if (soft) {
         setMessages((current) => {
@@ -396,9 +684,24 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
       } else {
         setMessages(serverMessages);
       }
+      setChatControls((current) => normalizeChatControls(response.data?.chatControls || current || workspaceDefaults));
       loadedSessionId.current = id;
     } finally {
       if (!soft) setLoadingHistory(false);
+    }
+  };
+
+  const handleAttachmentSelection = async (fileList: FileList | null) => {
+    setAttachmentError(null);
+    if (!fileList) return;
+    const files = Array.from(fileList);
+    for (const file of files) {
+      const result = await processFileForAttachment(file);
+      if (result.error) {
+        setAttachmentError(result.error);
+      } else if (result.attachment) {
+        setAttachments((prev) => [...prev, result.attachment!]);
+      }
     }
   };
 
@@ -408,7 +711,6 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
     const toolCalls: any[] = [];
     const toolResults: ToolResult[] = [];
     let streamBuffer = '';
-
     while (true) {
       const { value, done } = await reader.read();
       
@@ -431,7 +733,11 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
             const data = JSON.parse(payload) as ChatStreamChunk;
             
             if (data.type === 'content') {
-              assistantText += data.content || '';
+              const sanitizedContent = normalizeAssistantDisplayText(data.content || '');
+              if (!sanitizedContent) {
+                continue;
+              }
+              assistantText += sanitizedContent;
               patchAssistant({ content: assistantText });
             } else if (data.type === 'thinking' && data.thinking) {
               setMessages((current) => {
@@ -462,6 +768,26 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
                 durationMs: data.metadata.durationMs,
                 runIds: data.metadata.runIds,
                 isDeepResearch: (data.metadata as any).isDeepResearch,
+              });
+            } else if (data.type === 'review_result') {
+              setMessages((current) => {
+                const next = [...current];
+                const index = next.map((item) => item.role).lastIndexOf('assistant');
+                if (index >= 0) {
+                  const currentEvents = next[index].reviewEvents || [];
+                  next[index] = {
+                    ...next[index],
+                    reviewEvents: [
+                      ...currentEvents,
+                      {
+                        approved: (data as any).approved,
+                        feedback: (data as any).feedback,
+                        reviewerId: (data as any).reviewer_id,
+                      },
+                    ],
+                  };
+                }
+                return next;
               });
             } else if ((data.type as string) === 'harness') {
               setMessages((current) => {
@@ -512,6 +838,7 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
     if ((!input.trim() && !explicitEditRequest) || sending) return;
     const prompt = input.trim() || `[Edit] ${explicitEditRequest?.action}`;
     if (!explicitEditRequest) setInput('');
+    setShowComposerMenu(false);
     setSending(true);
 
     if (!routeSessionId) {
@@ -550,6 +877,12 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
           agent_id: selectedAgentId || undefined,
           selection: !explicitEditRequest ? (activeSelection || undefined) : undefined,
           editRequest: explicitEditRequest,
+          planMode: chatControls.planMode,
+          preferredWebMode: chatControls.preferredWebMode,
+          toolUseMode: chatControls.toolUseMode,
+          permissionMode: chatControls.permissionMode,
+          selectedPlugins: chatControls.selectedPlugins,
+          selectedTools: chatControls.selectedTools,
         };
         
         // Only send complexity when explicitly in complexity mode
@@ -1023,10 +1356,16 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
           )}
         </div>
 
-        <div style={{ paddingTop: '0.65rem', marginTop: '0.65rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ paddingTop: '0.45rem', marginTop: '0.45rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           {selectedAgent ? (
             <div style={{ marginBottom: '0.45rem', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
               Active agent: <strong>{selectedAgent.name}</strong>
+              {selectedAgent.promptPackId ? <span className="mono" style={{ marginLeft: '0.45rem', color: 'var(--text-muted)' }}>pack:{selectedAgent.promptPackId}</span> : null}
+            </div>
+          ) : null}
+          {agentsError ? (
+            <div style={{ marginBottom: '0.45rem', color: 'var(--error)', fontSize: '0.78rem' }}>
+              {agentsError}
             </div>
           ) : null}
           
@@ -1076,37 +1415,261 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-end', position: 'relative' }}>
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)' }} title="Attach file or image">
+          {controlMessage ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '6px 12px',
+              marginBottom: '8px',
+              background: 'rgba(0, 240, 255, 0.08)',
+              border: '1px solid rgba(0, 240, 255, 0.2)',
+              borderRadius: '8px',
+              color: 'var(--neon-cyan)',
+              fontSize: '0.82rem',
+            }}>
+              <span>{controlMessage}</span>
+              <button
+                onClick={() => setControlMessage(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', display: 'flex', padding: 0 }}
+              >
+                <FiX size={14} />
+              </button>
+            </div>
+          ) : null}
+
+          {activeControlChips.length > 0 ? (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+              {activeControlChips.map((chip) => (
+                <span
+                  key={chip}
+                  className="mono"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(129, 140, 248, 0.12)',
+                    border: '1px solid rgba(129, 140, 248, 0.24)',
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    fontSize: '0.74rem',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  {chip}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', position: 'relative' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              style={{ display: 'none' }}
+              onChange={async (e) => {
+                await handleAttachmentSelection(e.target.files);
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowComposerMenu((current) => !current)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                width: '44px',
+                height: '44px',
+                background: showComposerMenu ? 'rgba(0, 240, 255, 0.08)' : 'rgba(255,255,255,0.05)',
+                border: '1px solid var(--border-glass)',
+              }}
+              title="Chat controls"
+            >
               <FiPlus size={20} />
-              <input 
-                type="file" 
-                multiple
-                style={{ display: 'none' }}
-                onChange={async (e) => {
-                  setAttachmentError(null);
-                  if (e.target.files) {
-                    const files = Array.from(e.target.files);
-                    for (const file of files) {
-                      const result = await processFileForAttachment(file);
-                      if (result.error) {
-                        setAttachmentError(result.error);
-                      } else if (result.attachment) {
-                        setAttachments(prev => [...prev, result.attachment!]);
-                      }
-                    }
-                  }
-                  e.target.value = ''; // reset so same file can trigger again
-                }} 
-              />
-            </label>
+            </button>
+            {showComposerMenu ? (
+              <div style={{
+                position: 'absolute',
+                left: 0,
+                bottom: 'calc(100% + 10px)',
+                width: 'min(340px, calc(100vw - 32px))',
+                maxHeight: 'min(68vh, 520px)',
+                overflowY: 'auto',
+                padding: '0.72rem',
+                borderRadius: '14px',
+                border: '1px solid var(--border-glass)',
+                background: 'rgba(10, 10, 18, 0.96)',
+                backdropFilter: 'blur(18px)',
+                boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+                zIndex: 30,
+                display: 'grid',
+                gap: '0.62rem',
+              }}>
+                <button
+                  className="btn-ghost"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.7rem', fontSize: '0.82rem' }}
+                >
+                  <FiFileText size={15} />
+                  Add photos & files
+                </button>
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.15rem 0.1rem', fontSize: '0.84rem' }}>
+                  <span>Plan mode</span>
+                  <input
+                    type="checkbox"
+                    checked={chatControls.planMode || false}
+                    onChange={(event) => updateChatControls({ planMode: event.target.checked })}
+                  />
+                </label>
+                <div style={{ display: 'grid', gap: '0.35rem' }}>
+                  <label className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Web mode</label>
+                  <select
+                    value={chatControls.preferredWebMode || 'auto'}
+                    onChange={(event) => updateChatControls({ preferredWebMode: event.target.value as PreferredWebMode })}
+                    style={compactControlFieldStyle}
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="search">Search</option>
+                    <option value="read_page">Read page</option>
+                    <option value="browser">Browser / live UI</option>
+                  </select>
+                </div>
+                <div style={{ display: 'grid', gap: '0.35rem' }}>
+                  <label className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Tool use</label>
+                  <select
+                    value={chatControls.toolUseMode || 'auto'}
+                    onChange={(event) => updateChatControls({ toolUseMode: event.target.value as ToolUseMode })}
+                    style={compactControlFieldStyle}
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="limited">Limited</option>
+                    <option value="manual">Manual confirmation</option>
+                  </select>
+                </div>
+                <div style={{ display: 'grid', gap: '0.35rem' }}>
+                  <label className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Permissions</label>
+                  <select
+                    value={chatControls.permissionMode || 'workspace_default'}
+                    onChange={(event) => updateChatControls({ permissionMode: event.target.value as PermissionMode })}
+                    style={compactControlFieldStyle}
+                  >
+                    <option value="workspace_default">Workspace default</option>
+                    <option value="allow_safe_tools">Allow safe tools</option>
+                    <option value="ask_every_time">Ask every time</option>
+                  </select>
+                </div>
+                <div style={{ display: 'grid', gap: '0.45rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Plugins</label>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{(chatControls.selectedPlugins || []).length} selected</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+                    {availablePluginBundles.length > 0 ? availablePluginBundles.map((plugin) => {
+                      const selected = (chatControls.selectedPlugins || []).includes(plugin);
+                      return (
+                        <button
+                          key={plugin}
+                          type="button"
+                          onClick={() => updateChatControls({
+                            selectedPlugins: toggleSelectedValue(chatControls.selectedPlugins, plugin),
+                          })}
+                          style={{
+                            border: selected ? '1px solid rgba(0, 240, 255, 0.35)' : '1px solid var(--border-glass)',
+                            background: selected ? 'rgba(0, 240, 255, 0.08)' : 'rgba(255,255,255,0.03)',
+                            borderRadius: '999px',
+                            padding: '0.38rem 0.7rem',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                            fontSize: '0.76rem',
+                          }}
+                        >
+                          {plugin}
+                        </button>
+                      );
+                    }) : (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>No plugin bundles discovered yet.</div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Tool selection</label>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{(chatControls.selectedTools || []).length} selected</span>
+                  </div>
+                  {(['built_in', 'mcp', 'plugin'] as const).map((groupKey) => {
+                    const groupTools = toolGroups[groupKey];
+                    if (!groupTools.length) return null;
+                    const groupLabel = groupKey === 'built_in' ? 'Built-in' : groupKey === 'mcp' ? 'MCP' : 'Plugin-provided';
+                    return (
+                      <div key={groupKey} style={{ display: 'grid', gap: '0.3rem' }}>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>{groupLabel}</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                          {groupTools.map((tool) => {
+                            const selected = (chatControls.selectedTools || []).includes(tool.name);
+                            return (
+                              <button
+                                key={tool.name}
+                                type="button"
+                                onClick={() => updateChatControls({
+                                  selectedTools: toggleSelectedValue(chatControls.selectedTools, tool.name),
+                                })}
+                                style={{
+                                  border: selected ? '1px solid rgba(129, 140, 248, 0.35)' : '1px solid var(--border-glass)',
+                                  background: selected ? 'rgba(129, 140, 248, 0.1)' : 'rgba(255,255,255,0.03)',
+                                  borderRadius: '999px',
+                                  padding: '0.35rem 0.65rem',
+                                  color: 'var(--text-primary)',
+                                  cursor: 'pointer',
+                                  fontSize: '0.72rem',
+                                }}
+                                title={tool.description}
+                              >
+                                {tool.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', alignItems: 'stretch', marginTop: '0.1rem' }}>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => {
+                      updateChatControls(workspaceDefaults);
+                      setShowComposerMenu(false);
+                    }}
+                    style={{ minHeight: '44px', padding: '0.55rem 0.7rem', fontSize: '0.76rem', lineHeight: 1.25 }}
+                  >
+                    Reset defaults
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={() => void saveCurrentControlsAsWorkspaceDefaults()}
+                    style={{ minHeight: '44px', padding: '0.55rem 0.7rem', fontSize: '0.76rem', lineHeight: 1.25 }}
+                  >
+                    Save defaults
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div style={{ flex: 1, position: 'relative' }}>
               <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                rows={3}
+                rows={1}
                 placeholder="Ask RawClaw to search, browse, run tools, or reason through a task..."
-                style={{ ...fieldStyle, resize: 'vertical', minHeight: '56px', paddingBottom: '1.8rem' }}
+                style={{
+                  ...fieldStyle,
+                  resize: 'vertical',
+                  minHeight: '44px',
+                  padding: '0.68rem 0.85rem 1.35rem',
+                  lineHeight: 1.35,
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault();
@@ -1122,33 +1685,15 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus }
               <button 
                 className="btn-primary" 
                 onClick={stopGeneration}
-                style={{ background: 'var(--error-glow)', borderColor: 'var(--error)', minHeight: '56px', padding: '0 1rem' }}
+                style={{ background: 'var(--error-glow)', borderColor: 'var(--error)', minHeight: '44px', padding: '0 0.95rem' }}
               >
                 Stop
               </button>
             ) : (
-              <button className={`btn-primary ${input.trim() ? 'send-pulse' : ''}`} onClick={() => void send()} disabled={sending || !input.trim()} style={{ minHeight: '56px', padding: '0 1rem' }}>
+              <button className={`btn-primary ${input.trim() ? 'send-pulse' : ''}`} onClick={() => void send()} disabled={sending || !input.trim()} style={{ minHeight: '44px', padding: '0 0.95rem' }}>
                 Send
               </button>
             )}
-          </div>
-          <div style={{ marginTop: '0.55rem', paddingTop: '0.55rem', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <ServicePill label="API" state={systemStatus?.services?.api || 'down'} />
-              <ServicePill label="Agent" state={systemStatus?.services?.agent || 'down'} />
-              <ServicePill label="Redis" state={systemStatus?.services?.redis || 'down'} />
-              <ServicePill label="ChromaDB" state={systemStatus?.services?.chroma || 'down'} />
-              <ServicePill label="Prisma/SQLite" state={systemStatus?.services?.database || 'down'} />
-              <ServicePill label="WebSocket" state={systemStatus?.websocket?.connected ? 'ok' : 'down'} />
-            </div>
-            <button
-              className="btn-ghost"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', border: '1px solid var(--border-glass)', padding: '0.45rem 0.7rem' }}
-              title={systemStatus?.git?.lastCommit || 'Git branch'}
-            >
-              <FiGitBranch size={14} />
-              <span className="mono" style={{ fontSize: '0.76rem' }}>{systemStatus?.git?.branch || 'unknown'}</span>
-            </button>
           </div>
         </div>
         
@@ -1382,8 +1927,8 @@ function MessageCard({
             <span style={{ opacity: 0.5, fontWeight: 400 }}>{formatTime(message.createdAt)}</span>
           </div>
           
-          {!isUser && (message.modelId || message.memoryRecall) && (
-            <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
+          {!isUser && (message.modelId || message.memoryRecall || message.workflowState?.assistantLane || message.workflowState?.confidenceState) && (
+            <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', flexWrap: 'wrap' }}>
               {message.memoryRecall && (
                 <span style={{ 
                   display: 'flex',
@@ -1400,6 +1945,36 @@ function MessageCard({
                 }}>
                   <FiDatabase size={10} />
                   RECALLED
+                </span>
+              )}
+              {message.workflowState?.assistantLane && (
+                <span className="mono" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  fontSize: '0.65rem',
+                  color: 'var(--neon-cyan)',
+                  background: 'rgba(0,240,255,0.08)',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(0,240,255,0.2)',
+                }}>
+                  lane:{message.workflowState.assistantLane}
+                </span>
+              )}
+              {message.workflowState?.confidenceState && (
+                <span className="mono" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  fontSize: '0.65rem',
+                  color: 'var(--text-secondary)',
+                  background: 'rgba(255,255,255,0.05)',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-glass)',
+                }}>
+                  confidence:{message.workflowState.confidenceState}
                 </span>
               )}
               {message.modelId && (
@@ -1797,6 +2372,39 @@ function MessageCard({
         </div>
       ) : null}
 
+      {!isUser && ((message.memoryEvents && message.memoryEvents.length > 0) || (message.advisoryEvents && message.advisoryEvents.length > 0)) ? (
+        <div style={{ width: '100%', display: 'grid', gap: '0.75rem' }}>
+          {message.memoryEvents?.length ? (
+            <div style={{ border: '1px solid var(--border-glass)', borderRadius: '12px', padding: '0.8rem', background: 'rgba(255,255,255,0.03)' }}>
+              <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginBottom: '0.45rem' }}>
+                MEMORY EVENTS
+              </div>
+              <div style={{ display: 'grid', gap: '0.35rem' }}>
+                {message.memoryEvents.map((event, index) => (
+                  <div key={`memory-${index}`} style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', lineHeight: 1.5 }}>
+                    - {event.layer}: {event.summary}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {message.advisoryEvents?.length ? (
+            <div style={{ border: '1px solid var(--border-glass)', borderRadius: '12px', padding: '0.8rem', background: 'rgba(255,255,255,0.03)' }}>
+              <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginBottom: '0.45rem' }}>
+                WHY I SUGGESTED THIS
+              </div>
+              <div style={{ display: 'grid', gap: '0.35rem' }}>
+                {message.advisoryEvents.map((event, index) => (
+                  <div key={`advisory-${index}`} style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', lineHeight: 1.5 }}>
+                    - {event.category}: {event.summary}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {!isUser && message.provenanceTrace ? <ProvenanceTrace trace={message.provenanceTrace} /> : null}
     </div>
   );
@@ -1862,17 +2470,13 @@ const fieldStyle = {
   color: 'var(--text-primary)',
 };
 
-function ServicePill({ label, state }: { label: string; state: 'ok' | 'degraded' | 'down' }) {
-  const ok = state === 'ok';
-  const degraded = state === 'degraded';
-  const color = ok ? '#10b981' : degraded ? '#f59e0b' : '#ef4444';
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', border: '1px solid rgba(255,255,255,0.08)', padding: '0.25rem 0.42rem', background: 'rgba(255,255,255,0.03)' }}>
-      <span className={ok ? 'status-dot-ok' : 'status-dot-error'} style={{ width: 8, height: 8, borderRadius: '999px', background: color }} />
-      <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>{label}</span>
-    </div>
-  );
-}
+const compactControlFieldStyle = {
+  ...fieldStyle,
+  padding: '0.58rem 0.72rem',
+  borderRadius: '10px',
+  fontSize: '0.84rem',
+  minHeight: '42px',
+};
 
 function cryptoRandom() {
   // Generate a premium-looking hex identifier instead of generic 'session-'

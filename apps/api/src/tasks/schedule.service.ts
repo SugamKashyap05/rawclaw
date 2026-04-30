@@ -122,6 +122,35 @@ export class ScheduleService implements OnModuleInit {
     }
   }
 
+  preview(cronExpression?: string) {
+    const expression = (cronExpression || '').trim();
+    if (!expression) {
+      return {
+        valid: false,
+        expression,
+        nextRun: null,
+        error: 'Schedule expression is required.',
+      };
+    }
+
+    const nextRun = this.getNextRun(expression);
+    if (!nextRun) {
+      return {
+        valid: false,
+        expression,
+        nextRun: null,
+        error: 'Invalid cron expression.',
+      };
+    }
+
+    return {
+      valid: true,
+      expression,
+      nextRun,
+      error: null,
+    };
+  }
+
   async getScheduledTasks() {
     const tasks = await this.prisma.taskDefinition.findMany({
       where: {

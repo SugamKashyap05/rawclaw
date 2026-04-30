@@ -1,0 +1,1094 @@
+{
+  "capturedAt": "2026-04-29T06:27:31.427689+00:00",
+  "captureMode": "evidence_pipeline_verification",
+  "notes": [
+    "This file compares the real scrape artifact against the ideal evidence pipeline fixture.",
+    "Each target contains actual extract output, evidence selection verdict, synthesized answer, and loyalty check.",
+    "Use the checks block to see exactly where the real pipeline diverges from the ideal fixture."
+  ],
+  "targets": [
+    {
+      "id": "example_domain",
+      "task": "page_read",
+      "actual": {
+        "extract": {
+          "kind": "transport_failure",
+          "url": "https://example.com/",
+          "title": "",
+          "content": "",
+          "structuredData": {},
+          "backendUsed": "none",
+          "backendAttempts": [
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "direct_http",
+              "attempt": "direct_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('172.66.147.243', 443) | caused by: OSError: [Errno 10013] Connect call failed ('104.20.23.154', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "direct_http",
+              "elapsed_ms": 369.91,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "env_proxy_http",
+              "attempt": "env_proxy_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('172.66.147.243', 443) | caused by: OSError: [Errno 10013] Connect call failed ('104.20.23.154', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "env_proxy_http",
+              "elapsed_ms": 495.92,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_headers_http",
+              "attempt": "browser_headers_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('172.66.147.243', 443) | caused by: OSError: [Errno 10013] Connect call failed ('104.20.23.154', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_headers_http",
+              "elapsed_ms": 451.88,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_public_fallback",
+              "attempt": "browser_public_fallback",
+              "status": "error",
+              "fetchFailureKind": "browser_fallback_failed",
+              "httpStatus": null,
+              "networkError": "[WinError 5] Access is denied",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_public_fallback",
+              "elapsed_ms": 127.72,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "status": "error",
+              "reason": "No extractor backend returned usable content"
+            }
+          ],
+          "quality": "extract_garbage",
+          "missingFields": [],
+          "interactionRequired": false,
+          "pageKind": "general",
+          "fetchFailureKind": "browser_fallback_failed",
+          "httpStatus": null,
+          "networkError": "[WinError 5] Access is denied",
+          "redirectedUrl": null,
+          "transportStrategy": "browser_public_fallback",
+          "tier": "failed",
+          "confidence": 0.05,
+          "extractionMethod": "none",
+          "wordCount": 0,
+          "paywallSignal": false,
+          "jsRenderSuspected": false,
+          "jsFallbackDetected": false,
+          "jsFallbackReason": null,
+          "pageType": "sparse",
+          "taskType": "page_read",
+          "sourceMode": "system_chosen",
+          "linkDensity": 0.0,
+          "approximateItemCount": 0,
+          "tableRowCount": 0,
+          "structuredRecordCount": 0
+        },
+        "evidenceVerdict": {
+          "usable": false,
+          "reason": "transport_failure: browser_fallback_failed",
+          "tier": "failed",
+          "confidence": 0.05,
+          "evidenceSource": "none",
+          "warningFlags": []
+        },
+        "synthesis": {
+          "answer": "This page could not be fetched or extracted. Reason: transport_failure: browser_fallback_failed",
+          "answerSource": "fallback_refused",
+          "groundedFields": [],
+          "usedFallback": true,
+          "fallbackReason": "transport_failure: browser_fallback_failed"
+        },
+        "loyalty": {
+          "loyal": true,
+          "score": 1.0,
+          "violations": [],
+          "checkedClaims": 0,
+          "supportedClaims": 0
+        }
+      },
+      "expected": {
+        "id": "example_domain",
+        "task": "page_read",
+        "extract": {
+          "kind": "content",
+          "confidence": 0.066,
+          "wordCount": 19,
+          "structuredData": {}
+        },
+        "evidence": {
+          "usable": false,
+          "evidenceSource": "none"
+        },
+        "synthesis": {
+          "answer": "This page could not be fetched or extracted from usable evidence.",
+          "answerSource": "fallback_refused",
+          "usedFallback": true
+        },
+        "loyalty": {
+          "loyal": true
+        }
+      },
+      "checks": {
+        "extract": {
+          "kind_exact": false,
+          "confidence_within_tolerance": true,
+          "wordCount_within_tolerance": false,
+          "structuredData_exact": true
+        },
+        "evidence": {
+          "usable_exact": true,
+          "evidenceSource_exact": true
+        },
+        "synthesis": {
+          "answerSource_exact": true,
+          "usedFallback_exact": true
+        },
+        "ideal_answer_loyal_to_actual_extract": true,
+        "ideal_answer_loyalty": {
+          "loyal": true,
+          "score": 1.0,
+          "violations": [],
+          "checkedClaims": 0,
+          "supportedClaims": 0
+        }
+      }
+    },
+    {
+      "id": "iana_reserved_domains",
+      "task": "page_read",
+      "actual": {
+        "extract": {
+          "kind": "transport_failure",
+          "url": "https://www.iana.org/domains/reserved",
+          "title": "",
+          "content": "",
+          "structuredData": {},
+          "backendUsed": "none",
+          "backendAttempts": [
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "direct_http",
+              "attempt": "direct_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "[Errno 10013] Connect call failed ('192.0.33.8', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "direct_http",
+              "elapsed_ms": 530.03,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "env_proxy_http",
+              "attempt": "env_proxy_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "[Errno 10013] Connect call failed ('192.0.33.8', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "env_proxy_http",
+              "elapsed_ms": 427.22,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_headers_http",
+              "attempt": "browser_headers_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "[Errno 10013] Connect call failed ('192.0.33.8', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_headers_http",
+              "elapsed_ms": 517.59,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_public_fallback",
+              "attempt": "browser_public_fallback",
+              "status": "error",
+              "fetchFailureKind": "browser_fallback_failed",
+              "httpStatus": null,
+              "networkError": "[WinError 5] Access is denied",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_public_fallback",
+              "elapsed_ms": 6.69,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "status": "error",
+              "reason": "No extractor backend returned usable content"
+            }
+          ],
+          "quality": "extract_garbage",
+          "missingFields": [],
+          "interactionRequired": false,
+          "pageKind": "general",
+          "fetchFailureKind": "browser_fallback_failed",
+          "httpStatus": null,
+          "networkError": "[WinError 5] Access is denied",
+          "redirectedUrl": null,
+          "transportStrategy": "browser_public_fallback",
+          "tier": "failed",
+          "confidence": 0.05,
+          "extractionMethod": "none",
+          "wordCount": 0,
+          "paywallSignal": false,
+          "jsRenderSuspected": false,
+          "jsFallbackDetected": false,
+          "jsFallbackReason": null,
+          "pageType": "sparse",
+          "taskType": "page_read",
+          "sourceMode": "system_chosen",
+          "linkDensity": 0.0,
+          "approximateItemCount": 0,
+          "tableRowCount": 0,
+          "structuredRecordCount": 0
+        },
+        "evidenceVerdict": {
+          "usable": false,
+          "reason": "transport_failure: browser_fallback_failed",
+          "tier": "failed",
+          "confidence": 0.05,
+          "evidenceSource": "none",
+          "warningFlags": []
+        },
+        "synthesis": {
+          "answer": "This page could not be fetched or extracted. Reason: transport_failure: browser_fallback_failed",
+          "answerSource": "fallback_refused",
+          "groundedFields": [],
+          "usedFallback": true,
+          "fallbackReason": "transport_failure: browser_fallback_failed"
+        },
+        "loyalty": {
+          "loyal": true,
+          "score": 1.0,
+          "violations": [],
+          "checkedClaims": 0,
+          "supportedClaims": 0
+        }
+      },
+      "expected": {
+        "id": "iana_reserved_domains",
+        "task": "page_read",
+        "extract": {
+          "kind": "content",
+          "confidence": 1.0,
+          "wordCount": 372,
+          "structuredData": {}
+        },
+        "evidence": {
+          "usable": true,
+          "evidenceSource": "page_content"
+        },
+        "synthesis": {
+          "answer": "IANA manages reserved domains for documentation and testing. RFC 2606 reserves example.com, example.net, and example.org for use in documentation and examples. The page also explains reserved special-use names and why these domains should not be delegated for normal public use.",
+          "answerSource": "page_content",
+          "usedFallback": false
+        },
+        "loyalty": {
+          "loyal": true
+        }
+      },
+      "checks": {
+        "extract": {
+          "kind_exact": false,
+          "confidence_within_tolerance": false,
+          "wordCount_within_tolerance": false,
+          "structuredData_exact": true
+        },
+        "evidence": {
+          "usable_exact": false,
+          "evidenceSource_exact": false
+        },
+        "synthesis": {
+          "answerSource_exact": false,
+          "usedFallback_exact": false
+        },
+        "ideal_answer_loyal_to_actual_extract": false,
+        "ideal_answer_loyalty": {
+          "loyal": false,
+          "score": 0.0,
+          "violations": [
+            "claim not in extracted content: RFC 2606",
+            "claim not in extracted content: example.com",
+            "claim not in extracted content: example.net",
+            "claim not in extracted content: example.org",
+            "claim not in extracted content: IANA",
+            "claim not in extracted content: RFC"
+          ],
+          "checkedClaims": 6,
+          "supportedClaims": 0
+        }
+      }
+    },
+    {
+      "id": "times_of_india_homepage",
+      "task": "page_read",
+      "actual": {
+        "extract": {
+          "kind": "transport_failure",
+          "url": "https://timesofindia.indiatimes.com/",
+          "title": "",
+          "content": "",
+          "structuredData": {},
+          "backendUsed": "none",
+          "backendAttempts": [
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "direct_http",
+              "attempt": "direct_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('49.44.117.152', 443) | caused by: OSError: [Errno 10013] Connect call failed ('23.200.216.66', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "direct_http",
+              "elapsed_ms": 409.55,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "env_proxy_http",
+              "attempt": "env_proxy_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('49.44.117.152', 443) | caused by: OSError: [Errno 10013] Connect call failed ('23.200.216.66', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "env_proxy_http",
+              "elapsed_ms": 554.7,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_headers_http",
+              "attempt": "browser_headers_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('49.44.117.152', 443) | caused by: OSError: [Errno 10013] Connect call failed ('23.200.216.66', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_headers_http",
+              "elapsed_ms": 482.77,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_public_fallback",
+              "attempt": "browser_public_fallback",
+              "status": "error",
+              "fetchFailureKind": "browser_fallback_failed",
+              "httpStatus": null,
+              "networkError": "[WinError 5] Access is denied",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_public_fallback",
+              "elapsed_ms": 4.7,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "status": "error",
+              "reason": "No extractor backend returned usable content"
+            }
+          ],
+          "quality": "extract_garbage",
+          "missingFields": [],
+          "interactionRequired": false,
+          "pageKind": "general",
+          "fetchFailureKind": "browser_fallback_failed",
+          "httpStatus": null,
+          "networkError": "[WinError 5] Access is denied",
+          "redirectedUrl": null,
+          "transportStrategy": "browser_public_fallback",
+          "tier": "failed",
+          "confidence": 0.05,
+          "extractionMethod": "none",
+          "wordCount": 0,
+          "paywallSignal": false,
+          "jsRenderSuspected": false,
+          "jsFallbackDetected": false,
+          "jsFallbackReason": null,
+          "pageType": "sparse",
+          "taskType": "page_read",
+          "sourceMode": "system_chosen",
+          "linkDensity": 0.0,
+          "approximateItemCount": 0,
+          "tableRowCount": 0,
+          "structuredRecordCount": 0
+        },
+        "evidenceVerdict": {
+          "usable": false,
+          "reason": "transport_failure: browser_fallback_failed",
+          "tier": "failed",
+          "confidence": 0.05,
+          "evidenceSource": "none",
+          "warningFlags": []
+        },
+        "synthesis": {
+          "answer": "This page could not be fetched or extracted. Reason: transport_failure: browser_fallback_failed",
+          "answerSource": "fallback_refused",
+          "groundedFields": [],
+          "usedFallback": true,
+          "fallbackReason": "transport_failure: browser_fallback_failed"
+        },
+        "loyalty": {
+          "loyal": true,
+          "score": 1.0,
+          "violations": [],
+          "checkedClaims": 0,
+          "supportedClaims": 0
+        }
+      },
+      "expected": {
+        "id": "times_of_india_homepage",
+        "task": "page_read",
+        "extract": {
+          "kind": "content",
+          "confidence": 1.0,
+          "wordCount": 477,
+          "structuredData": {
+            "page_items": [
+              "Chennai Koovagam festival: Where transgenders flock to wed, celebrate and mourn - photos",
+              "Politics has its place: Akhilesh visits BJP MLA who was injured while burning his effigy",
+              "Odisha skeleton row: Bank says man was inebriated, created a distressing situation"
+            ],
+            "sections": [
+              "Sports",
+              "Business"
+            ]
+          }
+        },
+        "evidence": {
+          "usable": true,
+          "evidenceSource": "structured_data"
+        },
+        "synthesis": {
+          "answer": "This page highlights: Chennai Koovagam festival: Where transgenders flock to wed, celebrate and mourn - photos; Politics has its place: Akhilesh visits BJP MLA who was injured while burning his effigy. Visible sections include Sports, Business.",
+          "answerSource": "structured_data",
+          "usedFallback": false
+        },
+        "loyalty": {
+          "loyal": true
+        }
+      },
+      "checks": {
+        "extract": {
+          "kind_exact": false,
+          "confidence_within_tolerance": false,
+          "wordCount_within_tolerance": false,
+          "structuredData_exact": false
+        },
+        "evidence": {
+          "usable_exact": false,
+          "evidenceSource_exact": false
+        },
+        "synthesis": {
+          "answerSource_exact": false,
+          "usedFallback_exact": false
+        },
+        "ideal_answer_loyal_to_actual_extract": false,
+        "ideal_answer_loyalty": {
+          "loyal": false,
+          "score": 0.0,
+          "violations": [
+            "claim not in extracted content: Chennai Koovagam",
+            "claim not in extracted content: BJP",
+            "claim not in extracted content: MLA"
+          ],
+          "checkedClaims": 3,
+          "supportedClaims": 0
+        }
+      }
+    },
+    {
+      "id": "ipl_points_table",
+      "task": "factual_extract",
+      "actual": {
+        "extract": {
+          "kind": "transport_failure",
+          "url": "https://www.iplt20.com/matches/points-table",
+          "title": "",
+          "content": "",
+          "structuredData": {},
+          "backendUsed": "none",
+          "backendAttempts": [
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "direct_http",
+              "attempt": "direct_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('49.44.179.146', 443) | caused by: OSError: [Errno 10013] Connect call failed ('49.44.179.144', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "direct_http",
+              "elapsed_ms": 448.85,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "env_proxy_http",
+              "attempt": "env_proxy_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('49.44.179.146', 443) | caused by: OSError: [Errno 10013] Connect call failed ('49.44.179.144', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "env_proxy_http",
+              "elapsed_ms": 506.02,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_headers_http",
+              "attempt": "browser_headers_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('49.44.179.146', 443) | caused by: OSError: [Errno 10013] Connect call failed ('49.44.179.144', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_headers_http",
+              "elapsed_ms": 489.72,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_public_fallback",
+              "attempt": "browser_public_fallback",
+              "status": "error",
+              "fetchFailureKind": "browser_fallback_failed",
+              "httpStatus": null,
+              "networkError": "[WinError 5] Access is denied",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_public_fallback",
+              "elapsed_ms": 3.81,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "status": "error",
+              "reason": "No extractor backend returned usable content"
+            }
+          ],
+          "quality": "extract_garbage",
+          "missingFields": [
+            "team",
+            "position",
+            "points",
+            "nrr",
+            "ranking_movement"
+          ],
+          "interactionRequired": false,
+          "pageKind": "standings/table",
+          "fetchFailureKind": "browser_fallback_failed",
+          "httpStatus": null,
+          "networkError": "[WinError 5] Access is denied",
+          "redirectedUrl": null,
+          "transportStrategy": "browser_public_fallback",
+          "tier": "failed",
+          "confidence": 0.05,
+          "extractionMethod": "none",
+          "wordCount": 0,
+          "paywallSignal": false,
+          "jsRenderSuspected": false,
+          "jsFallbackDetected": false,
+          "jsFallbackReason": null,
+          "pageType": "sparse",
+          "taskType": "factual_extract",
+          "sourceMode": "system_chosen",
+          "linkDensity": 0.0,
+          "approximateItemCount": 0,
+          "tableRowCount": 0,
+          "structuredRecordCount": 0
+        },
+        "evidenceVerdict": {
+          "usable": false,
+          "reason": "transport_failure: browser_fallback_failed",
+          "tier": "failed",
+          "confidence": 0.05,
+          "evidenceSource": "none",
+          "warningFlags": []
+        },
+        "synthesis": {
+          "answer": "This page could not be fetched or extracted. Reason: transport_failure: browser_fallback_failed",
+          "answerSource": "fallback_refused",
+          "groundedFields": [],
+          "usedFallback": true,
+          "fallbackReason": "transport_failure: browser_fallback_failed"
+        },
+        "loyalty": {
+          "loyal": true,
+          "score": 1.0,
+          "violations": [],
+          "checkedClaims": 0,
+          "supportedClaims": 0
+        }
+      },
+      "expected": {
+        "id": "ipl_points_table",
+        "task": "factual_extract",
+        "extract": {
+          "kind": "content",
+          "confidence": 1.0,
+          "wordCount": 22,
+          "structuredData": {
+            "team": "Chennai Super Kings",
+            "position": "6",
+            "points": "6",
+            "nrr": "-0.121",
+            "ranking_movement": [
+              "W",
+              "W",
+              "L",
+              "W",
+              "L"
+            ]
+          }
+        },
+        "evidence": {
+          "usable": true,
+          "evidenceSource": "structured_data"
+        },
+        "synthesis": {
+          "answer": "Chennai Super Kings are on 6 points and sit 6 in the table. Their net run rate is -0.121. Recent form: W, W, L, W, L.",
+          "answerSource": "structured_data",
+          "usedFallback": false
+        },
+        "loyalty": {
+          "loyal": true
+        }
+      },
+      "checks": {
+        "extract": {
+          "kind_exact": false,
+          "confidence_within_tolerance": false,
+          "wordCount_within_tolerance": false,
+          "structuredData_exact": false
+        },
+        "evidence": {
+          "usable_exact": false,
+          "evidenceSource_exact": false
+        },
+        "synthesis": {
+          "answerSource_exact": false,
+          "usedFallback_exact": false
+        },
+        "ideal_answer_loyal_to_actual_extract": false,
+        "ideal_answer_loyalty": {
+          "loyal": false,
+          "score": 0.0,
+          "violations": [
+            "claim not in extracted content: 0.121",
+            "claim not in extracted content: Chennai Super Kings"
+          ],
+          "checkedClaims": 2,
+          "supportedClaims": 0
+        }
+      }
+    },
+    {
+      "id": "openai_changelog",
+      "task": "factual_extract",
+      "actual": {
+        "extract": {
+          "kind": "transport_failure",
+          "url": "https://developers.openai.com/api/docs/changelog",
+          "title": "",
+          "content": "",
+          "structuredData": {},
+          "backendUsed": "none",
+          "backendAttempts": [
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "direct_http",
+              "attempt": "direct_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('64.239.109.1', 443) | caused by: OSError: [Errno 10013] Connect call failed ('64.239.123.1', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "direct_http",
+              "elapsed_ms": 488.68,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "env_proxy_http",
+              "attempt": "env_proxy_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('64.239.109.1', 443) | caused by: OSError: [Errno 10013] Connect call failed ('64.239.123.1', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "env_proxy_http",
+              "elapsed_ms": 420.89,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_headers_http",
+              "attempt": "browser_headers_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('64.239.109.193', 443) | caused by: OSError: [Errno 10013] Connect call failed ('64.239.123.193', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_headers_http",
+              "elapsed_ms": 523.48,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_public_fallback",
+              "attempt": "browser_public_fallback",
+              "status": "error",
+              "fetchFailureKind": "browser_fallback_failed",
+              "httpStatus": null,
+              "networkError": "[WinError 5] Access is denied",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_public_fallback",
+              "elapsed_ms": 4.17,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "status": "error",
+              "reason": "No extractor backend returned usable content"
+            }
+          ],
+          "quality": "extract_garbage",
+          "missingFields": [
+            "update_items",
+            "dates",
+            "what_changed"
+          ],
+          "interactionRequired": false,
+          "pageKind": "docs/changelog",
+          "fetchFailureKind": "browser_fallback_failed",
+          "httpStatus": null,
+          "networkError": "[WinError 5] Access is denied",
+          "redirectedUrl": null,
+          "transportStrategy": "browser_public_fallback",
+          "tier": "failed",
+          "confidence": 0.05,
+          "extractionMethod": "none",
+          "wordCount": 0,
+          "paywallSignal": false,
+          "jsRenderSuspected": false,
+          "jsFallbackDetected": false,
+          "jsFallbackReason": null,
+          "pageType": "sparse",
+          "taskType": "factual_extract",
+          "sourceMode": "system_chosen",
+          "linkDensity": 0.0,
+          "approximateItemCount": 0,
+          "tableRowCount": 0,
+          "structuredRecordCount": 0
+        },
+        "evidenceVerdict": {
+          "usable": false,
+          "reason": "transport_failure: browser_fallback_failed",
+          "tier": "failed",
+          "confidence": 0.05,
+          "evidenceSource": "none",
+          "warningFlags": []
+        },
+        "synthesis": {
+          "answer": "This page could not be fetched or extracted. Reason: transport_failure: browser_fallback_failed",
+          "answerSource": "fallback_refused",
+          "groundedFields": [],
+          "usedFallback": true,
+          "fallbackReason": "transport_failure: browser_fallback_failed"
+        },
+        "loyalty": {
+          "loyal": true,
+          "score": 1.0,
+          "violations": [],
+          "checkedClaims": 0,
+          "supportedClaims": 0
+        }
+      },
+      "expected": {
+        "id": "openai_changelog",
+        "task": "page_read",
+        "extract": {
+          "kind": "content",
+          "confidence": 0.05,
+          "wordCount": 0,
+          "structuredData": {}
+        },
+        "evidence": {
+          "usable": false,
+          "evidenceSource": "none"
+        },
+        "synthesis": {
+          "answer": "This page could not be extracted into readable content because it returned an empty body and requires JavaScript rendering.",
+          "answerSource": "fallback_refused",
+          "usedFallback": true
+        },
+        "loyalty": {
+          "loyal": true
+        }
+      },
+      "checks": {
+        "extract": {
+          "kind_exact": false,
+          "confidence_within_tolerance": true,
+          "wordCount_within_tolerance": true,
+          "structuredData_exact": true
+        },
+        "evidence": {
+          "usable_exact": true,
+          "evidenceSource_exact": true
+        },
+        "synthesis": {
+          "answerSource_exact": true,
+          "usedFallback_exact": true
+        },
+        "ideal_answer_loyal_to_actual_extract": true,
+        "ideal_answer_loyalty": {
+          "loyal": true,
+          "score": 1.0,
+          "violations": [],
+          "checkedClaims": 0,
+          "supportedClaims": 0
+        }
+      }
+    },
+    {
+      "id": "python_3144_release",
+      "task": "page_read",
+      "actual": {
+        "extract": {
+          "kind": "transport_failure",
+          "url": "https://www.python.org/downloads/release/python-3144/",
+          "title": "",
+          "content": "",
+          "structuredData": {},
+          "backendUsed": "none",
+          "backendAttempts": [
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "direct_http",
+              "attempt": "direct_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('167.82.60.223', 443) | caused by: OSError: [Errno 10013] Connect call failed ('167.82.56.223', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "direct_http",
+              "elapsed_ms": 505.28,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "env_proxy_http",
+              "attempt": "env_proxy_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('167.82.60.223', 443) | caused by: OSError: [Errno 10013] Connect call failed ('167.82.56.223', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "env_proxy_http",
+              "elapsed_ms": 539.84,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_headers_http",
+              "attempt": "browser_headers_http",
+              "status": "error",
+              "fetchFailureKind": "connect_failure",
+              "httpStatus": null,
+              "networkError": "ConnectError: All connection attempts failed | caused by: OSError: All connection attempts failed | caused by: ExceptionGroup: multiple connection attempts failed (2 sub-exceptions) | caused by: OSError: [Errno 10013] Connect call failed ('167.82.60.223', 443) | caused by: OSError: [Errno 10013] Connect call failed ('167.82.56.223', 443)",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_headers_http",
+              "elapsed_ms": 415.97,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "strategy": "browser_public_fallback",
+              "attempt": "browser_public_fallback",
+              "status": "error",
+              "fetchFailureKind": "browser_fallback_failed",
+              "httpStatus": null,
+              "networkError": "[WinError 5] Access is denied",
+              "redirectedUrl": null,
+              "transportStrategy": "browser_public_fallback",
+              "elapsed_ms": 10.91,
+              "contentType": null
+            },
+            {
+              "backend": "web_fetch",
+              "tool": "web_fetch",
+              "status": "error",
+              "reason": "No extractor backend returned usable content"
+            }
+          ],
+          "quality": "extract_garbage",
+          "missingFields": [
+            "event",
+            "date_time",
+            "what_changed"
+          ],
+          "interactionRequired": false,
+          "pageKind": "news/article",
+          "fetchFailureKind": "browser_fallback_failed",
+          "httpStatus": null,
+          "networkError": "[WinError 5] Access is denied",
+          "redirectedUrl": null,
+          "transportStrategy": "browser_public_fallback",
+          "tier": "failed",
+          "confidence": 0.05,
+          "extractionMethod": "none",
+          "wordCount": 0,
+          "paywallSignal": false,
+          "jsRenderSuspected": false,
+          "jsFallbackDetected": false,
+          "jsFallbackReason": null,
+          "pageType": "sparse",
+          "taskType": "page_read",
+          "sourceMode": "system_chosen",
+          "linkDensity": 0.0,
+          "approximateItemCount": 0,
+          "tableRowCount": 0,
+          "structuredRecordCount": 0
+        },
+        "evidenceVerdict": {
+          "usable": false,
+          "reason": "transport_failure: browser_fallback_failed",
+          "tier": "failed",
+          "confidence": 0.05,
+          "evidenceSource": "none",
+          "warningFlags": []
+        },
+        "synthesis": {
+          "answer": "This page could not be fetched or extracted. Reason: transport_failure: browser_fallback_failed",
+          "answerSource": "fallback_refused",
+          "groundedFields": [],
+          "usedFallback": true,
+          "fallbackReason": "transport_failure: browser_fallback_failed"
+        },
+        "loyalty": {
+          "loyal": true,
+          "score": 1.0,
+          "violations": [],
+          "checkedClaims": 0,
+          "supportedClaims": 0
+        }
+      },
+      "expected": {
+        "id": "python_3144_release",
+        "task": "page_read",
+        "extract": {
+          "kind": "content",
+          "confidence": 0.7,
+          "wordCount": 332,
+          "structuredData": {
+            "event": "Python Release Python 3.14.4",
+            "what_changed": "The recovered page content lists major changes around PEP 784, PEP 779, and PEP 750."
+          }
+        },
+        "evidence": {
+          "usable": true,
+          "evidenceSource": "page_content"
+        },
+        "synthesis": {
+          "answer": "Python Release Python 3.14.4 is the fourth maintenance release in the Python 3.14 series. The recovered page content lists major changes around PEP 784, PEP 779, and PEP 750, along with release files and maintenance notes for the branch. Note: this page served a no-JavaScript fallback, so the content may be incomplete.",
+          "answerSource": "page_content",
+          "usedFallback": false
+        },
+        "loyalty": {
+          "loyal": true
+        }
+      },
+      "checks": {
+        "extract": {
+          "kind_exact": false,
+          "confidence_within_tolerance": false,
+          "wordCount_within_tolerance": false,
+          "structuredData_exact": false
+        },
+        "evidence": {
+          "usable_exact": false,
+          "evidenceSource_exact": false
+        },
+        "synthesis": {
+          "answerSource_exact": false,
+          "usedFallback_exact": false
+        },
+        "ideal_answer_loyal_to_actual_extract": false,
+        "ideal_answer_loyalty": {
+          "loyal": false,
+          "score": 0.0,
+          "violations": [
+            "claim not in extracted content: Python 3.14.4",
+            "claim not in extracted content: Python 3.14",
+            "claim not in extracted content: 3.14.4",
+            "claim not in extracted content: 3.14",
+            "claim not in extracted content: PEP 784",
+            "claim not in extracted content: PEP 779",
+            "claim not in extracted content: PEP 750",
+            "claim not in extracted content: Python Release Python",
+            "claim not in extracted content: PEP"
+          ],
+          "checkedClaims": 9,
+          "supportedClaims": 0
+        }
+      }
+    }
+  ]
+}

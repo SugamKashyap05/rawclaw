@@ -26,6 +26,14 @@ const DEFAULT_SETTINGS: AppSettingsState = {
     githubConnected: false,
     slackConnected: false,
   },
+  chatDefaults: {
+    planMode: false,
+    preferredWebMode: 'auto',
+    toolUseMode: 'auto',
+    permissionMode: 'workspace_default',
+    selectedPlugins: [],
+    selectedTools: [],
+  },
 };
 
 @Injectable()
@@ -104,6 +112,12 @@ export class SettingsService {
             ...currentSettings.integrations,
             ...(payload.settings.integrations ?? {}),
           },
+          chatDefaults: {
+            ...currentSettings.chatDefaults,
+            ...(payload.settings.chatDefaults ?? {}),
+            selectedPlugins: payload.settings.chatDefaults?.selectedPlugins ?? currentSettings.chatDefaults.selectedPlugins,
+            selectedTools: payload.settings.chatDefaults?.selectedTools ?? currentSettings.chatDefaults.selectedTools,
+          },
         }
       : currentSettings;
 
@@ -175,6 +189,7 @@ export class SettingsService {
       bots: { ...DEFAULT_SETTINGS.bots, ...parsed.bots },
       security: { ...DEFAULT_SETTINGS.security, ...parsed.security },
       integrations: { ...DEFAULT_SETTINGS.integrations, ...parsed.integrations },
+      chatDefaults: { ...DEFAULT_SETTINGS.chatDefaults, ...(parsed.chatDefaults || {}) },
     };
   }
 

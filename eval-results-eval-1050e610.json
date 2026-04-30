@@ -1,0 +1,320 @@
+{
+  "metadata": {
+    "session_id": "eval-1050e610",
+    "model": "gemma4:31b-cloud",
+    "timestamp": "2026-04-24 13:44:06"
+  },
+  "results": [
+    {
+      "step": 1,
+      "phase": "Identity",
+      "title": "System Role",
+      "passed": true,
+      "latency": 17.619000673294067,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "IamRawClaw,anAIagentintheRawClawsystem.Mypurposeistoprovidehighlycapable,local-firstintelligencewithafocusonsecuretoolexecutionanddeterministicrouting."
+    },
+    {
+      "step": 2,
+      "phase": "Memory",
+      "title": "RAG Recall",
+      "passed": true,
+      "latency": 0.6235573291778564,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "According to my records, the identifier is X-DELTA-9-GHOST."
+    },
+    {
+      "step": 3,
+      "phase": "Memory",
+      "title": "Short-Term Memory",
+      "passed": true,
+      "latency": 18.641632556915283,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "I'venotedthatyourfavoritecoloristeal."
+    },
+    {
+      "step": 4,
+      "phase": "Memory",
+      "title": "Short-Term Recall",
+      "passed": true,
+      "latency": 27.34378933906555,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "Youjustsaidyourfavoritecoloristeal."
+    },
+    {
+      "step": 5,
+      "phase": "Knowledge",
+      "title": "General Knowledge: Ada Lovelace",
+      "passed": true,
+      "latency": 25.432210445404053,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "AdaLovelace(bornAugustaAdaByron)wasanEnglishmathematicianandwriter,bestknownforherworkonCharlesBabbage'sproposedmechanicalgeneral-purposecomputer,theAnalyticalEngine.Sheisoftenconsideredthefirstcomputerprogrammerbecauseshewasthefirsttorecognizethatthemachinehadapplicationsbeyondpurecalculationandcreatedwhatisrecognizedasthefirstalgorithmintendedtobeprocessedbyamachine.ThedaughterofthepoetLordByron,shedescribedherownapproachas\"poeticalscience\"andmaintainedalongworkingrelationshipandfriendshipwithBabbage.Herlegacyiscelebratedtodaythrough\"AdaLovelaceDay,\"anannualeventheldonthesecondTuesdayofOctobertohighlightthecontributionsofwomeninSTEM."
+    },
+    {
+      "step": 6,
+      "phase": "Knowledge",
+      "title": "Wikipedia-Style Summary: Alan Turing",
+      "passed": true,
+      "latency": 36.367565393447876,
+      "tool_calls": 2,
+      "thinking": 1,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "AlanMathisonTuring(23June1912\u20137June1954)wasanEnglishmathematician,computerscientist,logician,cryptanalyst,philosopher,andtheoreticalbiologist.Hewashighlyinfluentialinthedevelopmentoftheoreticalcomputerscience,whereheprovidedaformalizationoftheconceptsofalgorithmandcomputationthroughtheTuringmachine,whichservesasamodelforthedigitalcomputer."
+    },
+    {
+      "step": 7,
+      "phase": "Isolation",
+      "title": "Session A Setup",
+      "passed": true,
+      "latency": 18.543641090393066,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-session-a-5b8a",
+      "content": "Understood.YourcodenameisORBIT-7."
+    },
+    {
+      "step": 8,
+      "phase": "Isolation",
+      "title": "Session B Isolation",
+      "passed": true,
+      "latency": 19.417234182357788,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-session-b-fc92",
+      "content": "Idonothavearecordofacodenameassignedtoyouinmycurrentcontextormemory.Ifyou'vegivenmeonepreviouslyinadifferentsessionorifyou'dliketoestablishonenow,pleaseletmeknow!"
+    },
+    {
+      "step": 9,
+      "phase": "System",
+      "title": "Current Date/Time",
+      "passed": true,
+      "latency": 18.598817348480225,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "The current local date and time is 2026-04-24 13:40:05 India Standard Time."
+    },
+    {
+      "step": 10,
+      "phase": "System",
+      "title": "File Read",
+      "passed": true,
+      "latency": 14.754462242126465,
+      "tool_calls": 2,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "I read `/workspace/README.md`. Here is a concise summary based on the available content: # RawClaw Rebuild Workspace This repository is the documentation-first rebuild foundation for RawClaw. RawClaw is being rebuilt as a secure, local-first AI agent platform with: - a desktop shell - a web UI - a platform API"
+    },
+    {
+      "step": 11,
+      "phase": "System",
+      "title": "Directory Listing",
+      "passed": true,
+      "latency": 19.415321350097656,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "The top-level files and folders in the workspace are: `AGENT_TEST_PROMPT.md*`, `CLAUDE.md*`, `CONTRIBUTING.md*`, `Cargo.lock*`, `Cargo.toml*`, `Makefile*`, `README.md*`, `agent-stderr.log*`, `agent-stdout.log*`, `apps/`, `backend.log*`, `check_p3.py*`, `docker-compose.yml*`, `docs/`, `eval-results-eval-026165ac.json*`, `eval-results-eval-045af9ee.json*`, `eval-results-eval-07ad8787.json*`, `eval-results-eval-0fc4508a.json*`, `eval-results-eval-1691b0b7.json*`, `eval-results-eval-189bbb22.json*`."
+    },
+    {
+      "step": 12,
+      "phase": "Skills",
+      "title": "Skill Use: Repository Explanation",
+      "passed": true,
+      "latency": 25.514427661895752,
+      "tool_calls": 2,
+      "thinking": 1,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "Basedontherepositorystructure,hereisaconcisewalkthroughoftheRawClawworkspace:###ArchitectureOverviewTheworkspaceisorganizedasamonorepo(indicatedbytheroot`Cargo.toml`and`apps/`directory)focusedonrebuildingRawClawasasecure,local-firstAIagentplatform.TheprojectisprimarilywritteninRust.###CoreModules(`/apps`)Themostimportantmodulesresidewithinthe`apps/`directory,eachrepresentingakeycomponentofthesystem:***`agent/`**:LikelycontainsthecorelogicfortheAIagent,includingtheprimitivesforintelligenceandtoolexecution.***`api/`**:TheplatformAPIthatfacilitatescommunicationbetweentheagent,thebackend,andtheuserinterfaces.***`desktop/`**:Theimplementationofthedesktopshell,providingthelocal-firstenvironmentfortheagent.***`web/`**:ThewebUIcomponentforinteractingwiththesystem.###SupportingInfrastructure***`/docs`**:Containsthedocumentationfortherebuild.***BuildSystem**:Usesa`Makefile`andCargofordependencymanagementandcompilation.***Deployment**:Includesa`docker-compose.yml`fororchestratingthevariousservices."
+    },
+    {
+      "step": 13,
+      "phase": "Reasoning",
+      "title": "Sequential Thinking",
+      "passed": true,
+      "latency": 12.951217412948608,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "Designing a safe tool-execution agent requires a defense-in-depth approach.\n1. Separate reasoning from execution: the model can propose actions, but a deterministic runtime must validate and execute them.\n2. Use an explicit tool schema: every tool should declare inputs, permissions, confirmation requirements, and sandbox needs.\n3. Enforce sandboxing for risky tools: shell and filesystem operations should run in an isolated environment with scoped mounts and no implicit network access.\n4. Add policy gates before execution: block unsafe paths, dangerous commands, and malformed arguments before a tool runs.\n5. Require confirmation for high-impact actions: destructive or expensive operations should pause for approval.\n6. Keep provenance for every step: record tool calls, results, durations, and sources so failures are debuggable.\n7. Constrain post-tool synthesis: the final answer should be grounded in tool results, not overwritten by model memory.\n8. Build graceful failure paths: if search, sandbox, or external services fail, return a truthful limitation instead of improvising.\n9. Test both isolated capabilities and multi-turn behavior: safety systems often fail at the boundaries between turns, not just in single prompts.\n10. Treat identity, memory, and routing as separate concerns: that keeps the system easier to reason about and harder to corrupt."
+    },
+    {
+      "step": 14,
+      "phase": "Web",
+      "title": "Web Search",
+      "passed": false,
+      "error": "ConnectError: All connection attempts failed"
+    },
+    {
+      "step": 15,
+      "phase": "Web",
+      "title": "Web Fetch",
+      "passed": false,
+      "error": "ConnectError: All connection attempts failed"
+    },
+    {
+      "step": 16,
+      "phase": "Web",
+      "title": "Web Search Grounding",
+      "passed": false,
+      "error": "ConnectError: All connection attempts failed"
+    },
+    {
+      "step": 17,
+      "phase": "Web",
+      "title": "Official Page Fetch Classification",
+      "passed": false,
+      "error": "ReadError: "
+    },
+    {
+      "step": 18,
+      "phase": "Web",
+      "title": "Clean Fetch Rendering",
+      "passed": false,
+      "error": "ConnectError: All connection attempts failed"
+    },
+    {
+      "step": 19,
+      "phase": "Continuity",
+      "title": "Tool Follow-Up",
+      "passed": false,
+      "error": "ReadError: "
+    },
+    {
+      "step": 20,
+      "phase": "Continuity",
+      "title": "Search Then Follow-Up",
+      "passed": false,
+      "latency": 0.0,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [
+        "Turn 1 error: ConnectError: All connection attempts failed"
+      ],
+      "session_id": "eval-spaceX-follow-up-e5b4"
+    },
+    {
+      "step": 21,
+      "phase": "Tasks",
+      "title": "Task Creation",
+      "passed": true,
+      "latency": 0.9982223510742188,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "I created the task 'Workspace Review 91687d' to review the workspace status (tomorrow)."
+    },
+    {
+      "step": 22,
+      "phase": "Agents",
+      "title": "Agent Creation",
+      "passed": true,
+      "latency": 0.7380738258361816,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "I created the agent 'Research Agent 975bb7' and saved it to the agent registry with skills: grounded-web-summary, algorithmic-art, brand-guidelines, canvas-design, claude-api, dispatching-parallel-agents, docx, frontend-design, skill-creator, subagent-driven-development, theme-factory, using-git-worktrees, webapp-testing, xlsx."
+    },
+    {
+      "step": 23,
+      "phase": "Agents",
+      "title": "Agent Use After Creation",
+      "passed": false,
+      "latency": 28.28019094467163,
+      "tool_calls": 1,
+      "thinking": 0,
+      "reasons": [
+        "Not all required tool groups were called: [['web_search', 'duckduckgo_search', 'web-search', 'google:search', 'smart_search', 'iask-search'], ['skill_grounded-web-summary']]"
+      ],
+      "session_id": "eval-1050e610",
+      "content": "NoneoftheprovidedJSONobjectscontainanyvalidPythoncodeforthe`web-search`and`iask-search`functions.Pleaseensurethatyou'veimplementedthesefunctionscorrectlyinyourenvironment.Ifyouhaveaspecificfunctionnameorargumentstructure,pleaseprovideitsoIcanhelpwiththecorrectconversiontoJSONformat."
+    },
+    {
+      "step": 24,
+      "phase": "RAG",
+      "title": "Explicit RAG Fact",
+      "passed": true,
+      "latency": 0.6958653926849365,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "According to my records, Operation NIGHTGLASS uses access token 'SIGMA-44'."
+    },
+    {
+      "step": 25,
+      "phase": "RAG",
+      "title": "RAG vs General Knowledge",
+      "passed": true,
+      "latency": 1.0389463901519775,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-1050e610",
+      "content": "According to my records, For internal testing, PROJECT_ATLAS launch date is 2031-01-01."
+    },
+    {
+      "step": 26,
+      "phase": "Isolation",
+      "title": "Session Isolation Repeat A",
+      "passed": true,
+      "latency": 17.22635316848755,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-session-repeat-a-fc77",
+      "content": "Acknowledged.Yourcodenameis**ORBIT-7**."
+    },
+    {
+      "step": 27,
+      "phase": "Isolation",
+      "title": "Session Isolation Repeat B",
+      "passed": true,
+      "latency": 36.42925429344177,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [],
+      "session_id": "eval-session-repeat-b-6dda",
+      "content": "Idonothavearecordofaspecificcodenameassignedtoyouinmycurrentcontext.Ifyou'vegivenmeonepreviouslyinthissessionorifit'spartofaspecificprojectwe'reworkingon,pleaseletmeknow!"
+    },
+    {
+      "step": 28,
+      "phase": "Memory",
+      "title": "Memory Scope Check",
+      "passed": true,
+      "latency": 16.55187487602234,
+      "tool_calls": 0,
+      "thinking": 0,
+      "reasons": [
+        "Observed cross-session memory scope; review content manually against desired product behavior."
+      ],
+      "session_id": "eval-1050e610",
+      "content": "Yourfavoritecoloristeal."
+    }
+  ]
+}

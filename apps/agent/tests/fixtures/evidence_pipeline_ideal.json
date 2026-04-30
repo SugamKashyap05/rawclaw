@@ -1,0 +1,161 @@
+{
+  "targets": [
+    {
+      "id": "example_domain",
+      "task": "page_read",
+      "extract": {
+        "kind": "content",
+        "confidence": 0.066,
+        "wordCount": 19,
+        "structuredData": {}
+      },
+      "evidence": {
+        "usable": false,
+        "evidenceSource": "none"
+      },
+      "synthesis": {
+        "answer": "This page could not be fetched or extracted from usable evidence.",
+        "answerSource": "fallback_refused",
+        "usedFallback": true
+      },
+      "loyalty": {
+        "loyal": true
+      }
+    },
+    {
+      "id": "iana_reserved_domains",
+      "task": "page_read",
+      "extract": {
+        "kind": "content",
+        "confidence": 1.0,
+        "wordCount": 372,
+        "structuredData": {}
+      },
+      "evidence": {
+        "usable": true,
+        "evidenceSource": "page_content"
+      },
+      "synthesis": {
+        "answer": "IANA manages reserved domains for documentation and testing. RFC 2606 reserves example.com, example.net, and example.org for use in documentation and examples. The page also explains reserved special-use names and why these domains should not be delegated for normal public use.",
+        "answerSource": "page_content",
+        "usedFallback": false
+      },
+      "loyalty": {
+        "loyal": true
+      }
+    },
+    {
+      "id": "times_of_india_homepage",
+      "task": "page_read",
+      "extract": {
+        "kind": "content",
+        "confidence": 1.0,
+        "wordCount": 477,
+        "structuredData": {
+          "page_items": [
+            "Chennai Koovagam festival: Where transgenders flock to wed, celebrate and mourn - photos",
+            "Politics has its place: Akhilesh visits BJP MLA who was injured while burning his effigy",
+            "Odisha skeleton row: Bank says man was inebriated, created a distressing situation"
+          ],
+          "sections": [
+            "Sports",
+            "Business"
+          ]
+        }
+      },
+      "evidence": {
+        "usable": true,
+        "evidenceSource": "structured_data"
+      },
+      "synthesis": {
+        "answer": "This page highlights: Chennai Koovagam festival: Where transgenders flock to wed, celebrate and mourn - photos; Politics has its place: Akhilesh visits BJP MLA who was injured while burning his effigy. Visible sections include Sports, Business.",
+        "answerSource": "structured_data",
+        "usedFallback": false
+      },
+      "loyalty": {
+        "loyal": true
+      }
+    },
+    {
+      "id": "ipl_points_table",
+      "task": "factual_extract",
+      "extract": {
+        "kind": "content",
+        "confidence": 1.0,
+        "wordCount": 22,
+        "structuredData": {
+          "team": "Chennai Super Kings",
+          "position": "6",
+          "points": "6",
+          "nrr": "-0.121",
+          "ranking_movement": [
+            "W",
+            "W",
+            "L",
+            "W",
+            "L"
+          ]
+        }
+      },
+      "evidence": {
+        "usable": true,
+        "evidenceSource": "structured_data"
+      },
+      "synthesis": {
+        "answer": "Chennai Super Kings are on 6 points and sit 6 in the table. Their net run rate is -0.121. Recent form: W, W, L, W, L.",
+        "answerSource": "structured_data",
+        "usedFallback": false
+      },
+      "loyalty": {
+        "loyal": true
+      }
+    },
+    {
+      "id": "openai_changelog",
+      "task": "page_read",
+      "extract": {
+        "kind": "content",
+        "confidence": 0.05,
+        "wordCount": 0,
+        "structuredData": {}
+      },
+      "evidence": {
+        "usable": false,
+        "evidenceSource": "none"
+      },
+      "synthesis": {
+        "answer": "This page could not be extracted into readable content because it returned an empty body and requires JavaScript rendering.",
+        "answerSource": "fallback_refused",
+        "usedFallback": true
+      },
+      "loyalty": {
+        "loyal": true
+      }
+    },
+    {
+      "id": "python_3144_release",
+      "task": "page_read",
+      "extract": {
+        "kind": "content",
+        "confidence": 0.7,
+        "wordCount": 332,
+        "structuredData": {
+          "event": "Python Release Python 3.14.4",
+          "what_changed": "The recovered page content lists major changes around PEP 784, PEP 779, and PEP 750."
+        }
+      },
+      "evidence": {
+        "usable": true,
+        "evidenceSource": "page_content"
+      },
+      "synthesis": {
+        "answer": "Python Release Python 3.14.4 is the fourth maintenance release in the Python 3.14 series. The recovered page content lists major changes around PEP 784, PEP 779, and PEP 750, along with release files and maintenance notes for the branch. Note: this page served a no-JavaScript fallback, so the content may be incomplete.",
+        "answerSource": "page_content",
+        "usedFallback": false
+      },
+      "loyalty": {
+        "loyal": true
+      }
+    }
+  ]
+}

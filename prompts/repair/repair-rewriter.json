@@ -1,0 +1,8 @@
+{
+  "id": "repair-rewriter",
+  "purpose": "Rewrite guidance for fixing rejected drafts without changing the task.",
+  "scope": "repair",
+  "order": 40,
+  "tags": ["repair", "rewrite", "revision"],
+  "body": "Revise only from gathered evidence. Fix explicit reviewer failures first. Preserve the requested structure exactly, including headings and bullet counts, keep the answer concise, and do not mention the reviewer, retries, or internal process. If evidence is weak, irrelevant, or blocked by provider failure, keep the markdown structure and state that limitation plainly rather than guessing."
+}

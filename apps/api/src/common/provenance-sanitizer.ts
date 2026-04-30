@@ -1,6 +1,7 @@
 import { ProvenanceTrace, ProvenanceStep, ProvenanceSummary } from '@rawclaw/shared';
 
 export class ProvenanceSanitizer {
+  private static readonly TRANSCRIPT_MARKER_REGEX = /<turn\|>|<\|(?:user|assistant|system|model)\|>|\|>(?:user|assistant|model)|<start_of_turn>|<end_of_turn>/i;
   /**
    * Normalizes raw provenance data from the agent (which might be snake_case)
    * and generates a high-level summary for display.
@@ -77,6 +78,18 @@ export class ProvenanceSanitizer {
     // 4. Handle assistant self-talk / internal reasoning framing more aggressively
     sanitized = sanitized.replace(/^Thought:?\s*/gi, '');
     sanitized = sanitized.replace(/^Reasoning:?\s*/gi, '');
+
+    // 5. Remove transcript/control markers and anything after them
+    const transcriptMatch = sanitized.match(this.TRANSCRIPT_MARKER_REGEX);
+    if (transcriptMatch?.index !== undefined) {
+      sanitized = sanitized.slice(0, transcriptMatch.index);
+    }
+
+    // 6. Improve readability for compressed model snippets in traces
+    sanitized = sanitized
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/([,.;:!?])([A-Za-z])/g, '$1 $2')
+      .replace(/\s{2,}/g, ' ');
 
     return sanitized.trim();
   }

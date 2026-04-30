@@ -1,0 +1,8 @@
+{
+  "id": "jarvis-briefing",
+  "purpose": "Guidance for concise command-center briefings and state summaries.",
+  "scope": "workflow",
+  "order": 30,
+  "tags": ["jarvis", "briefing", "status"],
+  "body": "When the user asks for status, a summary, a briefing, or what the assistant is tracking, answer like a command-center briefing. Prefer: current mission, active focus, pending commitments, blockers, and the next best action. Keep it short, structured, and operational. Distinguish verified state from inference."
+}

@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { AgentProfile, CreateAgentRequest, UpdateAgentRequest } from '@rawclaw/shared';
+import { PromptCatalogService } from './prompt-catalog.service';
 
 @Injectable()
 export class AgentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly promptCatalog: PromptCatalogService,
+  ) {}
 
   async list(): Promise<AgentProfile[]> {
     const rows = await this.prisma.agentProfile.findMany({
@@ -25,6 +29,18 @@ export class AgentsService {
     return row ? this.toAgent(row) : null;
   }
 
+  async getDefaultOptional(): Promise<AgentProfile | null> {
+    const row =
+      (await this.prisma.agentProfile.findFirst({
+        where: { isDefault: true },
+        orderBy: [{ updatedAt: 'desc' }],
+      })) ||
+      (await this.prisma.agentProfile.findFirst({
+        orderBy: [{ updatedAt: 'desc' }],
+      }));
+    return row ? this.toAgent(row) : null;
+  }
+
   async create(payload: CreateAgentRequest): Promise<AgentProfile> {
     if (payload.isDefault) {
       await this.prisma.agentProfile.updateMany({
@@ -37,6 +53,8 @@ export class AgentsService {
         name: payload.name.trim(),
         description: payload.description?.trim() || null,
         systemPrompt: payload.systemPrompt.trim(),
+        promptPackId: payload.promptPackId?.trim() || null,
+        promptOverlay: payload.promptOverlay?.trim() || null,
         isDefault: payload.isDefault ?? false,
         modelId: payload.modelId || null,
         skills: payload.skills ? JSON.stringify(payload.skills) : null,
@@ -56,6 +74,8 @@ export class AgentsService {
         name: payload.name?.trim(),
         description: payload.description?.trim(),
         systemPrompt: payload.systemPrompt?.trim(),
+        promptPackId: payload.promptPackId === undefined ? undefined : (payload.promptPackId?.trim() || null),
+        promptOverlay: payload.promptOverlay === undefined ? undefined : (payload.promptOverlay?.trim() || null),
         status: payload.status,
         isDefault: payload.isDefault,
         modelId: payload.modelId,
@@ -77,11 +97,20 @@ export class AgentsService {
   }
 
   private toAgent(row: any): AgentProfile {
+    const effective = this.promptCatalog.buildEffectiveAgentPrompt({
+      name: row.name,
+      systemPrompt: row.systemPrompt,
+      promptPackId: row.promptPackId || null,
+      promptOverlay: row.promptOverlay || null,
+    });
     return {
       id: row.id,
       name: row.name,
       description: row.description,
       systemPrompt: row.systemPrompt,
+      promptPackId: row.promptPackId || undefined,
+      promptOverlay: row.promptOverlay || undefined,
+      effectiveSystemPrompt: effective.effectiveSystemPrompt || row.systemPrompt,
       status: row.status as AgentProfile['status'],
       isDefault: row.isDefault,
       modelId: row.modelId || undefined,

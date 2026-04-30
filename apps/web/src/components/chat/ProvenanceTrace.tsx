@@ -39,6 +39,31 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
     return { color: '#ff4d4d', label: 'Slow' };
   };
 
+  const getStepTone = (stepType: string, outputSummary: string) => {
+    const summary = outputSummary || '';
+    const approved = /APPROVED/i.test(summary);
+    const rejected = /REJECTED/i.test(summary);
+
+    switch (stepType) {
+      case 'plan':
+        return { color: '#00ffa3', bg: 'rgba(0, 255, 163, 0.04)' };
+      case 'tool_call':
+        return { color: '#00e5ff', bg: 'rgba(0, 229, 255, 0.04)' };
+      case 'tool_result':
+        return { color: '#00ffa3', bg: 'rgba(0, 255, 163, 0.04)' };
+      case 'review':
+        if (rejected) return { color: '#ff4d4d', bg: 'rgba(255, 77, 77, 0.05)' };
+        if (approved) return { color: '#00ffa3', bg: 'rgba(0, 255, 163, 0.04)' };
+        return { color: '#7bdcff', bg: 'rgba(123, 220, 255, 0.04)' };
+      case 'synthesis':
+        return { color: '#7bdcff', bg: 'rgba(123, 220, 255, 0.04)' };
+      case 'error':
+        return { color: '#ff4d4d', bg: 'rgba(255, 77, 77, 0.05)' };
+      default:
+        return { color: 'var(--text-secondary)', bg: 'rgba(255, 255, 255, 0.02)' };
+    }
+  };
+
   return (
     <div
       className="provenance-container"
@@ -99,6 +124,7 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
             const stepType = typeof step.stepType === 'string' ? step.stepType : (typeof rawStep.step_type === 'string' ? rawStep.step_type : 'unknown');
             const toolName = typeof step.toolName === 'string' ? step.toolName : (typeof rawStep.tool_name === 'string' ? rawStep.tool_name : null);
             const outputSummary = typeof step.outputSummary === 'string' ? step.outputSummary : (typeof rawStep.output_summary === 'string' ? rawStep.output_summary : '');
+            const tone = getStepTone(stepType, outputSummary);
 
           return (
             <div
@@ -108,13 +134,13 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.35rem 0.5rem',
-                background: 'rgba(255, 255, 255, 0.02)',
+                background: tone.bg,
                 borderRadius: '4px',
-                borderLeft: `2px solid ${timing.color}`,
+                borderLeft: `2px solid ${tone.color}`,
                 fontSize: '0.65rem',
               }}
             >
-              <span style={{ display: 'flex', color: timing.color }}>{getIcon(stepType)}</span>
+              <span style={{ display: 'flex', color: tone.color }}>{getIcon(stepType)}</span>
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 500, color: 'var(--text-main)', textTransform: 'capitalize', fontSize: '0.65rem' }}>
@@ -122,14 +148,26 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
                   {toolName ? <span style={{ color: 'var(--neon-cyan)', marginLeft: '0.25rem', fontSize: '0.6rem' }}>({toolName})</span> : null}
                 </div>
                 {outputSummary ? (
-                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {outputSummary.slice(0, 60)}
+                  <div
+                    style={{
+                      fontSize: '0.6rem',
+                      color: 'var(--text-muted)',
+                      overflow: 'hidden',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      whiteSpace: 'normal',
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {outputSummary}
                   </div>
                 ) : null}
               </div>
 
-              <div style={{ textAlign: 'right', fontSize: '0.55rem', color: timing.color }}>
-                {duration}ms
+              <div style={{ textAlign: 'right', fontSize: '0.55rem', color: 'var(--text-muted)' }}>
+                <div>{duration}ms</div>
+                <div style={{ color: timing.color }}>{timing.label}</div>
               </div>
             </div>
           );

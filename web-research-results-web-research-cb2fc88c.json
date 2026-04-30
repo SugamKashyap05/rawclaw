@@ -1,0 +1,268 @@
+{
+  "session_id": "web-research-cb2fc88c",
+  "model": "gemma4:31b-cloud",
+  "results": [
+    {
+      "step": 1,
+      "title": "Level 1: Fresh News Snapshot",
+      "passed": true,
+      "latency": 12.541064023971558,
+      "reasons": [],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "web_search",
+        "skill_grounded-web-summary",
+        "web_search"
+      ],
+      "content": "Based on the search results, here are the key takeaways:\n- SpaceX - Starship's Tenth Flight Test: SpaceX designs, manufactures and launches advanced rockets and spacecraft. The company was founded in 2002 to revolutionize space technology, with the ultimate goal of enabling people to live on other planets.\n- SpaceX has a few tricks up its sleeve for the last Starship flight of ...: SpaceX has a few tricks up its sleeve for the last Starship flight of the year SpaceX will reuse a Super Heavy booster with 24 previously flown Raptor engines.\n- Starship Block 3 development continues at Starbase and McGregor: SpaceX is gearing up for the next evolution of Starship, with Block 3 hardware on display at Starbase amid a flurry of engine testing at McGregor, highlighting both breakthroughs and challenges.",
+      "review_events": [
+        {
+          "approved": true,
+          "feedback": "",
+          "reviewer_id": "ollama/gemma4:31b-cloud"
+        }
+      ],
+      "provenance": {
+        "runId": "5256f64a-1582-4980-84cc-f1f1c651c6f1",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-cb2fc88c",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:46:45.981482+00:00Z"
+          },
+          {
+            "stepIndex": 1,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:46:49.043141+00:00Z"
+          },
+          {
+            "stepIndex": 2,
+            "stepType": "tool_call",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Search the web for the latest Space X Starship updates and...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:46:49.043177+00:00Z"
+          },
+          {
+            "stepIndex": 3,
+            "stepType": "tool_result",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Search the web for the latest Space X Starship updates and...",
+            "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Search the web for the latest Space X Starship updates and..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:46:49.043282+00:00Z"
+          },
+          {
+            "stepIndex": 4,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Forced tool path selected for obvious tool-backed request: web_search",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:46:49.043355+00:00Z"
+          },
+          {
+            "stepIndex": 5,
+            "stepType": "tool_call",
+            "toolName": "web_search",
+            "inputSummary": "query=the latest Space X Starship updates and present a concise ...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:46:51.798256+00:00Z"
+          },
+          {
+            "stepIndex": 6,
+            "stepType": "tool_result",
+            "toolName": "web_search",
+            "inputSummary": "query=the latest Space X Starship updates and present a concise ...",
+            "outputSummary": "3 results found (first: Space X - Starship's Tenth Flight Test)",
+            "sourceUrl": null,
+            "durationMs": 2754,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:46:51.798288+00:00Z"
+          },
+          {
+            "stepIndex": 7,
+            "stepType": "review",
+            "toolName": "ollama/gemma4:31b-cloud",
+            "inputSummary": null,
+            "outputSummary": "Result: APPROVED. Feedback:",
+            "sourceUrl": null,
+            "durationMs": 4465,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:46:56.282661+00:00Z"
+          },
+          {
+            "stepIndex": 8,
+            "stepType": "synthesis",
+            "toolName": null,
+            "inputSummary": null,
+            "outputSummary": "Based on the search results, here are the key takeaways:\n- Space X - Starship's Tenth Flight Test: Space X designs, manufactures and launches advanced rockets and spacecraft. The company was founded in ...",
+            "sourceUrl": null,
+            "durationMs": 10320,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:46:56.282833+00:00Z"
+          }
+        ],
+        "stepCount": 9,
+        "createdAt": "2026-04-24T12:46:56.282891+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": true,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "tool",
+          "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+          "lastAction": "Completed web_search"
+        }
+      }
+    },
+    {
+      "step": 2,
+      "title": "Level 2: Search + Fetch Grounded Summary",
+      "passed": false,
+      "latency": 8.022350788116455,
+      "reasons": [
+        "Ollama returned 400: {\"error\":\"The prompt is too long: 278398, model maximum context length: 262144 (ref: 8494c3a4-ccdb-48d6-b15f-e912df4c4314)\"}\n"
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "skill_grounded-web-summary"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "5b062941-60a6-4c37-a5cb-d0cc863123de",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-cb2fc88c",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:46:58.714714+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T12:46:58.714771+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    },
+    {
+      "step": 3,
+      "title": "Level 3: Comparative Research Memo",
+      "passed": false,
+      "latency": 10.135894298553467,
+      "reasons": [
+        "Ollama returned 400: {\"error\":\"The prompt is too long: 408874, model maximum context length: 262144 (ref: c45f71ed-8623-407e-afc7-4d22ddc8f364)\"}\n"
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "skill_grounded-web-summary"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "8fff09c3-b370-4dab-a9db-63b1f376e2be",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-cb2fc88c",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:47:08.530093+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T12:47:08.530148+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    },
+    {
+      "step": 4,
+      "title": "Level 4: Research Brief With Explicit Workflow",
+      "passed": false,
+      "latency": 11.974360704421997,
+      "reasons": [
+        "Ollama returned 400: {\"error\":\"The prompt is too long: 441976, model maximum context length: 262144 (ref: 589e48e2-918e-4218-b1ac-2e6f2dd096d0)\"}\n"
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "skill_grounded-web-summary"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "e0b63d5d-d1d5-4419-bcd3-cb93221dc679",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-cb2fc88c",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:47:18.790159+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T12:47:18.790217+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   FiActivity,
+  FiBookOpen,
   FiBox,
   FiChevronLeft,
   FiChevronRight,
@@ -13,6 +14,8 @@ import {
   FiShield,
   FiTool,
   FiUsers,
+  FiZap,
+  FiClock,
 } from 'react-icons/fi';
 
 interface SidebarCounts {
@@ -26,15 +29,18 @@ interface SidebarProps {
 }
 
 const ITEMS = [
-  { to: '/', label: 'Dashboard', icon: FiActivity },
+  { to: '/', label: 'Command Center', icon: FiActivity },
   { to: '/chat', label: 'Chat', icon: FiMessageSquare },
   { to: '/agents', label: 'Agents', icon: FiUsers, badge: 'agents' as const },
   { to: '/mcp', label: 'MCP Servers', icon: FiTool, badge: 'mcpServers' as const },
   { to: '/skills', label: 'Skills', icon: FiLayers },
-  { to: '/memory', label: 'Memory (RAG)', icon: FiDatabase },
+  { to: '/memory', label: 'Memory', icon: FiDatabase },
+  { to: '/learning', label: 'Learning', icon: FiBookOpen },
   { to: '/models', label: 'Models', icon: FiCpu },
   { to: '/integrations', label: 'Integrations', icon: FiShield },
-  { to: '/provenance', label: 'Provenance', icon: FiActivity },
+  { to: '/operator', label: 'Operator', icon: FiClock },
+  { to: '/gateway', label: 'Gateway Runtime', icon: FiZap },
+  { to: '/provenance', label: 'Control Room', icon: FiActivity },
   { to: '/tasks', label: 'Tasks', icon: FiBox, badge: 'pendingTasks' as const },
   { to: '/settings', label: 'Settings', icon: FiSettings },
 ];
@@ -84,9 +90,9 @@ export function Sidebar({ counts }: SidebarProps) {
           </div>
           {!isCollapsed && (
             <div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>RawClaw v2</div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>RawClaw JARVIS</div>
               <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem', letterSpacing: '0.2em' }}>
-                COMMAND CENTER
+                OPERATOR CONSOLE
               </div>
             </div>
           )}

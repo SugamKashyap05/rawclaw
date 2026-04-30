@@ -20,6 +20,14 @@ const EMPTY_SETTINGS: SettingsPayload = {
       githubConnected: false,
       slackConnected: false,
     },
+    chatDefaults: {
+      planMode: false,
+      preferredWebMode: 'auto',
+      toolUseMode: 'auto',
+      permissionMode: 'workspace_default',
+      selectedPlugins: [],
+      selectedTools: [],
+    },
   },
   workspaceFiles: {
     soul: '',

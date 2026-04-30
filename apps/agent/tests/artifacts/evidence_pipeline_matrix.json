@@ -1,0 +1,152 @@
+{
+  "targets": [
+    {
+      "id": "example_domain",
+      "toolResult": {
+        "output": {
+          "kind": "content",
+          "url": "https://example.com/",
+          "title": "Example Domain",
+          "content": "Example Domain is for use in documentation examples. It is a stable placeholder domain for simple web fetch and extract checks.",
+          "structuredData": {},
+          "quality": "extract_partial",
+          "tier": "partial",
+          "confidence": 0.58,
+          "wordCount": 19,
+          "structuredRecordCount": 0,
+          "jsFallbackDetected": false,
+          "jsFallbackReason": null
+        }
+      }
+    },
+    {
+      "id": "iana_reserved_domains",
+      "toolResult": {
+        "output": {
+          "kind": "content",
+          "url": "https://www.iana.org/domains/reserved",
+          "title": "IANA-managed Reserved Domains",
+          "content": "IANA manages reserved domains for documentation and testing. RFC 2606 reserves example.com, example.net, and example.org for use in documentation and examples. The page also explains reserved special-use names and why these domains should not be delegated for normal public use. This guidance helps developers, writers, and operators avoid accidental collisions with real deployed domains.",
+          "structuredData": {},
+          "quality": "extract_clean",
+          "tier": "clean",
+          "confidence": 1.0,
+          "wordCount": 372,
+          "structuredRecordCount": 0,
+          "jsFallbackDetected": false,
+          "jsFallbackReason": null
+        }
+      }
+    },
+    {
+      "id": "times_of_india_homepage",
+      "toolResult": {
+        "output": {
+          "kind": "content",
+          "url": "https://timesofindia.indiatimes.com/",
+          "title": "TOI - Breaking News, Latest News",
+          "content": "The homepage highlights Chennai Koovagam festival coverage, an Akhilesh visit to an injured BJP MLA, and an Odisha skeleton row update. Additional sections include Sports and Business.",
+          "structuredData": {
+            "page_items": [
+              "Chennai Koovagam festival: Where transgenders flock to wed, celebrate and mourn - photos",
+              "Politics has its place: Akhilesh visits BJP MLA who was injured while burning his effigy",
+              "Odisha skeleton row: Bank says man was inebriated, created a distressing situation"
+            ],
+            "headlines": [
+              "Chennai Koovagam festival: Where transgenders flock to wed, celebrate and mourn - photos",
+              "Politics has its place: Akhilesh visits BJP MLA who was injured while burning his effigy",
+              "Odisha skeleton row: Bank says man was inebriated, created a distressing situation"
+            ],
+            "sections": [
+              "Sports",
+              "Business"
+            ]
+          },
+          "quality": "extract_clean",
+          "tier": "clean",
+          "confidence": 1.0,
+          "wordCount": 477,
+          "structuredRecordCount": 5,
+          "jsFallbackDetected": false,
+          "jsFallbackReason": null
+        }
+      }
+    },
+    {
+      "id": "ipl_points_table",
+      "toolResult": {
+        "output": {
+          "kind": "content",
+          "url": "https://www.iplt20.com/matches/points-table",
+          "title": "IPL 2026 Points Table",
+          "content": "Chennai Super Kings are 6 in the IPL 2026 points table. They have 6 points. NRR is -0.121. Signals: recent form W,W,L,W,L.",
+          "structuredData": {
+            "team": "Chennai Super Kings",
+            "position": "6",
+            "points": "6",
+            "nrr": "-0.121",
+            "ranking_movement": [
+              "W",
+              "W",
+              "L",
+              "W",
+              "L"
+            ]
+          },
+          "quality": "extract_clean",
+          "tier": "clean",
+          "confidence": 1.0,
+          "wordCount": 22,
+          "structuredRecordCount": 5,
+          "jsFallbackDetected": false,
+          "jsFallbackReason": null
+        }
+      }
+    },
+    {
+      "id": "openai_changelog",
+      "toolResult": {
+        "output": {
+          "kind": "content",
+          "url": "https://developers.openai.com/api/docs/changelog",
+          "title": "OpenAI API Changelog",
+          "content": "[Page returned empty body. JavaScript rendering required.]",
+          "structuredData": {},
+          "quality": "extract_garbage",
+          "tier": "failed",
+          "confidence": 0.05,
+          "wordCount": 0,
+          "structuredRecordCount": 0,
+          "httpStatus": 200,
+          "fetchFailureKind": null,
+          "jsRenderSuspected": true,
+          "jsFallbackDetected": true,
+          "jsFallbackReason": "spa_empty_shell: <div id=\"__next\"></div>"
+        }
+      }
+    },
+    {
+      "id": "python_3144_release",
+      "toolResult": {
+        "output": {
+          "kind": "content",
+          "url": "https://www.python.org/downloads/release/python-3144/",
+          "title": "Python Release Python 3.14.4 | Python.org",
+          "content": "Python Release Python 3.14.4 is the fourth maintenance release in the Python 3.14 series. The recovered page content lists major changes around PEP 784, PEP 779, and PEP 750, along with release files and maintenance notes for the branch. It also explains that the page served a no-JavaScript fallback, so some dynamic sections may be incomplete even though the main release summary is still visible.",
+          "structuredData": {
+            "event": "Python Release Python 3.14.4",
+            "what_changed": "The recovered page content lists major changes around PEP 784, PEP 779, and PEP 750."
+          },
+          "quality": "extract_partial",
+          "tier": "partial",
+          "confidence": 0.7,
+          "wordCount": 332,
+          "structuredRecordCount": 2,
+          "jsRenderSuspected": true,
+          "jsFallbackDetected": true,
+          "jsFallbackReason": "interactive scripts did not run"
+        }
+      }
+    }
+  ]
+}

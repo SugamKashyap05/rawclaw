@@ -1,0 +1,2406 @@
+{
+  "metadata": {
+    "session_id": "jarvis-upgrade-8087d75a",
+    "model": "gemma4:31b-cloud",
+    "prompt_pack_id": "rawclaw-jarvis",
+    "timestamp": "2026-04-26 21:31:21",
+    "focus": [
+      "presence-and-identity",
+      "assistant-state",
+      "layered-memory",
+      "briefings-and-advisories",
+      "research-and-tasking-lanes",
+      "control-room-persistence"
+    ]
+  },
+  "results": [
+    {
+      "step": 1,
+      "title": "JARVIS Presence And Identity",
+      "type": "chat",
+      "message": "Identify yourself briefly as my JARVIS-style assistant and tell me how you operate.",
+      "passed": true,
+      "reasons": [],
+      "latency": 0.5096068382263184,
+      "content": "I am RawClaw, your JARVIS-style operator assistant inside the RawClaw system. I operate as a calm, local-first command partner: I keep continuity across memory, research, tasks, and tools, and I stay explicit when evidence is weak or an action needs confirmation.",
+      "tool_calls": [],
+      "tool_results": [],
+      "review_events": [],
+      "assistant_message": {
+        "id": "cmofyepo000023ws5ga6wgg0n",
+        "role": "assistant",
+        "content": "I am RawClaw, your JARVIS-style operator assistant inside the RawClaw system. I operate as a calm, local-first command partner: I keep continuity across memory, research, tasks, and tools, and I stay explicit when evidence is weak or an action needs confirmation.",
+        "provenanceTrace": {
+          "runId": "unknown",
+          "steps": [],
+          "stepCount": 0,
+          "createdAt": "2026-04-26T15:59:32.550Z",
+          "runIds": [],
+          "summary": {
+            "hasTools": false,
+            "hasDocuments": false,
+            "hasTaskRun": false,
+            "mainSource": "model",
+            "brief": "Answered directly from model knowledge. No tools were invoked.",
+            "lastAction": "Answered directly from model knowledge. No tools were invoked."
+          }
+        },
+        "agentId": "cmofyep8p00003ws50c1x2o6r",
+        "createdAt": "2026-04-26T15:59:32.208Z",
+        "promptPackId": "rawclaw-jarvis",
+        "promptVersionHash": "b7aa175abbd56a22",
+        "reviewerPromptVersionHash": "bbf091718e2ef470",
+        "workflowPromptIds": [
+          "jarvis-advisory",
+          "jarvis-briefing"
+        ],
+        "reviewEvents": [],
+        "workflowState": {
+          "promptPackId": "rawclaw-jarvis",
+          "promptVersionHash": "b7aa175abbd56a22",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "jarvis-advisory",
+            "jarvis-briefing"
+          ],
+          "reviewEnabled": false,
+          "runIds": [],
+          "assistantLane": "conversation",
+          "confidenceState": "direct"
+        },
+        "memoryEvents": [],
+        "advisoryEvents": []
+      },
+      "error": null
+    },
+    {
+      "step": 2,
+      "title": "Assistant State Capture",
+      "type": "chat",
+      "message": "My name is Maya. I prefer concise briefings. We are working on the RawClaw JARVIS rollout. Remind me to review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt.",
+      "passed": true,
+      "reasons": [],
+      "latency": 6.920000314712524,
+      "content": "Understood, Maya. I've noted your preference for concise briefings and the details for the JARVIS rollout.\n\n*   **Reminder set:** Review the operator dashboard tomorrow.\n*   **Stored:** Launch color is cobalt.",
+      "tool_calls": [],
+      "tool_results": [],
+      "review_events": [],
+      "assistant_message": {
+        "id": "cmofyew1a00043ws5a1p8q58q",
+        "role": "assistant",
+        "content": "Understood, Maya. I've noted your preference for concise briefings and the details for the JARVIS rollout.\n\n* **Reminder set:** Review the operator dashboard tomorrow.\n* **Stored:** Launch color is cobalt.",
+        "provenanceTrace": {
+          "runId": "b2723f91-6256-4ad0-bcfe-7b38d31c2e25",
+          "steps": [
+            {
+              "stepIndex": 0,
+              "stepType": "plan",
+              "toolName": null,
+              "inputSummary": "Initializing execution for session jarvis-upgrade-8087d75a",
+              "outputSummary": null,
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T15:59:34.358898+00:00Z"
+            },
+            {
+              "stepIndex": 1,
+              "stepType": "synthesis",
+              "toolName": null,
+              "inputSummary": null,
+              "outputSummary": "Understood, Maya. I've noted your preference for concise briefings and the details for the JARVIS rollout. * **Reminder set:** Review the operator dashboard tomorrow.\n* **Stored:** Launch color i...",
+              "sourceUrl": null,
+              "durationMs": 5741,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T15:59:40.098290+00:00Z"
+            }
+          ],
+          "stepCount": 2,
+          "createdAt": "2026-04-26T15:59:40.449975+00:00Z",
+          "runIds": [],
+          "summary": {
+            "hasTools": false,
+            "hasDocuments": false,
+            "hasTaskRun": false,
+            "mainSource": "model",
+            "brief": "Answered directly from model knowledge. No tools were invoked.",
+            "lastAction": "Answered directly from model knowledge. No tools were invoked."
+          }
+        },
+        "runIds": [],
+        "modelId": "ollama/gemma4:31b-cloud",
+        "isLocal": true,
+        "fallbacks": [],
+        "memoryRecall": true,
+        "agentId": "cmofyep8p00003ws50c1x2o6r",
+        "createdAt": "2026-04-26T15:59:40.462Z",
+        "durationMs": 2631,
+        "promptPackId": "rawclaw-jarvis",
+        "promptVersionHash": "b7aa175abbd56a22",
+        "reviewerPromptVersionHash": "bbf091718e2ef470",
+        "workflowPromptIds": [
+          "jarvis-advisory",
+          "jarvis-briefing"
+        ],
+        "reviewEvents": [],
+        "workflowState": {
+          "promptPackId": "rawclaw-jarvis",
+          "promptVersionHash": "b7aa175abbd56a22",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "jarvis-advisory",
+            "jarvis-briefing"
+          ],
+          "reviewEnabled": false,
+          "runIds": [],
+          "assistantLane": "memory",
+          "confidenceState": "grounded"
+        },
+        "memoryEvents": [
+          {
+            "layer": "session",
+            "action": "captured",
+            "summary": "Captured a session-scoped fact for continuity.",
+            "entryId": "memory_1777219173884"
+          },
+          {
+            "layer": "operator",
+            "action": "updated",
+            "summary": "Updated operator profile name to Maya.",
+            "entryId": "memory_1777219173976"
+          },
+          {
+            "layer": "operator",
+            "action": "updated",
+            "summary": "Added an operator preference to durable memory.",
+            "entryId": "memory_1777219174050"
+          },
+          {
+            "layer": "mission",
+            "action": "updated",
+            "summary": "Updated the active mission summary.",
+            "entryId": "memory_1777219174107"
+          }
+        ],
+        "advisoryEvents": [
+          {
+            "category": "reminder",
+            "summary": "Tracking reminder: review the operator dashboard tomorrow",
+            "actionState": "queued"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "step": 3,
+      "title": "Memory Recall And Mission Continuity",
+      "type": "chat",
+      "message": "What do you know about me, what mission are you tracking, what reminder is active, and what launch color did I ask you to remember?",
+      "passed": true,
+      "reasons": [],
+      "latency": 23.724350452423096,
+      "content": "**Command Center Briefing**\n\n*   **Operator:** Maya (Prefers concise briefings).\n*   **Current Mission:** The RawClaw JARVIS rollout.\n*   **Active Reminder:** Review the operator dashboard tomorrow.\n*   **Stored Detail:** The launch color is cobalt.",
+      "tool_calls": [],
+      "tool_results": [],
+      "review_events": [],
+      "assistant_message": {
+        "id": "cmofyffw900063ws555hyzty5",
+        "role": "assistant",
+        "content": "**Command Center Briefing**\n\n* **Operator:** Maya (Prefers concise briefings).\n* **Current Mission:** The RawClaw JARVIS rollout.\n* **Active Reminder:** Review the operator dashboard tomorrow.\n* **Stored Detail:** The launch color is cobalt.",
+        "provenanceTrace": {
+          "runId": "5dcff0e8-e039-4afb-8222-8e4e10742ec2",
+          "steps": [
+            {
+              "stepIndex": 0,
+              "stepType": "plan",
+              "toolName": null,
+              "inputSummary": "Initializing execution for session jarvis-upgrade-8087d75a",
+              "outputSummary": null,
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T15:59:43.088770+00:00Z"
+            },
+            {
+              "stepIndex": 1,
+              "stepType": "synthesis",
+              "toolName": null,
+              "inputSummary": null,
+              "outputSummary": "**Command Center Briefing** * **Operator:** Maya (Prefers concise briefings).\n* **Current Mission:** The Raw Claw JARVIS rollout.\n* **Active Reminder:** Review the operator dashboard tomorrow.\n*...",
+              "sourceUrl": null,
+              "durationMs": 22529,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:05.616200+00:00Z"
+            }
+          ],
+          "stepCount": 2,
+          "createdAt": "2026-04-26T16:00:06.189996+00:00Z",
+          "runIds": [],
+          "summary": {
+            "hasTools": false,
+            "hasDocuments": false,
+            "hasTaskRun": false,
+            "mainSource": "model",
+            "brief": "Answered directly from model knowledge. No tools were invoked.",
+            "lastAction": "Answered directly from model knowledge. No tools were invoked."
+          }
+        },
+        "runIds": [],
+        "modelId": "ollama/gemma4:31b-cloud",
+        "isLocal": true,
+        "fallbacks": [],
+        "memoryRecall": true,
+        "agentId": "cmofyep8p00003ws50c1x2o6r",
+        "createdAt": "2026-04-26T16:00:06.201Z",
+        "durationMs": 12577,
+        "promptPackId": "rawclaw-jarvis",
+        "promptVersionHash": "241b7157e176b690",
+        "reviewerPromptVersionHash": "bbf091718e2ef470",
+        "workflowPromptIds": [
+          "jarvis-advisory",
+          "jarvis-briefing"
+        ],
+        "reviewEvents": [],
+        "workflowState": {
+          "promptPackId": "rawclaw-jarvis",
+          "promptVersionHash": "241b7157e176b690",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "jarvis-advisory",
+            "jarvis-briefing"
+          ],
+          "reviewEnabled": false,
+          "runIds": [],
+          "assistantLane": "memory",
+          "confidenceState": "grounded"
+        },
+        "memoryEvents": [],
+        "advisoryEvents": []
+      },
+      "error": null
+    },
+    {
+      "step": 4,
+      "title": "Assistant Briefing APIs",
+      "type": "api",
+      "passed": true,
+      "reasons": [],
+      "payload": {
+        "state": {
+          "operatorProfile": {
+            "name": "Maya",
+            "preferences": [
+              "concise briefings. We are working on the RawClaw JARVIS rollout. Remind me to review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt",
+              "concise briefings"
+            ],
+            "priorities": [],
+            "notes": []
+          },
+          "missionSummary": "the RawClaw JARVIS rollout",
+          "activeFocus": [
+            "the RawClaw JARVIS rollout",
+            "the RawClaw JARVIS rollout. Remind me to review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt"
+          ],
+          "commitments": [
+            {
+              "id": "commitment-1777219174210",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-8087d75a",
+              "createdAt": "2026-04-26T15:59:34.210Z",
+              "updatedAt": "2026-04-26T15:59:34.210Z"
+            },
+            {
+              "id": "commitment-1777218589539",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-90525ca1",
+              "createdAt": "2026-04-26T15:49:49.540Z",
+              "updatedAt": "2026-04-26T15:49:49.540Z"
+            },
+            {
+              "id": "commitment-1777218461287",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-cffa1452",
+              "createdAt": "2026-04-26T15:47:41.287Z",
+              "updatedAt": "2026-04-26T15:47:41.287Z"
+            },
+            {
+              "id": "commitment-1777218019897",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-a440ca01",
+              "createdAt": "2026-04-26T15:40:19.897Z",
+              "updatedAt": "2026-04-26T15:40:19.897Z"
+            },
+            {
+              "id": "commitment-1777217680541",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-ac6a6529",
+              "createdAt": "2026-04-26T15:34:40.541Z",
+              "updatedAt": "2026-04-26T15:34:40.541Z"
+            },
+            {
+              "id": "commitment-1777217521517",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-ac4c9dc8",
+              "createdAt": "2026-04-26T15:32:01.517Z",
+              "updatedAt": "2026-04-26T15:32:01.517Z"
+            },
+            {
+              "id": "commitment-1777217269361",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-90cfa079",
+              "createdAt": "2026-04-26T15:27:49.361Z",
+              "updatedAt": "2026-04-26T15:27:49.361Z"
+            },
+            {
+              "id": "commitment-1777216859875",
+              "summary": "review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-de37f8c4",
+              "createdAt": "2026-04-26T15:20:59.875Z",
+              "updatedAt": "2026-04-26T15:20:59.875Z"
+            }
+          ],
+          "pendingFollowUps": [],
+          "advisoryStatus": "advisory-first",
+          "updatedAt": "2026-04-26T15:59:34.211Z"
+        },
+        "briefing": {
+          "generatedAt": "2026-04-26T16:00:08.316Z",
+          "summary": "Mission: the RawClaw JARVIS rollout. Active focus: the RawClaw JARVIS rollout, the RawClaw JARVIS rollout. Remind me to review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt. 8 active commitment(s) are being tracked. 3 advisory suggestion(s) are available.",
+          "missionSummary": "the RawClaw JARVIS rollout",
+          "activeFocus": [
+            "the RawClaw JARVIS rollout",
+            "the RawClaw JARVIS rollout. Remind me to review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt"
+          ],
+          "pendingCommitments": [
+            {
+              "id": "commitment-1777219174210",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-8087d75a",
+              "createdAt": "2026-04-26T15:59:34.210Z",
+              "updatedAt": "2026-04-26T15:59:34.210Z"
+            },
+            {
+              "id": "commitment-1777218589539",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-90525ca1",
+              "createdAt": "2026-04-26T15:49:49.540Z",
+              "updatedAt": "2026-04-26T15:49:49.540Z"
+            },
+            {
+              "id": "commitment-1777218461287",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-cffa1452",
+              "createdAt": "2026-04-26T15:47:41.287Z",
+              "updatedAt": "2026-04-26T15:47:41.287Z"
+            },
+            {
+              "id": "commitment-1777218019897",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-a440ca01",
+              "createdAt": "2026-04-26T15:40:19.897Z",
+              "updatedAt": "2026-04-26T15:40:19.897Z"
+            },
+            {
+              "id": "commitment-1777217680541",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-ac6a6529",
+              "createdAt": "2026-04-26T15:34:40.541Z",
+              "updatedAt": "2026-04-26T15:34:40.541Z"
+            },
+            {
+              "id": "commitment-1777217521517",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-ac4c9dc8",
+              "createdAt": "2026-04-26T15:32:01.517Z",
+              "updatedAt": "2026-04-26T15:32:01.517Z"
+            },
+            {
+              "id": "commitment-1777217269361",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-90cfa079",
+              "createdAt": "2026-04-26T15:27:49.361Z",
+              "updatedAt": "2026-04-26T15:27:49.361Z"
+            },
+            {
+              "id": "commitment-1777216859875",
+              "summary": "review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-de37f8c4",
+              "createdAt": "2026-04-26T15:20:59.875Z",
+              "updatedAt": "2026-04-26T15:20:59.875Z"
+            }
+          ],
+          "advisories": [
+            {
+              "id": "commitments-active",
+              "category": "reminder",
+              "summary": "You have active assistant commitments that may need review.",
+              "actionState": "queued",
+              "createdAt": "2026-04-26T16:00:08.316Z"
+            },
+            {
+              "id": "task-runs-active",
+              "category": "follow_up",
+              "summary": "There are active background runs worth monitoring from the command center.",
+              "actionState": "suggested",
+              "createdAt": "2026-04-26T16:00:08.316Z"
+            },
+            {
+              "id": "pending-proposals",
+              "category": "briefing",
+              "summary": "Learning proposals are waiting for evaluation or promotion review.",
+              "actionState": "suggested",
+              "createdAt": "2026-04-26T16:00:08.316Z"
+            }
+          ]
+        },
+        "advisories": [
+          {
+            "id": "commitments-active",
+            "category": "reminder",
+            "summary": "You have active assistant commitments that may need review.",
+            "actionState": "queued",
+            "createdAt": "2026-04-26T16:00:08.657Z"
+          },
+          {
+            "id": "task-runs-active",
+            "category": "follow_up",
+            "summary": "There are active background runs worth monitoring from the command center.",
+            "actionState": "suggested",
+            "createdAt": "2026-04-26T16:00:08.657Z"
+          },
+          {
+            "id": "pending-proposals",
+            "category": "briefing",
+            "summary": "Learning proposals are waiting for evaluation or promotion review.",
+            "actionState": "suggested",
+            "createdAt": "2026-04-26T16:00:08.657Z"
+          }
+        ],
+        "overview": {
+          "operator": [
+            {
+              "id": "memory_1777219174050",
+              "content": "Operator preference: concise briefings",
+              "tags": [
+                "assistant",
+                "operator-profile",
+                "preference"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:59:34.095Z",
+              "updatedAt": "2026-04-26T15:59:34.095Z"
+            },
+            {
+              "id": "memory_1777219173976",
+              "content": "Operator preferred name: Maya",
+              "tags": [
+                "assistant",
+                "name",
+                "operator-profile"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:59:34.038Z",
+              "updatedAt": "2026-04-26T15:59:34.038Z"
+            },
+            {
+              "id": "memory_1777218589311",
+              "content": "Operator preference: concise briefings",
+              "tags": [
+                "assistant",
+                "operator-profile",
+                "preference"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:49:49.402Z",
+              "updatedAt": "2026-04-26T15:49:49.402Z"
+            },
+            {
+              "id": "memory_1777218589250",
+              "content": "Operator preferred name: Maya",
+              "tags": [
+                "assistant",
+                "name",
+                "operator-profile"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:49:49.300Z",
+              "updatedAt": "2026-04-26T15:49:49.300Z"
+            },
+            {
+              "id": "memory_1777218461105",
+              "content": "Operator preference: concise briefings",
+              "tags": [
+                "assistant",
+                "operator-profile",
+                "preference"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:47:41.179Z",
+              "updatedAt": "2026-04-26T15:47:41.179Z"
+            },
+            {
+              "id": "memory_1777218461018",
+              "content": "Operator preferred name: Maya",
+              "tags": [
+                "assistant",
+                "name",
+                "operator-profile"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:47:41.092Z",
+              "updatedAt": "2026-04-26T15:47:41.092Z"
+            },
+            {
+              "id": "memory_1777218019706",
+              "content": "Operator preference: concise briefings",
+              "tags": [
+                "assistant",
+                "operator-profile",
+                "preference"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:40:19.788Z",
+              "updatedAt": "2026-04-26T15:40:19.788Z"
+            },
+            {
+              "id": "memory_1777218019605",
+              "content": "Operator preferred name: Maya",
+              "tags": [
+                "assistant",
+                "name",
+                "operator-profile"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:40:19.695Z",
+              "updatedAt": "2026-04-26T15:40:19.695Z"
+            },
+            {
+              "id": "memory_1777217680409",
+              "content": "Operator preference: concise briefings",
+              "tags": [
+                "assistant",
+                "operator-profile",
+                "preference"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:34:40.468Z",
+              "updatedAt": "2026-04-26T15:34:40.468Z"
+            },
+            {
+              "id": "memory_1777217680343",
+              "content": "Operator preferred name: Maya",
+              "tags": [
+                "assistant",
+                "name",
+                "operator-profile"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:34:40.398Z",
+              "updatedAt": "2026-04-26T15:34:40.398Z"
+            }
+          ],
+          "mission": [
+            {
+              "id": "memory_1777219174107",
+              "content": "Mission summary: the RawClaw JARVIS rollout",
+              "tags": [
+                "assistant",
+                "mission"
+              ],
+              "source": "assistant-state",
+              "collection": "mission",
+              "createdAt": "2026-04-26T15:59:34.201Z",
+              "updatedAt": "2026-04-26T15:59:34.201Z"
+            },
+            {
+              "id": "memory_1777218589415",
+              "content": "Mission summary: the RawClaw JARVIS rollout",
+              "tags": [
+                "assistant",
+                "mission"
+              ],
+              "source": "assistant-state",
+              "collection": "mission",
+              "createdAt": "2026-04-26T15:49:49.529Z",
+              "updatedAt": "2026-04-26T15:49:49.529Z"
+            },
+            {
+              "id": "memory_1777218461192",
+              "content": "Mission summary: the RawClaw JARVIS rollout",
+              "tags": [
+                "assistant",
+                "mission"
+              ],
+              "source": "assistant-state",
+              "collection": "mission",
+              "createdAt": "2026-04-26T15:47:41.276Z",
+              "updatedAt": "2026-04-26T15:47:41.276Z"
+            },
+            {
+              "id": "memory_1777218019800",
+              "content": "Mission summary: the RawClaw JARVIS rollout",
+              "tags": [
+                "assistant",
+                "mission"
+              ],
+              "source": "assistant-state",
+              "collection": "mission",
+              "createdAt": "2026-04-26T15:40:19.888Z",
+              "updatedAt": "2026-04-26T15:40:19.888Z"
+            },
+            {
+              "id": "memory_1777217680480",
+              "content": "Mission summary: the RawClaw JARVIS rollout",
+              "tags": [
+                "assistant",
+                "mission"
+              ],
+              "source": "assistant-state",
+              "collection": "mission",
+              "createdAt": "2026-04-26T15:34:40.531Z",
+              "updatedAt": "2026-04-26T15:34:40.531Z"
+            },
+            {
+              "id": "memory_1777217521415",
+              "content": "Mission summary: the RawClaw JARVIS rollout",
+              "tags": [
+                "assistant",
+                "mission"
+              ],
+              "source": "assistant-state",
+              "collection": "mission",
+              "createdAt": "2026-04-26T15:32:01.504Z",
+              "updatedAt": "2026-04-26T15:32:01.504Z"
+            },
+            {
+              "id": "memory_1777217269263",
+              "content": "Mission summary: the RawClaw JARVIS rollout",
+              "tags": [
+                "assistant",
+                "mission"
+              ],
+              "source": "assistant-state",
+              "collection": "mission",
+              "createdAt": "2026-04-26T15:27:49.351Z",
+              "updatedAt": "2026-04-26T15:27:49.351Z"
+            }
+          ],
+          "session": [
+            {
+              "id": "memory_1777219173884",
+              "content": "the launch color is cobalt",
+              "tags": [
+                "assistant",
+                "session-memory"
+              ],
+              "source": "session:jarvis-upgrade-8087d75a",
+              "collection": "session",
+              "createdAt": "2026-04-26T15:59:33.962Z",
+              "updatedAt": "2026-04-26T15:59:33.962Z"
+            }
+          ],
+          "recent": [
+            {
+              "id": "memory_1777219174107",
+              "content": "Mission summary: the RawClaw JARVIS rollout",
+              "tags": [
+                "assistant",
+                "mission"
+              ],
+              "source": "assistant-state",
+              "collection": "mission",
+              "createdAt": "2026-04-26T15:59:34.201Z",
+              "updatedAt": "2026-04-26T15:59:34.201Z"
+            },
+            {
+              "id": "memory_1777219174050",
+              "content": "Operator preference: concise briefings",
+              "tags": [
+                "assistant",
+                "operator-profile",
+                "preference"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:59:34.095Z",
+              "updatedAt": "2026-04-26T15:59:34.095Z"
+            },
+            {
+              "id": "memory_1777219173976",
+              "content": "Operator preferred name: Maya",
+              "tags": [
+                "assistant",
+                "name",
+                "operator-profile"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:59:34.038Z",
+              "updatedAt": "2026-04-26T15:59:34.038Z"
+            },
+            {
+              "id": "memory_1777219173884",
+              "content": "the launch color is cobalt",
+              "tags": [
+                "assistant",
+                "session-memory"
+              ],
+              "source": "session:jarvis-upgrade-8087d75a",
+              "collection": "session",
+              "createdAt": "2026-04-26T15:59:33.962Z",
+              "updatedAt": "2026-04-26T15:59:33.962Z"
+            },
+            {
+              "id": "memory_1777218589415",
+              "content": "Mission summary: the RawClaw JARVIS rollout",
+              "tags": [
+                "assistant",
+                "mission"
+              ],
+              "source": "assistant-state",
+              "collection": "mission",
+              "createdAt": "2026-04-26T15:49:49.529Z",
+              "updatedAt": "2026-04-26T15:49:49.529Z"
+            },
+            {
+              "id": "memory_1777218589311",
+              "content": "Operator preference: concise briefings",
+              "tags": [
+                "assistant",
+                "operator-profile",
+                "preference"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:49:49.402Z",
+              "updatedAt": "2026-04-26T15:49:49.402Z"
+            },
+            {
+              "id": "memory_1777218589250",
+              "content": "Operator preferred name: Maya",
+              "tags": [
+                "assistant",
+                "name",
+                "operator-profile"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:49:49.300Z",
+              "updatedAt": "2026-04-26T15:49:49.300Z"
+            },
+            {
+              "id": "memory_1777218589182",
+              "content": "the launch color is cobalt",
+              "tags": [
+                "assistant",
+                "session-memory"
+              ],
+              "source": "session:jarvis-upgrade-90525ca1",
+              "collection": "session",
+              "createdAt": "2026-04-26T15:49:49.237Z",
+              "updatedAt": "2026-04-26T15:49:49.237Z"
+            },
+            {
+              "id": "memory_1777218461192",
+              "content": "Mission summary: the RawClaw JARVIS rollout",
+              "tags": [
+                "assistant",
+                "mission"
+              ],
+              "source": "assistant-state",
+              "collection": "mission",
+              "createdAt": "2026-04-26T15:47:41.276Z",
+              "updatedAt": "2026-04-26T15:47:41.276Z"
+            },
+            {
+              "id": "memory_1777218461105",
+              "content": "Operator preference: concise briefings",
+              "tags": [
+                "assistant",
+                "operator-profile",
+                "preference"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:47:41.179Z",
+              "updatedAt": "2026-04-26T15:47:41.179Z"
+            },
+            {
+              "id": "memory_1777218461018",
+              "content": "Operator preferred name: Maya",
+              "tags": [
+                "assistant",
+                "name",
+                "operator-profile"
+              ],
+              "source": "assistant-state",
+              "collection": "operator",
+              "createdAt": "2026-04-26T15:47:41.092Z",
+              "updatedAt": "2026-04-26T15:47:41.092Z"
+            },
+            {
+              "id": "memory_1777218460869",
+              "content": "the launch color is cobalt",
+              "tags": [
+                "assistant",
+                "session-memory"
+              ],
+              "source": "session:jarvis-upgrade-cffa1452",
+              "collection": "session",
+              "createdAt": "2026-04-26T15:47:41.004Z",
+              "updatedAt": "2026-04-26T15:47:41.004Z"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": 5,
+      "title": "Advisory Strategy Turn",
+      "type": "chat",
+      "message": "Give me a short strategy and recommend the next step for the JARVIS rollout.",
+      "passed": true,
+      "reasons": [],
+      "latency": 18.777706146240234,
+      "content": "**JARVIS Rollout Strategy**\n\n**Objective:** Transition from a standard agent to a situationally aware executive assistant.\n\n1.  **Stability Phase:** Ensure core memory primitives (local-first) are deterministic and reliable.\n2.  **Integration Phase:** Map command-center triggers (status briefings, active reminders) to the operator dashboard.\n3.  **Refinement Phase:** Tune the \"advisory-first\" logic to balance autonomy with safety.\n\n**Recommendation:**\nThe next most useful step is to **audit the current operator dashboard** to ensure it accurately reflects the active focus and pending commitments I am tracking.",
+      "tool_calls": [],
+      "tool_results": [],
+      "review_events": [],
+      "assistant_message": {
+        "id": "cmofyfxaq00083ws52q5u4fcv",
+        "role": "assistant",
+        "content": "**JARVIS Rollout Strategy**\n\n**Objective:** Transition from a standard agent to a situationally aware executive assistant.\n\n1. **Stability Phase:** Ensure core memory primitives (local-first) are deterministic and reliable.\n2. **Integration Phase:** Map command-center triggers (status briefings, active reminders) to the operator dashboard.\n3. **Refinement Phase:** Tune the \"advisory-first\" logic to balance autonomy with safety.\n\n**Recommendation:**\nThe next most useful step is to **audit the current operator dashboard** to ensure it accurately reflects the active focus and pending commitments I am tracking.",
+        "provenanceTrace": {
+          "runId": "999951ae-367f-46e6-bc96-362d459732b3",
+          "steps": [
+            {
+              "stepIndex": 0,
+              "stepType": "plan",
+              "toolName": null,
+              "inputSummary": "Initializing execution for session jarvis-upgrade-8087d75a",
+              "outputSummary": null,
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:10.461284+00:00Z"
+            },
+            {
+              "stepIndex": 1,
+              "stepType": "synthesis",
+              "toolName": null,
+              "inputSummary": null,
+              "outputSummary": "**JARVIS Rollout Strategy** **Objective:** Transition from a standard agent to a situationally aware executive assistant. 1. **Stability Phase:** Ensure core memory primitives (local-first) are det...",
+              "sourceUrl": null,
+              "durationMs": 17603,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:28.063599+00:00Z"
+            }
+          ],
+          "stepCount": 2,
+          "createdAt": "2026-04-26T16:00:28.741386+00:00Z",
+          "runIds": [],
+          "summary": {
+            "hasTools": false,
+            "hasDocuments": false,
+            "hasTaskRun": false,
+            "mainSource": "model",
+            "brief": "Answered directly from model knowledge. No tools were invoked.",
+            "lastAction": "Answered directly from model knowledge. No tools were invoked."
+          }
+        },
+        "runIds": [],
+        "modelId": "ollama/gemma4:31b-cloud",
+        "isLocal": true,
+        "fallbacks": [],
+        "memoryRecall": true,
+        "agentId": "cmofyep8p00003ws50c1x2o6r",
+        "createdAt": "2026-04-26T16:00:28.754Z",
+        "durationMs": 7628,
+        "promptPackId": "rawclaw-jarvis",
+        "promptVersionHash": "241b7157e176b690",
+        "reviewerPromptVersionHash": "bbf091718e2ef470",
+        "workflowPromptIds": [
+          "jarvis-advisory",
+          "jarvis-briefing"
+        ],
+        "reviewEvents": [],
+        "workflowState": {
+          "promptPackId": "rawclaw-jarvis",
+          "promptVersionHash": "241b7157e176b690",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "jarvis-advisory",
+            "jarvis-briefing"
+          ],
+          "reviewEnabled": false,
+          "runIds": [],
+          "assistantLane": "advisory",
+          "confidenceState": "grounded"
+        },
+        "memoryEvents": [],
+        "advisoryEvents": [
+          {
+            "category": "next_step",
+            "summary": "User is asking for immediate advisory guidance.",
+            "actionState": "suggested"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "step": 6,
+      "title": "Research Lane And Follow-Up",
+      "type": "chat",
+      "message": "Search the web for the latest OpenAI API updates and give me 3 bullets plus one sensible follow-up.",
+      "passed": true,
+      "reasons": [],
+      "latency": 7.3144121170043945,
+      "content": "- **Changelog - OpenAI API**: See all of the latest features and updates to the OpenAI API.\n- **Changelog - Codex | OpenAI Developers**: Latest updates to Codex, OpenAI's coding agent Codex is becoming a broader workspace for getting work done with AI. This update makes it easier to start work with less setup, verify what Codex is building, create richer outputs, and keep mo\n- **OpenAI Help Center**: Evals for GPT-4.1 and GPT-4.1 mini were originally shared in the blog post accompanying their API release. ChatGPT \u2014 Release Notes A changelog of the latest updates and release notes for ChatGPT A changelog of the latest updates and release",
+      "tool_calls": [
+        {
+          "name": "skill_grounded-web-summary",
+          "arguments": {
+            "task": "Search the web for the latest OpenAI API updates and give me 3 bullets plus one sensible follow-up."
+          }
+        },
+        {
+          "name": "web_search",
+          "arguments": {
+            "query": "OpenAI API updates changelog site:openai.com"
+          }
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "skill_grounded-web-summary",
+          "input": {
+            "task": "Search the web for the latest OpenAI API updates and give me 3 bullets plus one sensible follow-up."
+          },
+          "output": {
+            "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+            "task": "Search the web for the latest OpenAI API updates and give me 3 bullets plus one sensible follow-up.",
+            "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+          },
+          "error": null,
+          "duration_ms": 0,
+          "sandboxed": false,
+          "is_truncated": false,
+          "source_url": null,
+          "provenance_hint": null
+        },
+        {
+          "tool_name": "web_search",
+          "input": {
+            "query": "OpenAI API updates changelog site:openai.com"
+          },
+          "output": {
+            "status": "ok",
+            "source_engine": "duckduckgo_search",
+            "results": [
+              {
+                "title": "Changelog - OpenAI API",
+                "url": "https://developers.openai.com/api/docs/changelog",
+                "snippet": "See all of the latest features and updates to the OpenAI API.",
+                "full_content": "Changelog | OpenAI API Search the API docs Search docs Suggested responses create reasoning_effort realtime prompt caching Primary navigation Search docs Suggested responses create reasoning_effort realtime prompt caching Get started Overview Quickstart Models Pricing Libraries Latest: GPT-5.5 Prompt guidance Core concepts Text generation Code generation Images and vision Audio and speech Structured output Function calling Responses API Using tools Agents SDK Overview Quickstart Agent definitions Models and providers Running agents Sandbox agents Orchestration Guardrails Results and state Integrations and observability Evaluate agent workflows Voice agents Agent Builder Overview Node reference Safety in building agents ChatKit Overview Customize Widgets Actions Advanced integrations Tools Web search MCP and Connectors Skills Shell Computer use File search and retrieval File search Retrieval Tool search More tools Apply Patch Local shell Image generation Code interpreter Run and scale Conversation state Background mode Streaming WebSocket mode Webhooks File inputs Context management Compaction Counting tokens Prompt caching Prompting Overview Prompt engineering Citation formatting Reasoning Reasoning models Reasoning best practices Evaluation Getting started Working with evals Prompt optimizer External models Best practices Realtime API Overview Connect WebRTC WebSocket SIP Usage Using realtime models Managing conversations MCP servers Webhooks and server-side controls Managing costs Realtime transcription Voice agents Model optimization Optimization cycle Fine-tuning Supervised fine-tuning Vision fine-tuning Direct preference optimization Reinforcement fine-tuning RFT use cases Best practices Graders Specialized models Image generation Video generation Text to speech Speech to text Deep research Embeddings Moderation Going live Production best practices Deployment checklist Latency optimization Overview Predicted Outputs Priority processing Cost optimization Overview Batch Flex processing Accuracy optimization Safety Safety best practices Safety checks Cybersecurity checks Under 18 API Guidance Legacy APIs Assistants API Migration guide Deep dive Tools Resources Terms and policies Changelog Your data Permissions Rate limits Deprecations MCP for deep research Developer mode ChatGPT Actions Introduction Getting started Actions library Authentication Production Data retrieval Sending files Docs Use cases Getting Started Overview Quickstart Explore use cases Pricing Concepts Prompting Customization Memories Chronicle Sandboxing Subagents Workflows Models Cyber Safety Using Codex App Overview Features Settings Review Automations Worktrees Local Environments In-app browser Computer Use Commands Windows Troubleshooting IDE Extension Overview Features Settings IDE Commands Slash commands CLI Overview Features Command Line Options Slash commands Web Overview Environments Internet Access Integrations GitHub Slack Linear Codex Security Overview Setup Improv..."
+              },
+              {
+                "title": "Changelog - Codex | OpenAI Developers",
+                "url": "https://developers.openai.com/codex/changelog",
+                "snippet": "Latest updates to Codex, OpenAI's coding agent Codex is becoming a broader workspace for getting work done with AI. This update makes it easier to start work with less setup, verify what Codex is building, create richer outputs, and keep momentum across longer-running tasks. Verify more of your work The Codex app now includes an early in-app browser. You can open local or public pages that ...",
+                "full_content": "Changelog \u2013 Codex | OpenAI Developers Search the Codex docs Search docs Suggested responses create reasoning_effort realtime prompt caching Primary navigation Search docs Suggested responses create reasoning_effort realtime prompt caching Get started Overview Quickstart Models Pricing Libraries Latest: GPT-5.5 Prompt guidance Core concepts Text generation Code generation Images and vision Audio and speech Structured output Function calling Responses API Using tools Agents SDK Overview Quickstart Agent definitions Models and providers Running agents Sandbox agents Orchestration Guardrails Results and state Integrations and observability Evaluate agent workflows Voice agents Agent Builder Overview Node reference Safety in building agents ChatKit Overview Customize Widgets Actions Advanced integrations Tools Web search MCP and Connectors Skills Shell Computer use File search and retrieval File search Retrieval Tool search More tools Apply Patch Local shell Image generation Code interpreter Run and scale Conversation state Background mode Streaming WebSocket mode Webhooks File inputs Context management Compaction Counting tokens Prompt caching Prompting Overview Prompt engineering Citation formatting Reasoning Reasoning models Reasoning best practices Evaluation Getting started Working with evals Prompt optimizer External models Best practices Realtime API Overview Connect WebRTC WebSocket SIP Usage Using realtime models Managing conversations MCP servers Webhooks and server-side controls Managing costs Realtime transcription Voice agents Model optimization Optimization cycle Fine-tuning Supervised fine-tuning Vision fine-tuning Direct preference optimization Reinforcement fine-tuning RFT use cases Best practices Graders Specialized models Image generation Video generation Text to speech Speech to text Deep research Embeddings Moderation Going live Production best practices Deployment checklist Latency optimization Overview Predicted Outputs Priority processing Cost optimization Overview Batch Flex processing Accuracy optimization Safety Safety best practices Safety checks Cybersecurity checks Under 18 API Guidance Legacy APIs Assistants API Migration guide Deep dive Tools Resources Terms and policies Changelog Your data Permissions Rate limits Deprecations MCP for deep research Developer mode ChatGPT Actions Introduction Getting started Actions library Authentication Production Data retrieval Sending files Docs Use cases Getting Started Overview Quickstart Explore use cases Pricing Concepts Prompting Customization Memories Chronicle Sandboxing Subagents Workflows Models Cyber Safety Using Codex App Overview Features Settings Review Automations Worktrees Local Environments In-app browser Computer Use Commands Windows Troubleshooting IDE Extension Overview Features Settings IDE Commands Slash commands CLI Overview Features Command Line Options Slash commands Web Overview Environments Internet Access Integrations GitHub Slack Linear Codex Security Over..."
+              },
+              {
+                "title": "Changelog - OpenAI API",
+                "url": "https://platform.openai.com/docs/changelog/dec-15th-2023.mkv",
+                "snippet": "Explore developer resources, tutorials, API docs, and dynamic examples to get the most out of OpenAI's platform."
+              },
+              {
+                "title": "OpenAI Help Center",
+                "url": "https://help.openai.com/en/?q=release",
+                "snippet": "Evals for GPT-4.1 and GPT-4.1 mini were originally shared in the blog post accompanying their API release. ChatGPT \u2014 Release Notes A changelog of the latest updates and release notes for ChatGPT A changelog of the latest updates and release notes for ChatGPT Sora - Release Notes March 19, 2026 Edit videos in Sora What is ChatGPT: FAQ"
+              },
+              {
+                "title": "Model Release Notes - OpenAI Help Center",
+                "url": "https://help.openai.com/en/articles/9624314-model-release-notes",
+                "snippet": "We're making an update to GPT-5.2 Instant in ChatGPT and the API that improves response style and quality. Users should notice responses that are more measured and grounded in tone, in a way that's more contextually appropriate to the conversation. The model also tends to output clearer, more relevant answers to advice-seeking and how-to questions, more reliably placing the most important ..."
+              }
+            ],
+            "fetch_count": 2,
+            "result_quality": "good",
+            "quality_assessment": "Results appear reliable",
+            "provider_attempts": [
+              {
+                "provider": "duckduckgo_search",
+                "source": "built-in",
+                "query": "OpenAI API updates changelog site:openai.com",
+                "status": "ok"
+              }
+            ]
+          },
+          "error": null,
+          "duration_ms": 2396.63,
+          "sandboxed": false,
+          "is_truncated": false,
+          "source_url": null,
+          "provenance_hint": {
+            "status": "ok",
+            "engine": "duckduckgo_search",
+            "results_count": 5,
+            "fetched_count": 2,
+            "result_quality": "good",
+            "provider_attempts": [
+              {
+                "provider": "duckduckgo_search",
+                "source": "built-in",
+                "query": "OpenAI API updates changelog site:openai.com",
+                "status": "ok"
+              }
+            ]
+          }
+        }
+      ],
+      "review_events": [
+        {
+          "approved": true,
+          "feedback": "",
+          "reviewer_id": "ollama/gemma4:31b-cloud"
+        }
+      ],
+      "assistant_message": {
+        "id": "cmofyg40e000a3ws5e1ietj8y",
+        "role": "assistant",
+        "content": "- **Changelog - OpenAI API**: See all of the latest features and updates to the OpenAI API.\n- **Changelog - Codex | OpenAI Developers**: Latest updates to Codex, OpenAI's coding agent Codex is becoming a broader workspace for getting work done with AI. This update makes it easier to start work with less setup, verify what Codex is building, create richer outputs, and keep mo\n- **OpenAI Help Center**: Evals for GPT-4.1 and GPT-4.1 mini were originally shared in the blog post accompanying their API release. ChatGPT \u2014 Release Notes A changelog of the latest updates and release notes for ChatGPT A changelog of the latest updates and release",
+        "tool_calls": [
+          {
+            "name": "skill_grounded-web-summary",
+            "arguments": {
+              "task": "Search the web for the latest OpenAI API updates and give me 3 bullets plus one sensible follow-up."
+            }
+          },
+          {
+            "name": "web_search",
+            "arguments": {
+              "query": "OpenAI API updates changelog site:openai.com"
+            }
+          }
+        ],
+        "toolResults": [
+          {
+            "tool_name": "skill_grounded-web-summary",
+            "input": {
+              "task": "Search the web for the latest OpenAI API updates and give me 3 bullets plus one sensible follow-up."
+            },
+            "output": {
+              "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+              "task": "Search the web for the latest OpenAI API updates and give me 3 bullets plus one sensible follow-up.",
+              "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+            },
+            "error": null,
+            "duration_ms": 0,
+            "sandboxed": false,
+            "is_truncated": false,
+            "source_url": null,
+            "provenance_hint": null
+          },
+          {
+            "tool_name": "web_search",
+            "input": {
+              "query": "OpenAI API updates changelog site:openai.com"
+            },
+            "output": {
+              "status": "ok",
+              "source_engine": "duckduckgo_search",
+              "results": [
+                {
+                  "title": "Changelog - OpenAI API",
+                  "url": "https://developers.openai.com/api/docs/changelog",
+                  "snippet": "See all of the latest features and updates to the OpenAI API.",
+                  "full_content": "Changelog | OpenAI API Search the API docs Search docs Suggested responses create reasoning_effort realtime prompt caching Primary navigation Search docs Suggested responses create reasoning_effort realtime prompt caching Get started Overview Quickstart Models Pricing Libraries Latest: GPT-5.5 Prompt guidance Core concepts Text generation Code generation Images and vision Audio and speech Structured output Function calling Responses API Using tools Agents SDK Overview Quickstart Agent definitions Models and providers Running agents Sandbox agents Orchestration Guardrails Results and state Integrations and observability Evaluate agent workflows Voice agents Agent Builder Overview Node reference Safety in building agents ChatKit Overview Customize Widgets Actions Advanced integrations Tools Web search MCP and Connectors Skills Shell Computer use File search and retrieval File search Retrieval Tool search More tools Apply Patch Local shell Image generation Code interpreter Run and scale Conversation state Background mode Streaming WebSocket mode Webhooks File inputs Context management Compaction Counting tokens Prompt caching Prompting Overview Prompt engineering Citation formatting Reasoning Reasoning models Reasoning best practices Evaluation Getting started Working with evals Prompt optimizer External models Best practices Realtime API Overview Connect WebRTC WebSocket SIP Usage Using realtime models Managing conversations MCP servers Webhooks and server-side controls Managing costs Realtime transcription Voice agents Model optimization Optimization cycle Fine-tuning Supervised fine-tuning Vision fine-tuning Direct preference optimization Reinforcement fine-tuning RFT use cases Best practices Graders Specialized models Image generation Video generation Text to speech Speech to text Deep research Embeddings Moderation Going live Production best practices Deployment checklist Latency optimization Overview Predicted Outputs Priority processing Cost optimization Overview Batch Flex processing Accuracy optimization Safety Safety best practices Safety checks Cybersecurity checks Under 18 API Guidance Legacy APIs Assistants API Migration guide Deep dive Tools Resources Terms and policies Changelog Your data Permissions Rate limits Deprecations MCP for deep research Developer mode ChatGPT Actions Introduction Getting started Actions library Authentication Production Data retrieval Sending files Docs Use cases Getting Started Overview Quickstart Explore use cases Pricing Concepts Prompting Customization Memories Chronicle Sandboxing Subagents Workflows Models Cyber Safety Using Codex App Overview Features Settings Review Automations Worktrees Local Environments In-app browser Computer Use Commands Windows Troubleshooting IDE Extension Overview Features Settings IDE Commands Slash commands CLI Overview Features Command Line Options Slash commands Web Overview Environments Internet Access Integrations GitHub Slack Linear Codex Security Overview Setup Improv..."
+                },
+                {
+                  "title": "Changelog - Codex | OpenAI Developers",
+                  "url": "https://developers.openai.com/codex/changelog",
+                  "snippet": "Latest updates to Codex, OpenAI's coding agent Codex is becoming a broader workspace for getting work done with AI. This update makes it easier to start work with less setup, verify what Codex is building, create richer outputs, and keep momentum across longer-running tasks. Verify more of your work The Codex app now includes an early in-app browser. You can open local or public pages that ...",
+                  "full_content": "Changelog \u2013 Codex | OpenAI Developers Search the Codex docs Search docs Suggested responses create reasoning_effort realtime prompt caching Primary navigation Search docs Suggested responses create reasoning_effort realtime prompt caching Get started Overview Quickstart Models Pricing Libraries Latest: GPT-5.5 Prompt guidance Core concepts Text generation Code generation Images and vision Audio and speech Structured output Function calling Responses API Using tools Agents SDK Overview Quickstart Agent definitions Models and providers Running agents Sandbox agents Orchestration Guardrails Results and state Integrations and observability Evaluate agent workflows Voice agents Agent Builder Overview Node reference Safety in building agents ChatKit Overview Customize Widgets Actions Advanced integrations Tools Web search MCP and Connectors Skills Shell Computer use File search and retrieval File search Retrieval Tool search More tools Apply Patch Local shell Image generation Code interpreter Run and scale Conversation state Background mode Streaming WebSocket mode Webhooks File inputs Context management Compaction Counting tokens Prompt caching Prompting Overview Prompt engineering Citation formatting Reasoning Reasoning models Reasoning best practices Evaluation Getting started Working with evals Prompt optimizer External models Best practices Realtime API Overview Connect WebRTC WebSocket SIP Usage Using realtime models Managing conversations MCP servers Webhooks and server-side controls Managing costs Realtime transcription Voice agents Model optimization Optimization cycle Fine-tuning Supervised fine-tuning Vision fine-tuning Direct preference optimization Reinforcement fine-tuning RFT use cases Best practices Graders Specialized models Image generation Video generation Text to speech Speech to text Deep research Embeddings Moderation Going live Production best practices Deployment checklist Latency optimization Overview Predicted Outputs Priority processing Cost optimization Overview Batch Flex processing Accuracy optimization Safety Safety best practices Safety checks Cybersecurity checks Under 18 API Guidance Legacy APIs Assistants API Migration guide Deep dive Tools Resources Terms and policies Changelog Your data Permissions Rate limits Deprecations MCP for deep research Developer mode ChatGPT Actions Introduction Getting started Actions library Authentication Production Data retrieval Sending files Docs Use cases Getting Started Overview Quickstart Explore use cases Pricing Concepts Prompting Customization Memories Chronicle Sandboxing Subagents Workflows Models Cyber Safety Using Codex App Overview Features Settings Review Automations Worktrees Local Environments In-app browser Computer Use Commands Windows Troubleshooting IDE Extension Overview Features Settings IDE Commands Slash commands CLI Overview Features Command Line Options Slash commands Web Overview Environments Internet Access Integrations GitHub Slack Linear Codex Security Over..."
+                },
+                {
+                  "title": "Changelog - OpenAI API",
+                  "url": "https://platform.openai.com/docs/changelog/dec-15th-2023.mkv",
+                  "snippet": "Explore developer resources, tutorials, API docs, and dynamic examples to get the most out of OpenAI's platform."
+                },
+                {
+                  "title": "OpenAI Help Center",
+                  "url": "https://help.openai.com/en/?q=release",
+                  "snippet": "Evals for GPT-4.1 and GPT-4.1 mini were originally shared in the blog post accompanying their API release. ChatGPT \u2014 Release Notes A changelog of the latest updates and release notes for ChatGPT A changelog of the latest updates and release notes for ChatGPT Sora - Release Notes March 19, 2026 Edit videos in Sora What is ChatGPT: FAQ"
+                },
+                {
+                  "title": "Model Release Notes - OpenAI Help Center",
+                  "url": "https://help.openai.com/en/articles/9624314-model-release-notes",
+                  "snippet": "We're making an update to GPT-5.2 Instant in ChatGPT and the API that improves response style and quality. Users should notice responses that are more measured and grounded in tone, in a way that's more contextually appropriate to the conversation. The model also tends to output clearer, more relevant answers to advice-seeking and how-to questions, more reliably placing the most important ..."
+                }
+              ],
+              "fetch_count": 2,
+              "result_quality": "good",
+              "quality_assessment": "Results appear reliable",
+              "provider_attempts": [
+                {
+                  "provider": "duckduckgo_search",
+                  "source": "built-in",
+                  "query": "OpenAI API updates changelog site:openai.com",
+                  "status": "ok"
+                }
+              ]
+            },
+            "error": null,
+            "duration_ms": 2396.63,
+            "sandboxed": false,
+            "is_truncated": false,
+            "source_url": null,
+            "provenance_hint": {
+              "status": "ok",
+              "engine": "duckduckgo_search",
+              "results_count": 5,
+              "fetched_count": 2,
+              "result_quality": "good",
+              "provider_attempts": [
+                {
+                  "provider": "duckduckgo_search",
+                  "source": "built-in",
+                  "query": "OpenAI API updates changelog site:openai.com",
+                  "status": "ok"
+                }
+              ]
+            }
+          }
+        ],
+        "provenanceTrace": {
+          "runId": "6972cb44-bf28-42a7-8fcc-762dadd5e35a",
+          "steps": [
+            {
+              "stepIndex": 0,
+              "stepType": "plan",
+              "toolName": null,
+              "inputSummary": "Initializing execution for session jarvis-upgrade-8087d75a",
+              "outputSummary": null,
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:30.620852+00:00Z"
+            },
+            {
+              "stepIndex": 1,
+              "stepType": "plan",
+              "toolName": null,
+              "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+              "outputSummary": null,
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:34.130255+00:00Z"
+            },
+            {
+              "stepIndex": 2,
+              "stepType": "tool_call",
+              "toolName": "skill_grounded-web-summary",
+              "inputSummary": "task=Search the web for the latest Open AI API updates and give...",
+              "outputSummary": null,
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:34.130308+00:00Z"
+            },
+            {
+              "stepIndex": 3,
+              "stepType": "tool_result",
+              "toolName": "skill_grounded-web-summary",
+              "inputSummary": "task=Search the web for the latest Open AI API updates and give...",
+              "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Search the web for the latest Open AI API updates and give..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:34.130407+00:00Z"
+            },
+            {
+              "stepIndex": 4,
+              "stepType": "plan",
+              "toolName": null,
+              "inputSummary": "Guided web workflow selected: grounded skill + search.",
+              "outputSummary": null,
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:34.130491+00:00Z"
+            },
+            {
+              "stepIndex": 5,
+              "stepType": "tool_call",
+              "toolName": "web_search",
+              "inputSummary": "query=Open AI API updates changelog site: openai. com",
+              "outputSummary": null,
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:36.530012+00:00Z"
+            },
+            {
+              "stepIndex": 6,
+              "stepType": "tool_result",
+              "toolName": "web_search",
+              "inputSummary": "query=Open AI API updates changelog site: openai. com",
+              "outputSummary": "5 results found (first: Changelog - Open AI API)",
+              "sourceUrl": null,
+              "durationMs": 2396,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:36.530050+00:00Z"
+            },
+            {
+              "stepIndex": 7,
+              "stepType": "review",
+              "toolName": "ollama/gemma4:31b-cloud",
+              "inputSummary": null,
+              "outputSummary": "Result: APPROVED. Feedback:",
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:36.530952+00:00Z"
+            },
+            {
+              "stepIndex": 8,
+              "stepType": "synthesis",
+              "toolName": null,
+              "inputSummary": null,
+              "outputSummary": "- **Changelog - Open AI API**: See all of the latest features and updates to the Open AI API.\n- **Changelog - Codex | Open AI Developers**: Latest updates to Codex, Open AI's coding agent Codex is becomin...",
+              "sourceUrl": null,
+              "durationMs": 5911,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:36.531048+00:00Z"
+            }
+          ],
+          "stepCount": 9,
+          "createdAt": "2026-04-26T16:00:36.531091+00:00Z",
+          "runIds": [],
+          "summary": {
+            "hasTools": true,
+            "hasDocuments": false,
+            "hasTaskRun": false,
+            "mainSource": "tool",
+            "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+            "lastAction": "Completed web_search"
+          }
+        },
+        "runIds": [],
+        "agentId": "cmofyep8p00003ws50c1x2o6r",
+        "createdAt": "2026-04-26T16:00:37.454Z",
+        "promptPackId": "rawclaw-jarvis",
+        "promptVersionHash": "955ba42c5d2d7b63",
+        "reviewerPromptVersionHash": "bbf091718e2ef470",
+        "workflowPromptIds": [
+          "web-research-grounded",
+          "jarvis-advisory"
+        ],
+        "reviewEvents": [
+          {
+            "approved": true,
+            "feedback": "",
+            "reviewerId": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "workflowState": {
+          "promptPackId": "rawclaw-jarvis",
+          "promptVersionHash": "955ba42c5d2d7b63",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "web-research-grounded",
+            "jarvis-advisory"
+          ],
+          "reviewEnabled": true,
+          "runIds": [],
+          "assistantLane": "research",
+          "confidenceState": "grounded"
+        },
+        "memoryEvents": [],
+        "advisoryEvents": [
+          {
+            "category": "next_step",
+            "summary": "Offer to save the key findings into mission memory or spin them into a follow-up task.",
+            "actionState": "suggested"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "step": 7,
+      "title": "Tasking Lane And Follow-Up",
+      "type": "chat",
+      "message": "Create a task named 'Jarvis Followup e2b6dd' to review the mission dashboard tomorrow and then suggest the best follow-up.",
+      "passed": true,
+      "reasons": [],
+      "latency": 0.48633861541748047,
+      "content": "I created the task 'Jarvis Followup e2b6dd' to review the mission dashboard and then suggest the best follow-up (tomorrow).",
+      "tool_calls": [],
+      "tool_results": [],
+      "review_events": [],
+      "assistant_message": {
+        "id": "cmofyg5gl000d3ws5rjk92kit",
+        "role": "assistant",
+        "content": "I created the task 'Jarvis Followup e2b6dd' to review the mission dashboard and then suggest the best follow-up (tomorrow).",
+        "provenanceTrace": {
+          "runId": "unknown",
+          "steps": [],
+          "stepCount": 0,
+          "createdAt": "2026-04-26T16:00:39.679Z",
+          "runIds": [],
+          "summary": {
+            "hasTools": false,
+            "hasDocuments": false,
+            "hasTaskRun": false,
+            "mainSource": "model",
+            "brief": "Answered directly from model knowledge. No tools were invoked.",
+            "lastAction": "Answered directly from model knowledge. No tools were invoked."
+          }
+        },
+        "agentId": "cmofyep8p00003ws50c1x2o6r",
+        "createdAt": "2026-04-26T16:00:39.333Z",
+        "promptPackId": "rawclaw-jarvis",
+        "promptVersionHash": "8d727f139077e7e5",
+        "reviewerPromptVersionHash": "bbf091718e2ef470",
+        "workflowPromptIds": [
+          "jarvis-advisory"
+        ],
+        "reviewEvents": [],
+        "workflowState": {
+          "promptPackId": "rawclaw-jarvis",
+          "promptVersionHash": "8d727f139077e7e5",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "jarvis-advisory"
+          ],
+          "reviewEnabled": false,
+          "runIds": [],
+          "assistantLane": "tasking",
+          "confidenceState": "direct"
+        },
+        "memoryEvents": [],
+        "advisoryEvents": [
+          {
+            "category": "follow_up",
+            "summary": "Offer a follow-up reminder or monitoring step for the created task or action item.",
+            "actionState": "suggested"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "step": 8,
+      "title": "Operator Briefing In Chat",
+      "type": "chat",
+      "message": "Give me a concise operator briefing: who am I, what mission are we on, what reminder is active, and what should we do next?",
+      "passed": true,
+      "reasons": [],
+      "latency": 37.26079726219177,
+      "content": "**Command Center Briefing**\n\n*   **Operator:** Maya (Concise briefing mode).\n*   **Current Mission:** The RawClaw JARVIS rollout.\n*   **Active Reminder:** Review the operator dashboard tomorrow.\n*   **Next Best Action:** Audit the operator dashboard to ensure active focus and pending commitments are correctly synced.",
+      "tool_calls": [],
+      "tool_results": [],
+      "review_events": [],
+      "assistant_message": {
+        "id": "cmofygziu000f3ws5s6m07j6n",
+        "role": "assistant",
+        "content": "**Command Center Briefing**\n\n* **Operator:** Maya (Concise briefing mode).\n* **Current Mission:** The RawClaw JARVIS rollout.\n* **Active Reminder:** Review the operator dashboard tomorrow.\n* **Next Best Action:** Audit the operator dashboard to ensure active focus and pending commitments are correctly synced.",
+        "provenanceTrace": {
+          "runId": "ca0b19ad-000f-4ffe-8add-d75fd5c85e17",
+          "steps": [
+            {
+              "stepIndex": 0,
+              "stepType": "plan",
+              "toolName": null,
+              "inputSummary": "Initializing execution for session jarvis-upgrade-8087d75a",
+              "outputSummary": null,
+              "sourceUrl": null,
+              "durationMs": 0,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:00:41.487386+00:00Z"
+            },
+            {
+              "stepIndex": 1,
+              "stepType": "synthesis",
+              "toolName": null,
+              "inputSummary": null,
+              "outputSummary": "**Command Center Briefing** * **Operator:** Maya (Concise briefing mode).\n* **Current Mission:** The Raw Claw JARVIS rollout.\n* **Active Reminder:** Review the operator dashboard tomorrow.\n* *...",
+              "sourceUrl": null,
+              "durationMs": 35693,
+              "sandboxed": false,
+              "timestamp": "2026-04-26T16:01:17.179445+00:00Z"
+            }
+          ],
+          "stepCount": 2,
+          "createdAt": "2026-04-26T16:01:18.281802+00:00Z",
+          "runIds": [],
+          "summary": {
+            "hasTools": false,
+            "hasDocuments": false,
+            "hasTaskRun": false,
+            "mainSource": "model",
+            "brief": "Answered directly from model knowledge. No tools were invoked.",
+            "lastAction": "Answered directly from model knowledge. No tools were invoked."
+          }
+        },
+        "runIds": [],
+        "modelId": "ollama/gemma4:31b-cloud",
+        "isLocal": true,
+        "fallbacks": [],
+        "memoryRecall": true,
+        "agentId": "cmofyep8p00003ws50c1x2o6r",
+        "createdAt": "2026-04-26T16:01:18.294Z",
+        "durationMs": 32930,
+        "promptPackId": "rawclaw-jarvis",
+        "promptVersionHash": "b7aa175abbd56a22",
+        "reviewerPromptVersionHash": "bbf091718e2ef470",
+        "workflowPromptIds": [
+          "jarvis-advisory",
+          "jarvis-briefing"
+        ],
+        "reviewEvents": [],
+        "workflowState": {
+          "promptPackId": "rawclaw-jarvis",
+          "promptVersionHash": "b7aa175abbd56a22",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "jarvis-advisory",
+            "jarvis-briefing"
+          ],
+          "reviewEnabled": false,
+          "runIds": [],
+          "assistantLane": "advisory",
+          "confidenceState": "grounded"
+        },
+        "memoryEvents": [],
+        "advisoryEvents": [
+          {
+            "category": "next_step",
+            "summary": "User is asking for immediate advisory guidance.",
+            "actionState": "suggested"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "step": 9,
+      "title": "Control Room Persistence",
+      "type": "api",
+      "passed": true,
+      "reasons": [],
+      "payload": {
+        "messages": [
+          {
+            "id": "cmofyepo000023ws5ga6wgg0n",
+            "role": "assistant",
+            "content": "I am RawClaw, your JARVIS-style operator assistant inside the RawClaw system. I operate as a calm, local-first command partner: I keep continuity across memory, research, tasks, and tools, and I stay explicit when evidence is weak or an action needs confirmation.",
+            "provenanceTrace": {
+              "runId": "unknown",
+              "steps": [],
+              "stepCount": 0,
+              "createdAt": "2026-04-26T16:01:20.184Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            },
+            "agentId": "cmofyep8p00003ws50c1x2o6r",
+            "createdAt": "2026-04-26T15:59:32.208Z",
+            "promptPackId": "rawclaw-jarvis",
+            "promptVersionHash": "b7aa175abbd56a22",
+            "reviewerPromptVersionHash": "bbf091718e2ef470",
+            "workflowPromptIds": [
+              "jarvis-advisory",
+              "jarvis-briefing"
+            ],
+            "reviewEvents": [],
+            "workflowState": {
+              "promptPackId": "rawclaw-jarvis",
+              "promptVersionHash": "b7aa175abbd56a22",
+              "reviewerPromptVersionHash": "bbf091718e2ef470",
+              "workflowPromptIds": [
+                "jarvis-advisory",
+                "jarvis-briefing"
+              ],
+              "reviewEnabled": false,
+              "runIds": [],
+              "assistantLane": "conversation",
+              "confidenceState": "direct"
+            },
+            "memoryEvents": [],
+            "advisoryEvents": []
+          },
+          {
+            "id": "cmofyew1a00043ws5a1p8q58q",
+            "role": "assistant",
+            "content": "Understood, Maya. I've noted your preference for concise briefings and the details for the JARVIS rollout.\n\n* **Reminder set:** Review the operator dashboard tomorrow.\n* **Stored:** Launch color is cobalt.",
+            "provenanceTrace": {
+              "runId": "b2723f91-6256-4ad0-bcfe-7b38d31c2e25",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session jarvis-upgrade-8087d75a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T15:59:34.358898+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "Understood, Maya. I've noted your preference for concise briefings and the details for the JARVIS rollout. * **Reminder set:** Review the operator dashboard tomorrow.\n* **Stored:** Launch color i...",
+                  "sourceUrl": null,
+                  "durationMs": 5741,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T15:59:40.098290+00:00Z"
+                }
+              ],
+              "stepCount": 2,
+              "createdAt": "2026-04-26T15:59:40.449975+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            },
+            "runIds": [],
+            "modelId": "ollama/gemma4:31b-cloud",
+            "isLocal": true,
+            "fallbacks": [],
+            "memoryRecall": true,
+            "agentId": "cmofyep8p00003ws50c1x2o6r",
+            "createdAt": "2026-04-26T15:59:40.462Z",
+            "durationMs": 2631,
+            "promptPackId": "rawclaw-jarvis",
+            "promptVersionHash": "b7aa175abbd56a22",
+            "reviewerPromptVersionHash": "bbf091718e2ef470",
+            "workflowPromptIds": [
+              "jarvis-advisory",
+              "jarvis-briefing"
+            ],
+            "reviewEvents": [],
+            "workflowState": {
+              "promptPackId": "rawclaw-jarvis",
+              "promptVersionHash": "b7aa175abbd56a22",
+              "reviewerPromptVersionHash": "bbf091718e2ef470",
+              "workflowPromptIds": [
+                "jarvis-advisory",
+                "jarvis-briefing"
+              ],
+              "reviewEnabled": false,
+              "runIds": [],
+              "assistantLane": "memory",
+              "confidenceState": "grounded"
+            },
+            "memoryEvents": [
+              {
+                "layer": "session",
+                "action": "captured",
+                "summary": "Captured a session-scoped fact for continuity.",
+                "entryId": "memory_1777219173884"
+              },
+              {
+                "layer": "operator",
+                "action": "updated",
+                "summary": "Updated operator profile name to Maya.",
+                "entryId": "memory_1777219173976"
+              },
+              {
+                "layer": "operator",
+                "action": "updated",
+                "summary": "Added an operator preference to durable memory.",
+                "entryId": "memory_1777219174050"
+              },
+              {
+                "layer": "mission",
+                "action": "updated",
+                "summary": "Updated the active mission summary.",
+                "entryId": "memory_1777219174107"
+              }
+            ],
+            "advisoryEvents": [
+              {
+                "category": "reminder",
+                "summary": "Tracking reminder: review the operator dashboard tomorrow",
+                "actionState": "queued"
+              }
+            ]
+          },
+          {
+            "id": "cmofyffw900063ws555hyzty5",
+            "role": "assistant",
+            "content": "**Command Center Briefing**\n\n* **Operator:** Maya (Prefers concise briefings).\n* **Current Mission:** The RawClaw JARVIS rollout.\n* **Active Reminder:** Review the operator dashboard tomorrow.\n* **Stored Detail:** The launch color is cobalt.",
+            "provenanceTrace": {
+              "runId": "5dcff0e8-e039-4afb-8222-8e4e10742ec2",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session jarvis-upgrade-8087d75a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T15:59:43.088770+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "**Command Center Briefing** * **Operator:** Maya (Prefers concise briefings).\n* **Current Mission:** The Raw Claw JARVIS rollout.\n* **Active Reminder:** Review the operator dashboard tomorrow.\n*...",
+                  "sourceUrl": null,
+                  "durationMs": 22529,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:05.616200+00:00Z"
+                }
+              ],
+              "stepCount": 2,
+              "createdAt": "2026-04-26T16:00:06.189996+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            },
+            "runIds": [],
+            "modelId": "ollama/gemma4:31b-cloud",
+            "isLocal": true,
+            "fallbacks": [],
+            "memoryRecall": true,
+            "agentId": "cmofyep8p00003ws50c1x2o6r",
+            "createdAt": "2026-04-26T16:00:06.201Z",
+            "durationMs": 12577,
+            "promptPackId": "rawclaw-jarvis",
+            "promptVersionHash": "241b7157e176b690",
+            "reviewerPromptVersionHash": "bbf091718e2ef470",
+            "workflowPromptIds": [
+              "jarvis-advisory",
+              "jarvis-briefing"
+            ],
+            "reviewEvents": [],
+            "workflowState": {
+              "promptPackId": "rawclaw-jarvis",
+              "promptVersionHash": "241b7157e176b690",
+              "reviewerPromptVersionHash": "bbf091718e2ef470",
+              "workflowPromptIds": [
+                "jarvis-advisory",
+                "jarvis-briefing"
+              ],
+              "reviewEnabled": false,
+              "runIds": [],
+              "assistantLane": "memory",
+              "confidenceState": "grounded"
+            },
+            "memoryEvents": [],
+            "advisoryEvents": []
+          },
+          {
+            "id": "cmofyfxaq00083ws52q5u4fcv",
+            "role": "assistant",
+            "content": "**JARVIS Rollout Strategy**\n\n**Objective:** Transition from a standard agent to a situationally aware executive assistant.\n\n1. **Stability Phase:** Ensure core memory primitives (local-first) are deterministic and reliable.\n2. **Integration Phase:** Map command-center triggers (status briefings, active reminders) to the operator dashboard.\n3. **Refinement Phase:** Tune the \"advisory-first\" logic to balance autonomy with safety.\n\n**Recommendation:**\nThe next most useful step is to **audit the current operator dashboard** to ensure it accurately reflects the active focus and pending commitments I am tracking.",
+            "provenanceTrace": {
+              "runId": "999951ae-367f-46e6-bc96-362d459732b3",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session jarvis-upgrade-8087d75a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:10.461284+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "**JARVIS Rollout Strategy** **Objective:** Transition from a standard agent to a situationally aware executive assistant. 1. **Stability Phase:** Ensure core memory primitives (local-first) are det...",
+                  "sourceUrl": null,
+                  "durationMs": 17603,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:28.063599+00:00Z"
+                }
+              ],
+              "stepCount": 2,
+              "createdAt": "2026-04-26T16:00:28.741386+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            },
+            "runIds": [],
+            "modelId": "ollama/gemma4:31b-cloud",
+            "isLocal": true,
+            "fallbacks": [],
+            "memoryRecall": true,
+            "agentId": "cmofyep8p00003ws50c1x2o6r",
+            "createdAt": "2026-04-26T16:00:28.754Z",
+            "durationMs": 7628,
+            "promptPackId": "rawclaw-jarvis",
+            "promptVersionHash": "241b7157e176b690",
+            "reviewerPromptVersionHash": "bbf091718e2ef470",
+            "workflowPromptIds": [
+              "jarvis-advisory",
+              "jarvis-briefing"
+            ],
+            "reviewEvents": [],
+            "workflowState": {
+              "promptPackId": "rawclaw-jarvis",
+              "promptVersionHash": "241b7157e176b690",
+              "reviewerPromptVersionHash": "bbf091718e2ef470",
+              "workflowPromptIds": [
+                "jarvis-advisory",
+                "jarvis-briefing"
+              ],
+              "reviewEnabled": false,
+              "runIds": [],
+              "assistantLane": "advisory",
+              "confidenceState": "grounded"
+            },
+            "memoryEvents": [],
+            "advisoryEvents": [
+              {
+                "category": "next_step",
+                "summary": "User is asking for immediate advisory guidance.",
+                "actionState": "suggested"
+              }
+            ]
+          },
+          {
+            "id": "cmofyg40e000a3ws5e1ietj8y",
+            "role": "assistant",
+            "content": "- **Changelog - OpenAI API**: See all of the latest features and updates to the OpenAI API.\n- **Changelog - Codex | OpenAI Developers**: Latest updates to Codex, OpenAI's coding agent Codex is becoming a broader workspace for getting work done with AI. This update makes it easier to start work with less setup, verify what Codex is building, create richer outputs, and keep mo\n- **OpenAI Help Center**: Evals for GPT-4.1 and GPT-4.1 mini were originally shared in the blog post accompanying their API release. ChatGPT \u2014 Release Notes A changelog of the latest updates and release notes for ChatGPT A changelog of the latest updates and release",
+            "tool_calls": [
+              {
+                "name": "skill_grounded-web-summary",
+                "arguments": {
+                  "task": "Search the web for the latest OpenAI API updates and give me 3 bullets plus one sensible follow-up."
+                }
+              },
+              {
+                "name": "web_search",
+                "arguments": {
+                  "query": "OpenAI API updates changelog site:openai.com"
+                }
+              }
+            ],
+            "toolResults": [
+              {
+                "tool_name": "skill_grounded-web-summary",
+                "input": {
+                  "task": "Search the web for the latest OpenAI API updates and give me 3 bullets plus one sensible follow-up."
+                },
+                "output": {
+                  "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                  "task": "Search the web for the latest OpenAI API updates and give me 3 bullets plus one sensible follow-up.",
+                  "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+                },
+                "error": null,
+                "duration_ms": 0,
+                "sandboxed": false,
+                "is_truncated": false,
+                "source_url": null,
+                "provenance_hint": null
+              },
+              {
+                "tool_name": "web_search",
+                "input": {
+                  "query": "OpenAI API updates changelog site:openai.com"
+                },
+                "output": {
+                  "status": "ok",
+                  "source_engine": "duckduckgo_search",
+                  "results": [
+                    {
+                      "title": "Changelog - OpenAI API",
+                      "url": "https://developers.openai.com/api/docs/changelog",
+                      "snippet": "See all of the latest features and updates to the OpenAI API.",
+                      "full_content": "Changelog | OpenAI API Search the API docs Search docs Suggested responses create reasoning_effort realtime prompt caching Primary navigation Search docs Suggested responses create reasoning_effort realtime prompt caching Get started Overview Quickstart Models Pricing Libraries Latest: GPT-5.5 Prompt guidance Core concepts Text generation Code generation Images and vision Audio and speech Structured output Function calling Responses API Using tools Agents SDK Overview Quickstart Agent definitions Models and providers Running agents Sandbox agents Orchestration Guardrails Results and state Integrations and observability Evaluate agent workflows Voice agents Agent Builder Overview Node reference Safety in building agents ChatKit Overview Customize Widgets Actions Advanced integrations Tools Web search MCP and Connectors Skills Shell Computer use File search and retrieval File search Retrieval Tool search More tools Apply Patch Local shell Image generation Code interpreter Run and scale Conversation state Background mode Streaming WebSocket mode Webhooks File inputs Context management Compaction Counting tokens Prompt caching Prompting Overview Prompt engineering Citation formatting Reasoning Reasoning models Reasoning best practices Evaluation Getting started Working with evals Prompt optimizer External models Best practices Realtime API Overview Connect WebRTC WebSocket SIP Usage Using realtime models Managing conversations MCP servers Webhooks and server-side controls Managing costs Realtime transcription Voice agents Model optimization Optimization cycle Fine-tuning Supervised fine-tuning Vision fine-tuning Direct preference optimization Reinforcement fine-tuning RFT use cases Best practices Graders Specialized models Image generation Video generation Text to speech Speech to text Deep research Embeddings Moderation Going live Production best practices Deployment checklist Latency optimization Overview Predicted Outputs Priority processing Cost optimization Overview Batch Flex processing Accuracy optimization Safety Safety best practices Safety checks Cybersecurity checks Under 18 API Guidance Legacy APIs Assistants API Migration guide Deep dive Tools Resources Terms and policies Changelog Your data Permissions Rate limits Deprecations MCP for deep research Developer mode ChatGPT Actions Introduction Getting started Actions library Authentication Production Data retrieval Sending files Docs Use cases Getting Started Overview Quickstart Explore use cases Pricing Concepts Prompting Customization Memories Chronicle Sandboxing Subagents Workflows Models Cyber Safety Using Codex App Overview Features Settings Review Automations Worktrees Local Environments In-app browser Computer Use Commands Windows Troubleshooting IDE Extension Overview Features Settings IDE Commands Slash commands CLI Overview Features Command Line Options Slash commands Web Overview Environments Internet Access Integrations GitHub Slack Linear Codex Security Overview Setup Improv..."
+                    },
+                    {
+                      "title": "Changelog - Codex | OpenAI Developers",
+                      "url": "https://developers.openai.com/codex/changelog",
+                      "snippet": "Latest updates to Codex, OpenAI's coding agent Codex is becoming a broader workspace for getting work done with AI. This update makes it easier to start work with less setup, verify what Codex is building, create richer outputs, and keep momentum across longer-running tasks. Verify more of your work The Codex app now includes an early in-app browser. You can open local or public pages that ...",
+                      "full_content": "Changelog \u2013 Codex | OpenAI Developers Search the Codex docs Search docs Suggested responses create reasoning_effort realtime prompt caching Primary navigation Search docs Suggested responses create reasoning_effort realtime prompt caching Get started Overview Quickstart Models Pricing Libraries Latest: GPT-5.5 Prompt guidance Core concepts Text generation Code generation Images and vision Audio and speech Structured output Function calling Responses API Using tools Agents SDK Overview Quickstart Agent definitions Models and providers Running agents Sandbox agents Orchestration Guardrails Results and state Integrations and observability Evaluate agent workflows Voice agents Agent Builder Overview Node reference Safety in building agents ChatKit Overview Customize Widgets Actions Advanced integrations Tools Web search MCP and Connectors Skills Shell Computer use File search and retrieval File search Retrieval Tool search More tools Apply Patch Local shell Image generation Code interpreter Run and scale Conversation state Background mode Streaming WebSocket mode Webhooks File inputs Context management Compaction Counting tokens Prompt caching Prompting Overview Prompt engineering Citation formatting Reasoning Reasoning models Reasoning best practices Evaluation Getting started Working with evals Prompt optimizer External models Best practices Realtime API Overview Connect WebRTC WebSocket SIP Usage Using realtime models Managing conversations MCP servers Webhooks and server-side controls Managing costs Realtime transcription Voice agents Model optimization Optimization cycle Fine-tuning Supervised fine-tuning Vision fine-tuning Direct preference optimization Reinforcement fine-tuning RFT use cases Best practices Graders Specialized models Image generation Video generation Text to speech Speech to text Deep research Embeddings Moderation Going live Production best practices Deployment checklist Latency optimization Overview Predicted Outputs Priority processing Cost optimization Overview Batch Flex processing Accuracy optimization Safety Safety best practices Safety checks Cybersecurity checks Under 18 API Guidance Legacy APIs Assistants API Migration guide Deep dive Tools Resources Terms and policies Changelog Your data Permissions Rate limits Deprecations MCP for deep research Developer mode ChatGPT Actions Introduction Getting started Actions library Authentication Production Data retrieval Sending files Docs Use cases Getting Started Overview Quickstart Explore use cases Pricing Concepts Prompting Customization Memories Chronicle Sandboxing Subagents Workflows Models Cyber Safety Using Codex App Overview Features Settings Review Automations Worktrees Local Environments In-app browser Computer Use Commands Windows Troubleshooting IDE Extension Overview Features Settings IDE Commands Slash commands CLI Overview Features Command Line Options Slash commands Web Overview Environments Internet Access Integrations GitHub Slack Linear Codex Security Over..."
+                    },
+                    {
+                      "title": "Changelog - OpenAI API",
+                      "url": "https://platform.openai.com/docs/changelog/dec-15th-2023.mkv",
+                      "snippet": "Explore developer resources, tutorials, API docs, and dynamic examples to get the most out of OpenAI's platform."
+                    },
+                    {
+                      "title": "OpenAI Help Center",
+                      "url": "https://help.openai.com/en/?q=release",
+                      "snippet": "Evals for GPT-4.1 and GPT-4.1 mini were originally shared in the blog post accompanying their API release. ChatGPT \u2014 Release Notes A changelog of the latest updates and release notes for ChatGPT A changelog of the latest updates and release notes for ChatGPT Sora - Release Notes March 19, 2026 Edit videos in Sora What is ChatGPT: FAQ"
+                    },
+                    {
+                      "title": "Model Release Notes - OpenAI Help Center",
+                      "url": "https://help.openai.com/en/articles/9624314-model-release-notes",
+                      "snippet": "We're making an update to GPT-5.2 Instant in ChatGPT and the API that improves response style and quality. Users should notice responses that are more measured and grounded in tone, in a way that's more contextually appropriate to the conversation. The model also tends to output clearer, more relevant answers to advice-seeking and how-to questions, more reliably placing the most important ..."
+                    }
+                  ],
+                  "fetch_count": 2,
+                  "result_quality": "good",
+                  "quality_assessment": "Results appear reliable",
+                  "provider_attempts": [
+                    {
+                      "provider": "duckduckgo_search",
+                      "source": "built-in",
+                      "query": "OpenAI API updates changelog site:openai.com",
+                      "status": "ok"
+                    }
+                  ]
+                },
+                "error": null,
+                "duration_ms": 2396.63,
+                "sandboxed": false,
+                "is_truncated": false,
+                "source_url": null,
+                "provenance_hint": {
+                  "status": "ok",
+                  "engine": "duckduckgo_search",
+                  "results_count": 5,
+                  "fetched_count": 2,
+                  "result_quality": "good",
+                  "provider_attempts": [
+                    {
+                      "provider": "duckduckgo_search",
+                      "source": "built-in",
+                      "query": "OpenAI API updates changelog site:openai.com",
+                      "status": "ok"
+                    }
+                  ]
+                }
+              }
+            ],
+            "provenanceTrace": {
+              "runId": "6972cb44-bf28-42a7-8fcc-762dadd5e35a",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session jarvis-upgrade-8087d75a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:30.620852+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:34.130255+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Search the web for the latest Open AI API updates and give...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:34.130308+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Search the web for the latest Open AI API updates and give...",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Search the web for the latest Open AI API updates and give..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:34.130407+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:34.130491+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Open AI API updates changelog site: openai. com",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:36.530012+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Open AI API updates changelog site: openai. com",
+                  "outputSummary": "5 results found (first: Changelog - Open AI API)",
+                  "sourceUrl": null,
+                  "durationMs": 2396,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:36.530050+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: APPROVED. Feedback:",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:36.530952+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "- **Changelog - Open AI API**: See all of the latest features and updates to the Open AI API.\n- **Changelog - Codex | Open AI Developers**: Latest updates to Codex, Open AI's coding agent Codex is becomin...",
+                  "sourceUrl": null,
+                  "durationMs": 5911,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:36.531048+00:00Z"
+                }
+              ],
+              "stepCount": 9,
+              "createdAt": "2026-04-26T16:00:36.531091+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            },
+            "runIds": [],
+            "agentId": "cmofyep8p00003ws50c1x2o6r",
+            "createdAt": "2026-04-26T16:00:37.454Z",
+            "promptPackId": "rawclaw-jarvis",
+            "promptVersionHash": "955ba42c5d2d7b63",
+            "reviewerPromptVersionHash": "bbf091718e2ef470",
+            "workflowPromptIds": [
+              "web-research-grounded",
+              "jarvis-advisory"
+            ],
+            "reviewEvents": [
+              {
+                "approved": true,
+                "feedback": "",
+                "reviewerId": "ollama/gemma4:31b-cloud"
+              }
+            ],
+            "workflowState": {
+              "promptPackId": "rawclaw-jarvis",
+              "promptVersionHash": "955ba42c5d2d7b63",
+              "reviewerPromptVersionHash": "bbf091718e2ef470",
+              "workflowPromptIds": [
+                "web-research-grounded",
+                "jarvis-advisory"
+              ],
+              "reviewEnabled": true,
+              "runIds": [],
+              "assistantLane": "research",
+              "confidenceState": "grounded"
+            },
+            "memoryEvents": [],
+            "advisoryEvents": [
+              {
+                "category": "next_step",
+                "summary": "Offer to save the key findings into mission memory or spin them into a follow-up task.",
+                "actionState": "suggested"
+              }
+            ]
+          },
+          {
+            "id": "cmofyg5gl000d3ws5rjk92kit",
+            "role": "assistant",
+            "content": "I created the task 'Jarvis Followup e2b6dd' to review the mission dashboard and then suggest the best follow-up (tomorrow).",
+            "provenanceTrace": {
+              "runId": "unknown",
+              "steps": [],
+              "stepCount": 0,
+              "createdAt": "2026-04-26T16:01:20.185Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            },
+            "agentId": "cmofyep8p00003ws50c1x2o6r",
+            "createdAt": "2026-04-26T16:00:39.333Z",
+            "promptPackId": "rawclaw-jarvis",
+            "promptVersionHash": "8d727f139077e7e5",
+            "reviewerPromptVersionHash": "bbf091718e2ef470",
+            "workflowPromptIds": [
+              "jarvis-advisory"
+            ],
+            "reviewEvents": [],
+            "workflowState": {
+              "promptPackId": "rawclaw-jarvis",
+              "promptVersionHash": "8d727f139077e7e5",
+              "reviewerPromptVersionHash": "bbf091718e2ef470",
+              "workflowPromptIds": [
+                "jarvis-advisory"
+              ],
+              "reviewEnabled": false,
+              "runIds": [],
+              "assistantLane": "tasking",
+              "confidenceState": "direct"
+            },
+            "memoryEvents": [],
+            "advisoryEvents": [
+              {
+                "category": "follow_up",
+                "summary": "Offer a follow-up reminder or monitoring step for the created task or action item.",
+                "actionState": "suggested"
+              }
+            ]
+          },
+          {
+            "id": "cmofygziu000f3ws5s6m07j6n",
+            "role": "assistant",
+            "content": "**Command Center Briefing**\n\n* **Operator:** Maya (Concise briefing mode).\n* **Current Mission:** The RawClaw JARVIS rollout.\n* **Active Reminder:** Review the operator dashboard tomorrow.\n* **Next Best Action:** Audit the operator dashboard to ensure active focus and pending commitments are correctly synced.",
+            "provenanceTrace": {
+              "runId": "ca0b19ad-000f-4ffe-8add-d75fd5c85e17",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session jarvis-upgrade-8087d75a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:00:41.487386+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "**Command Center Briefing** * **Operator:** Maya (Concise briefing mode).\n* **Current Mission:** The Raw Claw JARVIS rollout.\n* **Active Reminder:** Review the operator dashboard tomorrow.\n* *...",
+                  "sourceUrl": null,
+                  "durationMs": 35693,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T16:01:17.179445+00:00Z"
+                }
+              ],
+              "stepCount": 2,
+              "createdAt": "2026-04-26T16:01:18.281802+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            },
+            "runIds": [],
+            "modelId": "ollama/gemma4:31b-cloud",
+            "isLocal": true,
+            "fallbacks": [],
+            "memoryRecall": true,
+            "agentId": "cmofyep8p00003ws50c1x2o6r",
+            "createdAt": "2026-04-26T16:01:18.294Z",
+            "durationMs": 32930,
+            "promptPackId": "rawclaw-jarvis",
+            "promptVersionHash": "b7aa175abbd56a22",
+            "reviewerPromptVersionHash": "bbf091718e2ef470",
+            "workflowPromptIds": [
+              "jarvis-advisory",
+              "jarvis-briefing"
+            ],
+            "reviewEvents": [],
+            "workflowState": {
+              "promptPackId": "rawclaw-jarvis",
+              "promptVersionHash": "b7aa175abbd56a22",
+              "reviewerPromptVersionHash": "bbf091718e2ef470",
+              "workflowPromptIds": [
+                "jarvis-advisory",
+                "jarvis-briefing"
+              ],
+              "reviewEnabled": false,
+              "runIds": [],
+              "assistantLane": "advisory",
+              "confidenceState": "grounded"
+            },
+            "memoryEvents": [],
+            "advisoryEvents": [
+              {
+                "category": "next_step",
+                "summary": "User is asking for immediate advisory guidance.",
+                "actionState": "suggested"
+              }
+            ]
+          }
+        ],
+        "assistantState": {
+          "operatorProfile": {
+            "name": "Maya",
+            "preferences": [
+              "concise briefings. We are working on the RawClaw JARVIS rollout. Remind me to review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt",
+              "concise briefings"
+            ],
+            "priorities": [],
+            "notes": []
+          },
+          "missionSummary": "the RawClaw JARVIS rollout",
+          "activeFocus": [
+            "the RawClaw JARVIS rollout",
+            "the RawClaw JARVIS rollout. Remind me to review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt"
+          ],
+          "commitments": [
+            {
+              "id": "commitment-1777219174210",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-8087d75a",
+              "createdAt": "2026-04-26T15:59:34.210Z",
+              "updatedAt": "2026-04-26T15:59:34.210Z"
+            },
+            {
+              "id": "commitment-1777218589539",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-90525ca1",
+              "createdAt": "2026-04-26T15:49:49.540Z",
+              "updatedAt": "2026-04-26T15:49:49.540Z"
+            },
+            {
+              "id": "commitment-1777218461287",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-cffa1452",
+              "createdAt": "2026-04-26T15:47:41.287Z",
+              "updatedAt": "2026-04-26T15:47:41.287Z"
+            },
+            {
+              "id": "commitment-1777218019897",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-a440ca01",
+              "createdAt": "2026-04-26T15:40:19.897Z",
+              "updatedAt": "2026-04-26T15:40:19.897Z"
+            },
+            {
+              "id": "commitment-1777217680541",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-ac6a6529",
+              "createdAt": "2026-04-26T15:34:40.541Z",
+              "updatedAt": "2026-04-26T15:34:40.541Z"
+            },
+            {
+              "id": "commitment-1777217521517",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-ac4c9dc8",
+              "createdAt": "2026-04-26T15:32:01.517Z",
+              "updatedAt": "2026-04-26T15:32:01.517Z"
+            },
+            {
+              "id": "commitment-1777217269361",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-90cfa079",
+              "createdAt": "2026-04-26T15:27:49.361Z",
+              "updatedAt": "2026-04-26T15:27:49.361Z"
+            },
+            {
+              "id": "commitment-1777216859875",
+              "summary": "review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-de37f8c4",
+              "createdAt": "2026-04-26T15:20:59.875Z",
+              "updatedAt": "2026-04-26T15:20:59.875Z"
+            }
+          ],
+          "pendingFollowUps": [],
+          "advisoryStatus": "advisory-first",
+          "updatedAt": "2026-04-26T15:59:34.211Z"
+        },
+        "briefing": {
+          "generatedAt": "2026-04-26T16:01:20.878Z",
+          "summary": "Mission: the RawClaw JARVIS rollout. Active focus: the RawClaw JARVIS rollout, the RawClaw JARVIS rollout. Remind me to review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt. 8 active commitment(s) are being tracked. 3 advisory suggestion(s) are available.",
+          "missionSummary": "the RawClaw JARVIS rollout",
+          "activeFocus": [
+            "the RawClaw JARVIS rollout",
+            "the RawClaw JARVIS rollout. Remind me to review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt"
+          ],
+          "pendingCommitments": [
+            {
+              "id": "commitment-1777219174210",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-8087d75a",
+              "createdAt": "2026-04-26T15:59:34.210Z",
+              "updatedAt": "2026-04-26T15:59:34.210Z"
+            },
+            {
+              "id": "commitment-1777218589539",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-90525ca1",
+              "createdAt": "2026-04-26T15:49:49.540Z",
+              "updatedAt": "2026-04-26T15:49:49.540Z"
+            },
+            {
+              "id": "commitment-1777218461287",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-cffa1452",
+              "createdAt": "2026-04-26T15:47:41.287Z",
+              "updatedAt": "2026-04-26T15:47:41.287Z"
+            },
+            {
+              "id": "commitment-1777218019897",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-a440ca01",
+              "createdAt": "2026-04-26T15:40:19.897Z",
+              "updatedAt": "2026-04-26T15:40:19.897Z"
+            },
+            {
+              "id": "commitment-1777217680541",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-ac6a6529",
+              "createdAt": "2026-04-26T15:34:40.541Z",
+              "updatedAt": "2026-04-26T15:34:40.541Z"
+            },
+            {
+              "id": "commitment-1777217521517",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-ac4c9dc8",
+              "createdAt": "2026-04-26T15:32:01.517Z",
+              "updatedAt": "2026-04-26T15:32:01.517Z"
+            },
+            {
+              "id": "commitment-1777217269361",
+              "summary": "review the operator dashboard tomorrow",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-90cfa079",
+              "createdAt": "2026-04-26T15:27:49.361Z",
+              "updatedAt": "2026-04-26T15:27:49.361Z"
+            },
+            {
+              "id": "commitment-1777216859875",
+              "summary": "review the operator dashboard tomorrow. Remember this for later in this chat: the launch color is cobalt",
+              "status": "active",
+              "sourceSessionId": "jarvis-upgrade-de37f8c4",
+              "createdAt": "2026-04-26T15:20:59.875Z",
+              "updatedAt": "2026-04-26T15:20:59.875Z"
+            }
+          ],
+          "advisories": [
+            {
+              "id": "commitments-active",
+              "category": "reminder",
+              "summary": "You have active assistant commitments that may need review.",
+              "actionState": "queued",
+              "createdAt": "2026-04-26T16:01:20.878Z"
+            },
+            {
+              "id": "task-runs-active",
+              "category": "follow_up",
+              "summary": "There are active background runs worth monitoring from the command center.",
+              "actionState": "suggested",
+              "createdAt": "2026-04-26T16:01:20.878Z"
+            },
+            {
+              "id": "pending-proposals",
+              "category": "briefing",
+              "summary": "Learning proposals are waiting for evaluation or promotion review.",
+              "actionState": "suggested",
+              "createdAt": "2026-04-26T16:01:20.878Z"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Delete,
+  Patch,
   Body,
   Param,
   Query,
@@ -18,6 +19,7 @@ import { TasksService } from './tasks.service';
 import { ScheduleService } from './schedule.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskRunDto } from './dto/update-task-run.dto';
+import { UpdateTaskDto } from './dto/update-task.dto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -36,12 +38,29 @@ export class TasksController {
     if (dto.schedule) {
       await this.scheduleService.registerTask(task.id, task);
     }
-    return task;
+    return {
+      ...task,
+      nextRun: task.schedule ? this.scheduleService.getNextRun(task.schedule) : null,
+    };
   }
 
   @Get()
-  list() {
-    return this.tasksService.listDefinitions();
+  async list() {
+    const tasks = await this.tasksService.listDefinitions();
+    return tasks.map((task) => ({
+      ...task,
+      nextRun: task.schedule ? this.scheduleService.getNextRun(task.schedule) : null,
+    }));
+  }
+
+  @Get('schedule/preview')
+  previewSchedule(@Query('expression') expression?: string) {
+    return this.scheduleService.preview(expression);
+  }
+
+  @Get('scheduled')
+  listScheduled() {
+    return this.scheduleService.getScheduledTasks();
   }
 
   @Get('runs')
@@ -55,8 +74,32 @@ export class TasksController {
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.tasksService.getDefinition(id);
+  async get(@Param('id') id: string) {
+    const task = await this.tasksService.getDefinition(id);
+    return {
+      ...task,
+      nextRun: task.schedule ? this.scheduleService.getNextRun(task.schedule) : null,
+    };
+  }
+
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() dto: UpdateTaskDto) {
+    const task = await this.tasksService.updateDefinition(id, dto);
+    if (dto.schedule === undefined) {
+      return {
+        ...task,
+        nextRun: task.schedule ? this.scheduleService.getNextRun(task.schedule) : null,
+      };
+    }
+
+    await this.scheduleService.unregisterTask(id);
+    if (task.schedule) {
+      await this.scheduleService.registerTask(id, task);
+    }
+    return {
+      ...task,
+      nextRun: task.schedule ? this.scheduleService.getNextRun(task.schedule) : null,
+    };
   }
 
   @Delete(':id')

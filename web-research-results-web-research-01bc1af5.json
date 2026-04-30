@@ -1,0 +1,149 @@
+{
+  "session_id": "web-research-01bc1af5",
+  "model": "gemma4:31b-cloud",
+  "results": [
+    {
+      "step": 1,
+      "title": "Level 1: Fresh News Snapshot",
+      "passed": false,
+      "latency": 100.72650861740112,
+      "reasons": [
+        "ReadTimeout: The stream went silent before completing."
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "web_search",
+        "skill_grounded-web-summary",
+        "web_search"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "c6566c37-22c5-414c-9ff2-48588c5a14c3",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-01bc1af5",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:11:39.410298+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T13:11:39.410348+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    },
+    {
+      "step": 2,
+      "title": "Level 2: Search + Fetch Grounded Summary",
+      "passed": false,
+      "latency": 52.1524658203125,
+      "reasons": [
+        "ReadError: "
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "web_search",
+        "skill_grounded-web-summary",
+        "web_search"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "d0e53359-1260-4711-9172-0528392ea998",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-01bc1af5",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:13:20.249167+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T13:13:20.249229+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    },
+    {
+      "step": 3,
+      "title": "Level 3: Comparative Research Memo",
+      "passed": false,
+      "latency": 2.780115842819214,
+      "reasons": [
+        "ConnectError: All connection attempts failed"
+      ],
+      "tool_calls": [],
+      "content": "",
+      "review_events": [],
+      "provenance": null
+    },
+    {
+      "step": 4,
+      "title": "Level 4: Research Brief With Explicit Workflow",
+      "passed": false,
+      "latency": 5.002964735031128,
+      "reasons": [
+        "ReadError: "
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "skill_grounded-web-summary"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "8cfd4042-5358-4a5a-a5ea-dcce35474744",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-01bc1af5",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:14:15.445684+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T13:14:15.445723+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    }
+  ]
+}

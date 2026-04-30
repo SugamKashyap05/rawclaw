@@ -1,3 +1,8 @@
+import sys as _sys, asyncio as _asyncio
+if _sys.platform == "win32":
+    _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
+del _sys, _asyncio
+
 """
 RawClaw Agent — FastAPI application entry point.
 
@@ -8,7 +13,11 @@ Phase 3 wiring:
   - Tool health endpoints exposed
   - Executor handles confirmation gates and provenance
 """
+import sys
 import asyncio
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import json
 import logging
 import os
@@ -26,6 +35,9 @@ from src.config import settings
 from src.sandbox.sandbox_config import get_sandbox_config
 from src.memory.chroma_memory import ChromaMemory
 from src.memory.knowledge_brain import KnowledgeBrain
+from src.agents import AgentProfileStore
+from src.gateway import GatewayExecutionError, GatewayRegistry, GatewayService
+from src.sessions import SessionManager
 
 # Tool subsystem imports (auto-registers built-in tools)
 from src.tools.registry import TOOL_REGISTRY
@@ -117,6 +129,9 @@ model_router = ModelRouter()
 mcp_gateway: MCPGateway | None = None
 skill_loader: SkillLoader | None = None
 skill_researcher: SkillResearcher | None = None
+agent_profile_store: AgentProfileStore | None = None
+gateway_registry: GatewayRegistry | None = None
+gateway_service: GatewayService | None = None
 
 
 @asynccontextmanager
@@ -145,6 +160,18 @@ async def lifespan(app: FastAPI):
     app.state.use_langgraph = cfg.USE_LANGGRAPH
     app.state.mcp_discovery = MCPDiscovery(chroma_memory)
     logger.info("ChromaDB memory and MCP discovery initialized")
+
+    global agent_profile_store
+    global gateway_registry
+    global gateway_service
+    agent_profile_store = AgentProfileStore()
+    app.state.agent_profile_store = agent_profile_store
+    app.state.session_manager = SessionManager()
+    gateway_registry = GatewayRegistry(agent_profile_store, app.state.session_manager)
+    gateway_service = GatewayService(agent_profile_store, app.state.session_manager)
+    app.state.gateway_registry = gateway_registry
+    app.state.gateway_service = gateway_service
+    logger.info("Gateway runtime initialized")
 
     # 3. Import built-in tools (already auto-registered via __init__.py)
     from src.tools.builtin import register_builtin_tools
@@ -286,10 +313,15 @@ app.add_middleware(
 async def health_check() -> dict:
     """Basic health check endpoint."""
     healths = await model_router.get_health()
+    registry = getattr(app.state, "gateway_registry", None)
+    event_loop = type(asyncio.get_event_loop()).__name__
     return {
         "status": "ok",
+        "event_loop": event_loop,
+        "event_loop_ok": "Selector" in event_loop,
         "providers": {k: v.model_dump() for k, v in healths.items()},
         "tools_loaded": TOOL_REGISTRY.count,
+        "gateway": registry.health_summary() if registry else {"status": "unavailable"},
     }
 
 
@@ -329,6 +361,18 @@ async def tools_health():
     }
 
 
+@app.get("/api/tools/web_fetch/diagnose")
+async def diagnose_web_fetch(url: str = "https://example.com"):
+    """Runs low-level connectivity diagnosis for the web fetch tool."""
+    from src.tools.builtin.web_fetch import WebFetchTool
+
+    tool = TOOL_REGISTRY.get_optional("web_fetch")
+    web_fetch_tool = tool if isinstance(tool, WebFetchTool) else WebFetchTool()
+    return {
+        "diagnosis": await web_fetch_tool.diagnose_connectivity(url),
+    }
+
+
 @app.get("/api/tools/{tool_name}")
 async def get_tool(tool_name: str):
     """Get details for a specific tool."""
@@ -364,6 +408,7 @@ async def execute_chat(request: Request, chat_request: ChatRequest):
     knowledge_brain = getattr(request.app.state, "knowledge_brain", None)
     mcp_discovery = getattr(request.app.state, "mcp_discovery", None)
     use_langgraph = getattr(request.app.state, "use_langgraph", cfg.USE_LANGGRAPH)
+    active_gateway = getattr(request.app.state, "gateway_service", None)
 
     if use_langgraph:
         from src.graph.executor import LANGGRAPH_EXECUTOR
@@ -371,23 +416,23 @@ async def execute_chat(request: Request, chat_request: ChatRequest):
     else:
         executor = EXECUTOR
 
-    session_id = chat_request.session_id or "default"
-    model_id = chat_request.model or cfg.DEFAULT_HIGH_MODEL
+    if not active_gateway:
+        return JSONResponse(status_code=503, content={"error": "Gateway service not initialized"})
 
     async def event_generator():
         try:
-            if use_langgraph:
-                async for chunk in executor.execute(
-                    [m.model_dump() for m in chat_request.messages],
-                    session_id=session_id,
-                    model_id=model_id,
-                    chroma_memory=chroma_memory,
-                    knowledge_brain=knowledge_brain,
-                ):
-                    yield chunk
-            else:
-                async for chunk in executor.execute(chat_request, chroma_memory, knowledge_brain, mcp_discovery):
-                    yield chunk
+            async for chunk in active_gateway.stream_chat(
+                chat_request,
+                executor,
+                use_langgraph=use_langgraph,
+                chroma_memory=chroma_memory,
+                knowledge_brain=knowledge_brain,
+                mcp_discovery=mcp_discovery,
+            ):
+                yield chunk
+        except GatewayExecutionError as e:
+            logger.warning(f"Gateway rejected request: {e}")
+            yield json.dumps({"type": "error", "error": "gateway_error", "message": str(e)}) + "\n"
         except Exception as e:
             logger.error(f"Error in event_generator: {e}", exc_info=True)
             yield json.dumps({"type": "error", "error": "generator_error", "message": str(e)}) + "\n"
@@ -396,6 +441,33 @@ async def execute_chat(request: Request, chat_request: ChatRequest):
         event_generator(),
         media_type="application/x-ndjson",
     )
+
+
+@app.get("/api/gateway/agents")
+async def list_gateway_agents():
+    registry = getattr(app.state, "gateway_registry", None)
+    if not registry:
+        return JSONResponse(status_code=503, content={"error": "Gateway registry not initialized"})
+    return {"agents": [agent.model_dump() for agent in registry.list_agents()]}
+
+
+@app.get("/api/gateway/sessions")
+async def list_gateway_sessions():
+    registry = getattr(app.state, "gateway_registry", None)
+    if not registry:
+        return JSONResponse(status_code=503, content={"error": "Gateway registry not initialized"})
+    return {"sessions": [session.model_dump(mode="json") for session in registry.list_sessions()]}
+
+
+@app.get("/api/gateway/sessions/{session_id}")
+async def get_gateway_session(session_id: str):
+    registry = getattr(app.state, "gateway_registry", None)
+    if not registry:
+        return JSONResponse(status_code=503, content={"error": "Gateway registry not initialized"})
+    session = registry.get_session(session_id)
+    if not session:
+        return JSONResponse(status_code=404, content={"error": f"Session '{session_id}' not found"})
+    return {"session": session.model_dump(mode="json")}
 
 
 @app.post("/execute/task")
@@ -738,7 +810,7 @@ async def build_skill(request: BuildSkillRequest):
     return result
 
 
-def start():
+def main():
     """Entry point for running the agent."""
     from src.config import settings
     port = int(os.environ.get("AGENT_PORT", settings.AGENT_PORT))
@@ -746,8 +818,15 @@ def start():
     if os.name == "nt" and reload_enabled:
         logger.warning("AGENT_RELOAD=true requested on Windows; disabling reload to avoid multiprocessing permission errors.")
         reload_enabled = False
-    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=reload_enabled)
+    uvicorn.run(
+        "src.main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=reload_enabled,
+        loop="asyncio",
+        http="h11",
+    )
 
 
 if __name__ == "__main__":
-    start()
+    main()

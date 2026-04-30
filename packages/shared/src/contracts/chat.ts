@@ -1,9 +1,24 @@
 import { ToolCall, ToolResult } from './tool';
 import { ProvenanceTrace, ProvenanceStep } from './provenance';
+import { AssistantConfidenceState, AssistantLane } from './assistant';
+import { GatewayRoutingContext } from './gateway';
 
 export interface Citation {
   url: string;
   title?: string;
+}
+
+export type PreferredWebMode = 'auto' | 'search' | 'read_page' | 'browser';
+export type ToolUseMode = 'auto' | 'limited' | 'manual';
+export type PermissionMode = 'ask_every_time' | 'allow_safe_tools' | 'workspace_default';
+
+export interface ChatControlState {
+  planMode?: boolean;
+  preferredWebMode?: PreferredWebMode;
+  toolUseMode?: ToolUseMode;
+  permissionMode?: PermissionMode;
+  selectedPlugins?: string[];
+  selectedTools?: string[];
 }
 
 export interface DocumentSelection {
@@ -28,6 +43,26 @@ export interface DocumentEditRequest {
   instruction?: string;
 }
 
+export interface GatewayAgentProfileSnapshot {
+  id: string;
+  name: string;
+  workspace_id: string;
+  workspace_path: string;
+  default_model?: string;
+  allowed_tools: string[];
+  memory_scope: string;
+  prompt_files: string[];
+  research_defaults: Record<string, any>;
+  active: boolean;
+}
+
+export interface GatewayContextPayload {
+  resolved_agent_profile?: GatewayAgentProfileSnapshot;
+  workspace_path?: string;
+  memory_scope?: string;
+  routing_binding?: GatewayRoutingContext;
+}
+
 export interface ChatAttachment {
   filename: string;
   type?: string;
@@ -45,6 +80,36 @@ export interface ChatAttachment {
   extractionFailed?: boolean;
   /** The text resulting from extraction (duplicated here for immediate context budgeting) */
   extractedText?: string;
+}
+
+export interface ReviewEvent {
+  approved?: boolean;
+  feedback?: string;
+  reviewerId?: string;
+}
+
+export interface MemoryEvent {
+  layer: 'session' | 'operator' | 'mission';
+  action: 'captured' | 'updated' | 'recalled';
+  summary: string;
+  entryId?: string;
+}
+
+export interface AdvisoryEvent {
+  category: 'next_step' | 'follow_up' | 'reminder' | 'blocker' | 'briefing';
+  summary: string;
+  actionState: 'suggested' | 'queued' | 'executed';
+}
+
+export interface WorkflowState {
+  promptPackId?: string;
+  promptVersionHash?: string;
+  reviewerPromptVersionHash?: string;
+  workflowPromptIds?: string[];
+  reviewEnabled?: boolean;
+  runIds?: string[];
+  assistantLane?: AssistantLane;
+  confidenceState?: AssistantConfidenceState;
 }
 
 export interface ChatMessage {
@@ -73,7 +138,15 @@ export interface ChatMessage {
   // P2 Metadata
   createdAt?: Date | string;
   durationMs?: number;
+  promptPackId?: string;
+  promptVersionHash?: string;
+  reviewerPromptVersionHash?: string;
+  workflowPromptIds?: string[];
   runIds?: string[];
+  reviewEvents?: ReviewEvent[];
+  workflowState?: WorkflowState;
+  memoryEvents?: MemoryEvent[];
+  advisoryEvents?: AdvisoryEvent[];
   /** Parsed edit suggestion containing originalText, suggestedText, action */
   editSuggestion?: {
     originalText: string;
@@ -88,7 +161,7 @@ export type ChatComplexity = 'low' | 'medium' | 'high';
  * Request payload for initiating a chat completion.
  */
 export interface ChatRequest {
-  /** The unique session identifier for storing conversational context */
+  /** The caller-provided session identifier. For routed surfaces, this is advisory and may be remapped by the gateway. */
   session_id: string;
   /** The array of messages forming the latest conversation context */
   messages: ChatMessage[];
@@ -106,8 +179,29 @@ export interface ChatRequest {
   sender_identifier?: string;
   /** Optional selected agent profile to apply additional system instructions */
   agent_id?: string;
+  /** Optional surface key for control-plane routing */
+  surfaceType?: string;
+  /** Optional thread key for durable routing */
+  threadKey?: string;
+  /** Optional channel key for durable routing */
+  channelKey?: string;
   /** Optional secondary agent to review output before finalizing */
   output_reviewer_id?: string;
+  /** Resolved prompt templates for reviewer/repair runtime helpers */
+  promptTemplates?: {
+    reviewer?: string;
+    repair?: string;
+  };
+  /** Prompt provenance attached by the API orchestration layer */
+  promptProvenance?: {
+    promptPackId?: string;
+    promptVersionHash?: string;
+    reviewerPromptVersionHash?: string;
+    workflowPromptIds?: string[];
+    assistantLane?: AssistantLane;
+  };
+  /** Runtime gateway routing context resolved by the API or another caller */
+  gateway_context?: GatewayContextPayload;
   // P2 Parameters
   temperature?: number;
   top_p?: number;
@@ -115,6 +209,13 @@ export interface ChatRequest {
   selection?: DocumentSelection;
   /** Direct edit request forcing the backend to issue a specific edit intent */
   editRequest?: DocumentEditRequest;
+  /** Codex-style per-chat controls selected in the composer */
+  planMode?: boolean;
+  preferredWebMode?: PreferredWebMode;
+  toolUseMode?: ToolUseMode;
+  permissionMode?: PermissionMode;
+  selectedPlugins?: string[];
+  selectedTools?: string[];
 }
 
 /**
@@ -189,4 +290,3 @@ export interface DocumentPayload {
   updatedAt?: string | Date;
   metadata?: any;
 }
-

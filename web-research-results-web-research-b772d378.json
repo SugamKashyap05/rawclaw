@@ -1,0 +1,118 @@
+{
+  "session_id": "web-research-b772d378",
+  "model": "gemma4:31b-cloud",
+  "results": [
+    {
+      "step": 1,
+      "title": "Level 1: Fresh News Snapshot",
+      "passed": false,
+      "latency": 100.52592325210571,
+      "reasons": [
+        "ReadTimeout: The stream went silent before completing."
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "web_search",
+        "skill_grounded-web-summary",
+        "web_search"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "64feb935-8976-45a5-aec3-7989eedb1a66",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-b772d378",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T12:59:24.094122+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T12:59:24.094168+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    },
+    {
+      "step": 2,
+      "title": "Level 2: Search + Fetch Grounded Summary",
+      "passed": false,
+      "latency": 85.96811819076538,
+      "reasons": [
+        "ReadError: "
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "skill_grounded-web-summary"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "ca7bbc0e-17be-47b8-b8dc-dfa5eda2ca35",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-b772d378",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:01:04.747228+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T13:01:04.747292+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    },
+    {
+      "step": 3,
+      "title": "Level 3: Comparative Research Memo",
+      "passed": false,
+      "latency": 2.700498580932617,
+      "reasons": [
+        "ConnectError: All connection attempts failed"
+      ],
+      "tool_calls": [],
+      "content": "",
+      "review_events": [],
+      "provenance": null
+    },
+    {
+      "step": 4,
+      "title": "Level 4: Research Brief With Explicit Workflow",
+      "passed": false,
+      "latency": 2.6266143321990967,
+      "reasons": [
+        "ConnectError: All connection attempts failed"
+      ],
+      "tool_calls": [],
+      "content": "",
+      "review_events": [],
+      "provenance": null
+    }
+  ]
+}

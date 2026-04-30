@@ -21,6 +21,7 @@ import httpx
 logger = logging.getLogger("rawclaw.mcp")
 
 DEFAULT_MCP_CONFIG = os.getenv("MCP_SERVERS_CONFIG", "./mcp_servers.json")
+STDIO_STREAM_LIMIT = int(os.getenv("MCP_STDIO_STREAM_LIMIT", str(4 * 1024 * 1024)))
 
 
 class MCPError(Exception):
@@ -81,6 +82,7 @@ class MCPServer:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     env=env,
+                    limit=STDIO_STREAM_LIMIT,
                 )
             else:
                 self._process = await asyncio.create_subprocess_exec(
@@ -90,6 +92,7 @@ class MCPServer:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     env=env,
+                    limit=STDIO_STREAM_LIMIT,
                 )
 
             # Send initialize request with timeout
@@ -113,7 +116,7 @@ class MCPServer:
                 
                 if response and "result" in response:
                     self._connected = True
-                    logger.info(f"MCP stdio server {self.name} initialized")
+                    logger.info(f"MCP stdio server {self.name} initialized (stream limit={STDIO_STREAM_LIMIT} bytes)")
                     await self._discover_tools_stdio()
                 else:
                     # Capture what we can
@@ -268,7 +271,14 @@ class MCPServer:
         except asyncio.TimeoutError:
             logger.error(f"MCP server [{self.name}] stdio read timeout after {self.timeout}s for request {request_id}")
         except Exception as e:
-            logger.error(f"MCP server [{self.name}] stdio read error: {e}")
+            message = str(e)
+            if "chunk is longer than limit" in message.lower():
+                logger.error(
+                    f"MCP server [{self.name}] stdio oversized-frame error for request {request_id} "
+                    f"(limit={STDIO_STREAM_LIMIT} bytes): {message}"
+                )
+            else:
+                logger.error(f"MCP server [{self.name}] stdio read error for request {request_id}: {message}")
         return None
 
 

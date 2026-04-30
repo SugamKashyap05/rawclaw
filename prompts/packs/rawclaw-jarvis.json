@@ -1,0 +1,10 @@
+{
+  "id": "rawclaw-jarvis",
+  "purpose": "JARVIS-style RawClaw pack for a calm executive-assistant command center.",
+  "scope": "pack",
+  "coreBlockIds": ["core-chat", "jarvis-core"],
+  "defaultWorkflowIds": ["jarvis-advisory"],
+  "reviewBlockId": "output-reviewer",
+  "repairBlockId": "repair-rewriter",
+  "tags": ["jarvis", "assistant", "command-center"]
+}

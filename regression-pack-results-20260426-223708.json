@@ -1,0 +1,76 @@
+{
+  "timestamp": "2026-04-26 22:37:08",
+  "model": "gemma4:31b-cloud",
+  "workspace": "E:\\2026 final projects\\rawclaw",
+  "results": [
+    {
+      "name": "Combined Chat Session Test",
+      "command": [
+        "C:\\Python314\\python.exe",
+        "scripts/combined-chat-session-test.py",
+        "gemma4:31b-cloud",
+        "--prompt-pack",
+        "rawclaw-default"
+      ],
+      "return_code": 0,
+      "passed": true,
+      "duration_seconds": 245.18,
+      "pass_rate": null,
+      "counts": {
+        "total": null,
+        "passed": null
+      },
+      "artifacts": [
+        "combined-chat-session-results-combined-chat-68d29546.json"
+      ]
+    },
+    {
+      "name": "Web Research Progression Test",
+      "command": [
+        "C:\\Python314\\python.exe",
+        "scripts/web-research-progression-test.py",
+        "gemma4:31b-cloud",
+        "--prompt-pack",
+        "rawclaw-default"
+      ],
+      "return_code": 1,
+      "passed": false,
+      "duration_seconds": 49.6,
+      "pass_rate": 83.3,
+      "counts": {
+        "total": 6,
+        "passed": 5
+      },
+      "artifacts": [
+        "web-research-results-web-research-f0e2edbc.json",
+        "web-research-diagnostics-web-research-f0e2edbc.json"
+      ]
+    },
+    {
+      "name": "JARVIS Upgrade Test",
+      "command": [
+        "C:\\Python314\\python.exe",
+        "scripts/jarvis-upgrade-test.py",
+        "gemma4:31b-cloud",
+        "--prompt-pack",
+        "rawclaw-jarvis"
+      ],
+      "return_code": 0,
+      "passed": true,
+      "duration_seconds": 178.7,
+      "pass_rate": null,
+      "counts": {
+        "total": null,
+        "passed": null
+      },
+      "artifacts": [
+        "jarvis-upgrade-results-jarvis-upgrade-0530714e.json"
+      ]
+    }
+  ],
+  "summary": {
+    "suites_run": 3,
+    "suites_passed": 2,
+    "pass_rate": 66.7
+  }
+}

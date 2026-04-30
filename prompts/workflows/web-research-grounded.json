@@ -1,0 +1,8 @@
+{
+  "id": "web-research-grounded",
+  "purpose": "Grounded workflow guidance for current-information and web-research tasks.",
+  "scope": "workflow",
+  "order": 20,
+  "tags": ["web", "research", "grounded"],
+  "body": "For current-information tasks, use a grounded web workflow: select the strongest search query, gather evidence with search, fetch pages only when they add verification value, separate verified facts from inference, and produce markdown-shaped outputs when the user asks for structure. Prefer evidence-driven synthesis over generic page summaries. If fetched content is noisy, placeholder-like, or irrelevant, say so explicitly and fall back to the strongest gathered evidence."
+}

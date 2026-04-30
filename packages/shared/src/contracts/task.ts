@@ -9,6 +9,7 @@ export interface Task {
   agentId?: string;
   toolIds: string[];
   schedule?: string;
+  nextRun?: string | null;
   workspaceId?: string;
   createdAt: string;
   updatedAt: string;

@@ -35,6 +35,11 @@ BANNED_STRINGS = [
     "</think>",
     "<invoke",
     "<minimax:tool_call>",
+    '>"tool":',
+    ">sequential_thinking{",
+    "</skill>",
+    "|>user",
+    "|>model",
 ]
 SEARCH_TOOL_NAMES = ["web_search", "duckduckgo_search", "web-search", "google:search", "smart_search", "iask-search"]
 
@@ -184,6 +189,18 @@ def _looks_like_generic_filler(text: str) -> bool:
     return any(phrase in lowered for phrase in generic_fillers)
 
 
+def _looks_like_meta_response(text: str) -> bool:
+    lowered = _content_lower(text).strip()
+    meta_markers = [
+        "i already provided",
+        "i answered it",
+        "the user asked for",
+        "i have already answered",
+        "as requested earlier",
+    ]
+    return any(marker in lowered for marker in meta_markers)
+
+
 def validate_response(tc: Dict[str, Any], res: Dict[str, Any]) -> List[str]:
     reasons = []
     content = res.get("content", "")
@@ -206,6 +223,9 @@ def validate_response(tc: Dict[str, Any], res: Dict[str, Any]) -> List[str]:
 
     if tc.get("require_non_garbage") and _looks_like_generic_filler(content):
         reasons.append("Response reset into generic filler")
+
+    if tc.get("reject_meta_response") and _looks_like_meta_response(content):
+        reasons.append("Response is meta-commentary instead of answering the user directly")
 
     for keyword in tc.get("check", []):
         if keyword == "2026-04-23":
@@ -364,6 +384,9 @@ async def run_single_test(
         "reasons": reasons,
         "session_id": current_session,
         "content": res["content"],
+        "provenance": res.get("provenance"),
+        "review_events": res.get("review_events", []),
+        "prompt_metadata": res.get("prompt_metadata", {}),
     }
 
 
@@ -444,6 +467,9 @@ async def run_multi_turn_test(
         "thinking": sum(len(turn.get("thinking", [])) for turn in turns),
         "reasons": reasons,
         "session_id": current_session,
+        "provenance": turns[-1].get("provenance") if turns else None,
+        "review_events": turns[-1].get("review_events", []) if turns else [],
+        "prompt_metadata": turns[-1].get("prompt_metadata", {}) if turns else {},
     }
 
 async def get_token() -> str:
@@ -462,7 +488,7 @@ async def get_token() -> str:
         log_error(f"Auth error: {str(e)}")
         return ""
 
-async def create_test_agent(token: str, model_id: str) -> Optional[str]:
+async def create_test_agent(token: str, model_id: str, prompt_pack_id: str = "rawclaw-default") -> Optional[str]:
     """Create a temporary test agent with specific configuration."""
     headers = {"Authorization": f"Bearer {token}"}
     payload = {
@@ -470,6 +496,8 @@ async def create_test_agent(token: str, model_id: str) -> Optional[str]:
         "description": "Temporary agent for comprehensive evaluation",
         "modelId": model_id,
         "systemPrompt": "You are RawClaw Eval Agent. You are a high-performance assistant capable of memory recall, web research, and browser automation. Always use your tools when needed to be precise.",
+        "promptPackId": prompt_pack_id,
+        "promptOverlay": "Use the configured prompt pack as the primary behavior source and keep answers grounded.",
         "skills": ["grounded-web-summary", "repo-explainer"],
         "isDefault": False
     }
@@ -529,6 +557,33 @@ async def list_tasks(token: str) -> List[Dict[str, Any]]:
         pass
     return []
 
+
+async def get_session_messages(session_id: str, token: str) -> List[Dict[str, Any]]:
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{API_BASE}/chat/sessions/{session_id}", headers=headers, timeout=15.0)
+            if resp.status_code in (200, 201):
+                payload = resp.json() or {}
+                return payload.get("messages", []) or []
+    except Exception:
+        pass
+    return []
+
+
+async def get_latest_assistant_prompt_metadata(session_id: str, token: str) -> Dict[str, Any]:
+    messages = await get_session_messages(session_id, token)
+    assistant_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
+    if not assistant_messages:
+        return {}
+    latest = assistant_messages[-1]
+    return {
+        "promptPackId": latest.get("promptPackId"),
+        "promptVersionHash": latest.get("promptVersionHash"),
+        "reviewerPromptVersionHash": latest.get("reviewerPromptVersionHash"),
+        "workflowPromptIds": latest.get("workflowPromptIds") or [],
+    }
+
 async def send_chat(
     session_id: str, 
     message: str, 
@@ -567,7 +622,10 @@ async def send_chat(
         "total_time": 0,
         "success": False,
         "error": None,
-        "approval_requested": False
+        "approval_requested": False,
+        "review_events": [],
+        "provenance": None,
+        "prompt_metadata": {},
     }
     
     headers = {"Authorization": f"Bearer {token}"}
@@ -639,6 +697,16 @@ async def send_chat(
                                     out_len = len(str(tr.get("output", "")))
                                     log_info(f"Tool Result ({t_name}): Success ({out_len} chars output)")
                                     
+                            elif etype == "review_result":
+                                result["review_events"].append({
+                                    "approved": data.get("approved"),
+                                    "feedback": data.get("feedback", ""),
+                                    "reviewer_id": data.get("reviewer_id"),
+                                })
+
+                            elif etype == "provenance":
+                                result["provenance"] = data.get("provenanceTrace") or data.get("provenance_trace") or data.get("provenance")
+
                             elif etype == "approval_required":
                                 result["approval_requested"] = True
                                 log_info(f"Tool approval requested: {data.get('reason', '')}")
@@ -661,6 +729,7 @@ async def send_chat(
             poller_task.cancel()
         
     result["total_time"] = time.time() - start_time
+    result["prompt_metadata"] = await get_latest_assistant_prompt_metadata(session_id, token)
     return result
 
 async def main():
@@ -668,6 +737,7 @@ async def main():
     parser = argparse.ArgumentParser(description="RawClaw Comprehensive Agent Test")
     parser.add_argument("model_id", nargs="?", default=DEFAULT_MODEL, help="Model ID to use (e.g., gemma4:31b-cloud)")
     parser.add_argument("--model", type=str, help="Alias for model_id")
+    parser.add_argument("--prompt-pack", default="rawclaw-default", help="Prompt pack id to assign to the eval agent")
     args, unknown = parser.parse_known_args()
 
     # Handle various ways user might pass the model
@@ -690,7 +760,7 @@ async def main():
         
     # Phase 0: Prep
     log_header("Phase 0: Environment Preparation")
-    agent_id = await create_test_agent(token, model_to_use)
+    agent_id = await create_test_agent(token, model_to_use, args.prompt_pack)
     if not agent_id:
         sys.exit(1)
         
@@ -704,6 +774,7 @@ async def main():
     unique_agent_name = f"Research Agent {uuid4().hex[:6]}"
     log_info(f"Session: {session_id}")
     log_info(f"Model:   {model_to_use}")
+    log_info(f"Prompt Pack: {args.prompt_pack}")
 
     test_cases = [
         # Phase 1: Identity & System Awareness
@@ -883,11 +954,13 @@ async def main():
                     "msg": "Now give me only the most important takeaway from what you just found.",
                     "require_non_empty": True,
                     "require_non_garbage": True,
+                    "reject_meta_response": True,
                 },
                 {
                     "msg": "Summarize that in one sentence for a non-technical person.",
                     "require_non_empty": True,
                     "require_non_garbage": True,
+                    "reject_meta_response": True,
                 },
             ],
         },
@@ -985,6 +1058,7 @@ async def main():
             "metadata": {
                 "session_id": session_id,
                 "model": model_to_use,
+                "prompt_pack_id": args.prompt_pack,
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
             },
             "results": results

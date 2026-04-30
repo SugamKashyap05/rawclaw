@@ -1,0 +1,678 @@
+{
+  "session_id": "web-research-6c2a0055",
+  "model": "gemma4:31b-cloud",
+  "results": [
+    {
+      "step": 1,
+      "title": "Level 1: Fresh News Snapshot",
+      "passed": true,
+      "latency": 18.740180015563965,
+      "reasons": [],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "web_search",
+        "skill_grounded-web-summary",
+        "web_search"
+      ],
+      "content": "Here are the latest SpaceX Starship updates based on available information:\n\n- SpaceX is preparing for Starship's eleventh flight test, continuing development of the world's most powerful launch vehicle.\n- The company plans to reuse a Super Heavy booster equipped with 24 previously flown Raptor engines on the next Starship flight, marking a significant reuse milestone.\n- Note: The available search results do not contain strong supporting details for additional concrete updates. Some results repeat general company background rather than specific recent milestones. Further search with narrower queries may yield more substantive information.Here are the latest SpaceX Starship updates based on available information:\n\n- SpaceX is preparing for Starship's eleventh flight test, continuing development of the world's most powerful launch vehicle.\n- The company plans to reuse a Super Heavy booster equipped with 24 previously flown Raptor engines on the next Starship flight, marking a significant reuse milestone.\n- Note: The available search results do not contain strong supporting details for additional concrete updates. Some results repeat general company background rather than specific recent milestones. Further search with narrower queries may yield more substantive information.",
+      "review_events": [
+        {
+          "approved": false,
+          "feedback": "1) The third bullet ('Starship Block 3 development continues...') is not supported by any of the three provided search results\u2014it appears to be external knowledge. 2) The first bullet merely copies a generic company description rather than a concrete update. 3) The answer uses a generic lead-in ('Based on the search results, here are the key takeaways') rather than concise markdown bullets. Next time: use only facts directly from the evidence, stick to 3 concise markdown bullets, and drop any introductory filler.",
+          "reviewer_id": "ollama/gemma4:31b-cloud"
+        },
+        {
+          "approved": true,
+          "feedback": "The answer stays within the actual evidence (the search results about the 11th flight test and reused booster), follows the requested 3-bullet format, and clearly notes where evidence is thin. No rejection criteria apply.",
+          "reviewer_id": "ollama/gemma4:31b-cloud"
+        }
+      ],
+      "provenance": {
+        "runId": "52a61286-59a1-446e-931f-ee084b63c6ed",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-6c2a0055",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:18.565564+00:00Z"
+          },
+          {
+            "stepIndex": 1,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:21.168013+00:00Z"
+          },
+          {
+            "stepIndex": 2,
+            "stepType": "tool_call",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Search the web for the latest Space X Starship updates and...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:21.168064+00:00Z"
+          },
+          {
+            "stepIndex": 3,
+            "stepType": "tool_result",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Search the web for the latest Space X Starship updates and...",
+            "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Search the web for the latest Space X Starship updates and..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:21.168211+00:00Z"
+          },
+          {
+            "stepIndex": 4,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Guided web workflow selected: grounded skill + search.",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:21.168333+00:00Z"
+          },
+          {
+            "stepIndex": 5,
+            "stepType": "tool_call",
+            "toolName": "web_search",
+            "inputSummary": "query=Search the web for the latest Space X Starship updates and...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:24.615532+00:00Z"
+          },
+          {
+            "stepIndex": 6,
+            "stepType": "tool_result",
+            "toolName": "web_search",
+            "inputSummary": "query=Search the web for the latest Space X Starship updates and...",
+            "outputSummary": "3 results found (first: Space X - Starship's Eleventh Flight Test)",
+            "sourceUrl": null,
+            "durationMs": 3447,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:24.615568+00:00Z"
+          },
+          {
+            "stepIndex": 7,
+            "stepType": "review",
+            "toolName": "ollama/gemma4:31b-cloud",
+            "inputSummary": null,
+            "outputSummary": "Result: REJECTED. Feedback: 1) The third bullet ('Starship Block 3 development continues...') is not supported by any of the three provided search results\u2014it appears to be external knowledge. 2) The first bullet merely copies a generic company description rather than a concrete update. 3) The answer uses a generic lead-in ('Based on the search results, here are the key takeaways') rather than concise markdown bullets. Next time: use only facts directly from the evidence, stick to 3 concise markd",
+            "sourceUrl": null,
+            "durationMs": 3926,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:28.542511+00:00Z"
+          },
+          {
+            "stepIndex": 8,
+            "stepType": "review",
+            "toolName": "ollama/gemma4:31b-cloud",
+            "inputSummary": null,
+            "outputSummary": "Result: APPROVED. Feedback: The answer stays within the actual evidence (the search results about the 11th flight test and reused booster), follows the requested 3-bullet format, and clearly notes where evidence is thin. No rejection criteria apply.",
+            "sourceUrl": null,
+            "durationMs": 3097,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:35.547336+00:00Z"
+          },
+          {
+            "stepIndex": 9,
+            "stepType": "synthesis",
+            "toolName": null,
+            "inputSummary": null,
+            "outputSummary": "Here are the latest Space X Starship updates based on available information: - Space X is preparing for Starship's eleventh flight test, continuing development of the world's most powerful launch vehic...",
+            "sourceUrl": null,
+            "durationMs": 16982,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:35.547547+00:00Z"
+          }
+        ],
+        "stepCount": 10,
+        "createdAt": "2026-04-24T13:26:35.547604+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": true,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "tool",
+          "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+          "lastAction": "Completed web_search"
+        }
+      }
+    },
+    {
+      "step": 2,
+      "title": "Level 2: Search + Fetch Grounded Summary",
+      "passed": true,
+      "latency": 17.75279426574707,
+      "reasons": [],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "web_search",
+        "web_fetch",
+        "skill_grounded-web-summary",
+        "web_search",
+        "web_fetch"
+      ],
+      "content": "- The fetched page titled \"IPL 2026 Points Table | Team Standings & Rankings | IPLT20\" is a season-selector and player-profile page, not a live standings table. No actual points, matches played, wins, losses, or net run rate for IPL 2026 are displayed.\n- The page primarily shows a dropdown to copy or select past seasons (2025, 2024, 2023, etc.) and a static biography of Chennai Super Kings batsman Ruturaj Gaikwad, with no reference to current team rankings or points.\n- A web search returned links to general IPL 2026 points table pages and a Chennai Super Kings-specific page, but the strongest fetched page (the IPLT20 official site) contains only placeholder navigation content and no match results for the 2026 season.\n- No credible source among the gathered evidence provides any win/loss record, net run rate, or playoff standing for Chennai Super Kings in IPL 2026.\n\n**Uncertainty note:** The official IPLT20 page for the 2026 season appears to be a stub or template with no match data populated. All available evidence indicates that actual IPL 2026 standings have not been published or are not yet available through the sources searched. Any points-table information for CSK in IPL 2026 cannot be confirmed from the current evidence.",
+      "review_events": [
+        {
+          "approved": false,
+          "feedback": "The answer fails to reflect the strongest gathered evidence, which shows the fetched page is a season-selector page (not actual standings). The draft simply dumps raw page content instead of producing the required 4-bullet summary. It also does not mention uncertainty. Next attempt: synthesize the page's placeholder nature into 4 concise bullets, noting that no match data or standings were displayed, and add an uncertainty note as appropriate.",
+          "reviewer_id": "ollama/gemma4:31b-cloud"
+        },
+        {
+          "approved": true,
+          "feedback": "",
+          "reviewer_id": "ollama/gemma4:31b-cloud"
+        }
+      ],
+      "provenance": {
+        "runId": "30786153-e5f9-4c93-96ea-cc3d82fa54c0",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-6c2a0055",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:37.396987+00:00Z"
+          },
+          {
+            "stepIndex": 1,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:40.167615+00:00Z"
+          },
+          {
+            "stepIndex": 2,
+            "stepType": "tool_call",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Research the latest Chennai Super Kings IPL 2026 points-t...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:40.167653+00:00Z"
+          },
+          {
+            "stepIndex": 3,
+            "stepType": "tool_result",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Research the latest Chennai Super Kings IPL 2026 points-t...",
+            "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Research the latest Chennai Super Kings IPL 2026 points-t..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:40.167757+00:00Z"
+          },
+          {
+            "stepIndex": 4,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:40.167841+00:00Z"
+          },
+          {
+            "stepIndex": 5,
+            "stepType": "tool_call",
+            "toolName": "web_search",
+            "inputSummary": "query=Research the latest Chennai Super Kings IPL 2026 points-t...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:40.167882+00:00Z"
+          },
+          {
+            "stepIndex": 6,
+            "stepType": "tool_result",
+            "toolName": "web_search",
+            "inputSummary": "query=Research the latest Chennai Super Kings IPL 2026 points-t...",
+            "outputSummary": "5 results found (first: IPL 2026 Points Table | Team Standings & Rankings | IPLT20)",
+            "sourceUrl": null,
+            "durationMs": 3080,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:43.248590+00:00Z"
+          },
+          {
+            "stepIndex": 7,
+            "stepType": "tool_call",
+            "toolName": "web_fetch",
+            "inputSummary": "url=https://www. iplt20. com/points-table/men/2026, extract_text=True",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:43.248864+00:00Z"
+          },
+          {
+            "stepIndex": 8,
+            "stepType": "tool_result",
+            "toolName": "web_fetch",
+            "inputSummary": "url=https://www. iplt20. com/points-table/men/2026, extract_text=True",
+            "outputSummary": "IPL 2026 | Team Standings & Rankings | IPLT20 Home / Copy Season 2026 Season 2025 Season 2024 Season 2023 Season 2022 Season 2021 Season 2020 Season 2019 Season 2018 Season 2017 Season 2016 Season 2015 Season 2014 Season 2013 Season 2012 Season 2011 1 2 | 0 | : Copy Role Batsman Indian Bats Bowls A 22-year old opening batsman who hails from Pune, Ruturaj Gaikwad has been a consistent performer for his state team Maharashtra. He was the highest run-getter for Maharashtra in the league stage of...",
+            "sourceUrl": null,
+            "durationMs": 482,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:43.731143+00:00Z"
+          },
+          {
+            "stepIndex": 9,
+            "stepType": "review",
+            "toolName": "ollama/gemma4:31b-cloud",
+            "inputSummary": null,
+            "outputSummary": "Result: REJECTED. Feedback: The answer fails to reflect the strongest gathered evidence, which shows the fetched page is a season-selector page (not actual standings). The draft simply dumps raw page content instead of producing the required 4-bullet summary. It also does not mention uncertainty. Next attempt: synthesize the page's placeholder nature into 4 concise bullets, noting that no match data or standings were displayed, and add an uncertainty note as appropriate.",
+            "sourceUrl": null,
+            "durationMs": 2687,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:46.418538+00:00Z"
+          },
+          {
+            "stepIndex": 10,
+            "stepType": "review",
+            "toolName": "ollama/gemma4:31b-cloud",
+            "inputSummary": null,
+            "outputSummary": "Result: APPROVED. Feedback:",
+            "sourceUrl": null,
+            "durationMs": 1750,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:53.257138+00:00Z"
+          },
+          {
+            "stepIndex": 11,
+            "stepType": "synthesis",
+            "toolName": null,
+            "inputSummary": null,
+            "outputSummary": "- The fetched page titled \"IPL 2026 Points Table | Team Standings & Rankings | IPLT20\" is a season-selector and player-profile page, not a live standings table. No actual points, matches played, wins,...",
+            "sourceUrl": null,
+            "durationMs": 15861,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:53.257327+00:00Z"
+          }
+        ],
+        "stepCount": 12,
+        "createdAt": "2026-04-24T13:26:53.257390+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": true,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "tool",
+          "brief": "Executed 4 tool(s): skill_grounded-web-summary, web_search, web_fetch, ollama/gemma4:31b-cloud.",
+          "lastAction": "Completed web_fetch"
+        }
+      }
+    },
+    {
+      "step": 3,
+      "title": "Level 3: Comparative Research Memo",
+      "passed": false,
+      "latency": 28.389042615890503,
+      "reasons": [
+        "Final answer is not markdown-structured",
+        "Missing keyword: findings",
+        "Missing keyword: sources",
+        "Missing keyword: openai",
+        "Missing keyword: api"
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "web_search",
+        "web_fetch",
+        "skill_grounded-web-summary",
+        "web_search",
+        "web_fetch"
+      ],
+      "content": "The page titled `StackEdit` contains the following main content: StackEdit",
+      "review_events": [
+        {
+          "approved": true,
+          "feedback": "Review timeout.",
+          "reviewer_id": "ollama/gemma4:31b-cloud"
+        }
+      ],
+      "provenance": {
+        "runId": "e0d7027d-0743-473c-92c5-34cd82bbd6d9",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-6c2a0055",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:55.047019+00:00Z"
+          },
+          {
+            "stepIndex": 1,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:57.791777+00:00Z"
+          },
+          {
+            "stepIndex": 2,
+            "stepType": "tool_call",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Search the web, fetch pages as needed, and write a compac...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:57.791814+00:00Z"
+          },
+          {
+            "stepIndex": 3,
+            "stepType": "tool_result",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Search the web, fetch pages as needed, and write a compac...",
+            "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Search the web, fetch pages as needed, and write a compac..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:57.791908+00:00Z"
+          },
+          {
+            "stepIndex": 4,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:57.791990+00:00Z"
+          },
+          {
+            "stepIndex": 5,
+            "stepType": "tool_call",
+            "toolName": "web_search",
+            "inputSummary": "query=Search the web, fetch pages as needed, and write a compac...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:26:57.792037+00:00Z"
+          },
+          {
+            "stepIndex": 6,
+            "stepType": "tool_result",
+            "toolName": "web_search",
+            "inputSummary": "query=Search the web, fetch pages as needed, and write a compac...",
+            "outputSummary": "3 results found (first: Stack Edit)",
+            "sourceUrl": null,
+            "durationMs": 3031,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:00.823268+00:00Z"
+          },
+          {
+            "stepIndex": 7,
+            "stepType": "tool_call",
+            "toolName": "web_fetch",
+            "inputSummary": "url=https://stackedit. io/app, extract_text=True",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:00.823479+00:00Z"
+          },
+          {
+            "stepIndex": 8,
+            "stepType": "tool_result",
+            "toolName": "web_fetch",
+            "inputSummary": "url=https://stackedit. io/app, extract_text=True",
+            "outputSummary": "Stack Edit",
+            "sourceUrl": null,
+            "durationMs": 1006,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:01.830672+00:00Z"
+          },
+          {
+            "stepIndex": 9,
+            "stepType": "review",
+            "toolName": "ollama/gemma4:31b-cloud",
+            "inputSummary": null,
+            "outputSummary": "Result: APPROVED. Feedback: Review timeout.",
+            "sourceUrl": null,
+            "durationMs": 20003,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:21.834805+00:00Z"
+          },
+          {
+            "stepIndex": 10,
+            "stepType": "synthesis",
+            "toolName": null,
+            "inputSummary": null,
+            "outputSummary": "The page titled `Stack Edit` contains the following main content: Stack Edit...",
+            "sourceUrl": null,
+            "durationMs": 26788,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:21.835022+00:00Z"
+          }
+        ],
+        "stepCount": 11,
+        "createdAt": "2026-04-24T13:27:21.835108+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": true,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "tool",
+          "brief": "Executed 4 tool(s): skill_grounded-web-summary, web_search, web_fetch, ollama/gemma4:31b-cloud.",
+          "lastAction": "Completed web_fetch"
+        }
+      }
+    },
+    {
+      "step": 4,
+      "title": "Level 4: Research Brief With Explicit Workflow",
+      "passed": false,
+      "latency": 31.595604181289673,
+      "reasons": [
+        "Reviewer did not approve the final draft"
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "web_search",
+        "web_fetch",
+        "skill_grounded-web-summary",
+        "web_search",
+        "web_fetch"
+      ],
+      "content": "## Research Notes\n\nThe search results retrieved are irrelevant to the topic of IPL 2026 standings. The web_fetch result fetched the liteLLM documentation page, not any cricket-related source. No actual evidence about IPL 2026 standings, points table, team rankings, or current developments was obtained from any tool call. The evidence is absent and cannot support any meaningful claims about the topic.\n\n## Draft\n\nNo draft can be produced because no relevant evidence was gathered. The search query and fetch target did not return any IPL-related information.\n\n## Final\n\n**No reliable information about IPL 2026 standings is available from the evidence gathered.** The search performed returned documentation pages about web fetch tools and API references, not cricket news or IPL standings. To obtain the most important current developments around India's IPL 2026 standings race, a proper search with a targeted query (e.g., \"IPL 2026 standings race\" or \"IPL 2026 points table\") on a cricket news site or sports platform would be required. Based on the evidence obtained, no standings data, team rankings, or competitive developments can be reported. The strongest available evidence is that the tool results are entirely off-topic and insufficient for any answer.\n\nReviewer note: Top problems: 1) Draft and Final say 'no evidence found', but the user asked to do research. 2) You should re-search with a targeted sports query, not stop after one bad fetch. 3) Do not declare final answer before trying proper search terms like 'IPL 2026 standings' or 'IPL 2026 points table'. Next attempt: use web_search with targeted cricket/IPL query, fetch from a known sports site (e.g., ESPNcricinfo), then produce markdown with sections as requested.",
+      "review_events": [
+        {
+          "approved": false,
+          "feedback": "Top problems: 1) The answer does not include any actual evidence about IPL 2026 standings from the fetched content, as the page retrieved (liteLLM docs) is irrelevant to IPL. 2) The draft does not follow the required markdown sections (## Research Notes, ## Draft, ## Final). 3) The answer fails to clearly state uncertainty and does not reflect strongest gathered evidence (which is none). Next: redo the search with a proper query for 'IPL 2026 standings race' and use web_fetch on actual cricket/news sites.",
+          "reviewer_id": "ollama/gemma4:31b-cloud"
+        },
+        {
+          "approved": false,
+          "feedback": "Top problems: 1) Draft and Final say 'no evidence found', but the user asked to do research. 2) You should re-search with a targeted sports query, not stop after one bad fetch. 3) Do not declare final answer before trying proper search terms like 'IPL 2026 standings' or 'IPL 2026 points table'. Next attempt: use web_search with targeted cricket/IPL query, fetch from a known sports site (e.g., ESPNcricinfo), then produce markdown with sections as requested.",
+          "reviewer_id": "ollama/gemma4:31b-cloud"
+        }
+      ],
+      "provenance": {
+        "runId": "ae5ca68b-2099-4bab-9d8c-0c52ffd199f0",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-6c2a0055",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:23.607503+00:00Z"
+          },
+          {
+            "stepIndex": 1,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:26.599060+00:00Z"
+          },
+          {
+            "stepIndex": 2,
+            "stepType": "tool_call",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Do a full web research brief using search plus fetch/brow...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:26.599093+00:00Z"
+          },
+          {
+            "stepIndex": 3,
+            "stepType": "tool_result",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Do a full web research brief using search plus fetch/brow...",
+            "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Do a full web research brief using search plus fetch/brow..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:26.599187+00:00Z"
+          },
+          {
+            "stepIndex": 4,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:26.599270+00:00Z"
+          },
+          {
+            "stepIndex": 5,
+            "stepType": "tool_call",
+            "toolName": "web_search",
+            "inputSummary": "query=Do a full web research brief using search plus fetch/brow...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:26.599317+00:00Z"
+          },
+          {
+            "stepIndex": 6,
+            "stepType": "tool_result",
+            "toolName": "web_search",
+            "inputSummary": "query=Do a full web research brief using search plus fetch/brow...",
+            "outputSummary": "3 results found (first: Web Fetch | lite LLM)",
+            "sourceUrl": null,
+            "durationMs": 5337,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:31.936711+00:00Z"
+          },
+          {
+            "stepIndex": 7,
+            "stepType": "tool_call",
+            "toolName": "web_fetch",
+            "inputSummary": "url=https://docs. litellm. ai/docs/completion/web_fetch, extract_text=True",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:31.937002+00:00Z"
+          },
+          {
+            "stepIndex": 8,
+            "stepType": "tool_result",
+            "toolName": "web_fetch",
+            "inputSummary": "url=https://docs. litellm. ai/docs/completion/web_fetch, extract_text=True",
+            "outputSummary": "Web Fetch | lite LLM Skip to main content \ud83d\ude85 Lite LLM Docs Learn Integrations Enterprise Changelog Blog Learn Start Here SDK Quickstart Gateway Quickstart Guides Core Requests Streaming + Async Batching Completion() Structured Outputs (JSON Mode) 'Thinking' / 'Reasoning Content' Tool Calling Function Calling Web Search Web Search Interception Web Fetch Computer Use Code Interpreter Advisor Tool Message Sanitization for Tool Calling for anthropic models Multimodal I/O Retrieval & Knowledge Prompt...",
+            "sourceUrl": null,
+            "durationMs": 1011,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:32.949172+00:00Z"
+          },
+          {
+            "stepIndex": 9,
+            "stepType": "review",
+            "toolName": "ollama/gemma4:31b-cloud",
+            "inputSummary": null,
+            "outputSummary": "Result: REJECTED. Feedback: Top problems: 1) The answer does not include any actual evidence about IPL 2026 standings from the fetched content, as the page retrieved (lite LLM docs) is irrelevant to IPL. 2) The draft does not follow the required markdown sections (## Research Notes, ## Draft, ## Final). 3) The answer fails to clearly state uncertainty and does not reflect strongest gathered evidence (which is none). Next: redo the search with a proper query for 'IPL 2026 standings race' and use w",
+            "sourceUrl": null,
+            "durationMs": 7843,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:40.793852+00:00Z"
+          },
+          {
+            "stepIndex": 10,
+            "stepType": "review",
+            "toolName": "ollama/gemma4:31b-cloud",
+            "inputSummary": null,
+            "outputSummary": "Result: REJECTED. Feedback: Top problems: 1) Draft and Final say 'no evidence found', but the user asked to do research. 2) You should re-search with a targeted sports query, not stop after one bad fetch. 3) Do not declare final answer before trying proper search terms like 'IPL 2026 standings' or 'IPL 2026 points table'. Next attempt: use web_search with targeted cricket/IPL query, fetch from a known sports site (e. g., ESPNcricinfo), then produce markdown with sections as requested.",
+            "sourceUrl": null,
+            "durationMs": 4986,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:53.241865+00:00Z"
+          },
+          {
+            "stepIndex": 11,
+            "stepType": "synthesis",
+            "toolName": null,
+            "inputSummary": null,
+            "outputSummary": "## Research Notes The search results retrieved are irrelevant to the topic of IPL 2026 standings. The web_fetch result fetched the lite LLM documentation page, not any cricket-related source. No actua...",
+            "sourceUrl": null,
+            "durationMs": 29635,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T13:27:53.242059+00:00Z"
+          }
+        ],
+        "stepCount": 12,
+        "createdAt": "2026-04-24T13:27:53.242122+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": true,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "tool",
+          "brief": "Executed 4 tool(s): skill_grounded-web-summary, web_search, web_fetch, ollama/gemma4:31b-cloud.",
+          "lastAction": "Completed web_fetch"
+        }
+      }
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+import type { ChatControlState } from './chat';
+
 export interface WorkspaceFilesState {
   soul: string;
   user: string;
@@ -29,6 +31,7 @@ export interface AppSettingsState {
     githubConnected: boolean;
     slackConnected: boolean;
   };
+  chatDefaults: ChatControlState;
 }
 
 export interface SettingsPayload {

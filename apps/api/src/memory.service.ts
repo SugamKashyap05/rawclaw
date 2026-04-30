@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
-import { MemoryEntry, MemorySearchRequest, MemorySearchResult, MemoryStats } from '@rawclaw/shared';
+import { CommandMemoryOverview, MemoryEntry, MemorySearchRequest, MemorySearchResult, MemoryStats } from '@rawclaw/shared';
 import { PrismaService } from './prisma.service';
 
 type PrismaMemoryRow = {
@@ -41,7 +41,24 @@ export class MemoryService {
       const response = await firstValueFrom(
         this.httpService.post<MemoryEntry>(`${this.agentUrl}/api/memory/add`, payload),
       );
-      return response.data;
+      const entry = response.data;
+      await this.prisma.memoryEntry.upsert({
+        where: { id: entry.id },
+        update: {
+          content: entry.content,
+          tags: JSON.stringify(entry.tags ?? []),
+          source: entry.source ?? null,
+          collection: entry.collection?.trim() || payload.collection?.trim() || 'default',
+        },
+        create: {
+          id: entry.id,
+          content: entry.content,
+          tags: JSON.stringify(entry.tags ?? []),
+          source: entry.source ?? null,
+          collection: entry.collection?.trim() || payload.collection?.trim() || 'default',
+        },
+      });
+      return entry;
     } catch {
       return this.addFallback(payload);
     }
@@ -69,6 +86,40 @@ export class MemoryService {
     } catch {
       return this.clearFallback(collection);
     }
+  }
+
+  async listEntries(options?: { collection?: string; source?: string; limit?: number }): Promise<MemoryEntry[]> {
+    const rows = await this.prisma.memoryEntry.findMany({
+      where: {
+        ...(options?.collection ? { collection: options.collection } : {}),
+        ...(options?.source ? { source: options.source } : {}),
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: options?.limit ?? 50,
+    });
+
+    return rows.map((row) => this.toEntry(row));
+  }
+
+  async deleteEntry(id: string): Promise<{ success: true }> {
+    await this.prisma.memoryEntry.delete({ where: { id } });
+    return { success: true };
+  }
+
+  async getCommandOverview(sessionId?: string): Promise<CommandMemoryOverview> {
+    const [operator, mission, recent, session] = await Promise.all([
+      this.listEntries({ collection: 'operator', limit: 10 }),
+      this.listEntries({ collection: 'mission', limit: 10 }),
+      this.listEntries({ limit: 12 }),
+      this.listEntries({ collection: 'session', source: sessionId ? `session:${sessionId}` : undefined, limit: 10 }),
+    ]);
+
+    return {
+      operator,
+      mission,
+      session,
+      recent,
+    };
   }
 
   private async getFallbackStats(): Promise<MemoryStats> {

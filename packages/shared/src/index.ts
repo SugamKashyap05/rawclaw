@@ -12,5 +12,9 @@ export * from './contracts/models';
 export * from './contracts/settings';
 export * from './contracts/skill';
 export * from './contracts/system';
+export * from './contracts/assistant';
+export * from './contracts/process-controller';
+export * from './contracts/gateway';
+export * from './contracts/operator';
 
 export const RAWCLAW_VERSION = '0.1.0';

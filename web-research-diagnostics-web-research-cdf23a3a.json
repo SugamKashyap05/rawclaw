@@ -1,0 +1,1698 @@
+{
+  "session_id": "web-research-cdf23a3a",
+  "model": "gemma4:31b-cloud",
+  "prompt_pack_id": "rawclaw-default",
+  "results": [
+    {
+      "step": 1,
+      "title": "Level 1: Fresh News Snapshot",
+      "passed": false,
+      "diagnostics": {
+        "prompt": "Search the web for the latest SpaceX Starship updates and present a concise markdown answer with 3 bullets.",
+        "error": "ReadError: ",
+        "latency_seconds": 20.896029949188232,
+        "ttft_seconds": 0.0,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary"
+        ],
+        "review_feedback": [],
+        "provenance_step_types": [
+          "plan"
+        ],
+        "final_answer_preview": "",
+        "final_answer_length": 0,
+        "markdown_detected": false,
+        "keyword_checks": {
+          "required": {
+            "spacex": false,
+            "starship": false
+          },
+          "forbidden": {}
+        },
+        "validation_reasons": [
+          "ReadError: "
+        ],
+        "raw_event_count": 6,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "a4342406-dce2-46b6-8445-8ea9e7b93ac5",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:02.570562+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-25T08:00:02.570638+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Search the web for the latest SpaceX Starship updates and present a concise markdown answer with 3 bullets."
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Search the web for the latest SpaceX Starship updates and present a concise markdown answer with 3 bullets."
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Search the web for the latest SpaceX Starship updates and present a concise markdown answer with 3 bullets."
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Search the web for the latest SpaceX Starship updates and present a concise markdown answer with 3 bullets.",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "latest spacex starship updates"
+              }
+            }
+          },
+          {
+            "type": "heartbeat",
+            "ts": 1777104012572
+          },
+          {
+            "type": "heartbeat",
+            "ts": 1777104022573
+          }
+        ],
+        "persisted_prompt_metadata": {}
+      }
+    },
+    {
+      "step": 2,
+      "title": "Level 2: Search + Fetch Grounded Summary",
+      "passed": true,
+      "diagnostics": {
+        "prompt": "Research the latest Chennai Super Kings IPL 2026 points-table situation. Use web search, fetch the strongest page you find, and present a markdown summary with 4 bullets plus one uncertainty note if needed.",
+        "error": null,
+        "latency_seconds": 4.259593963623047,
+        "ttft_seconds": 4.259023666381836,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "review_feedback": [
+          {
+            "approved": false,
+            "feedback": "Return at least 4 concise markdown bullets.",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          },
+          {
+            "approved": false,
+            "feedback": "Revision did not complete in time. Returning the best available draft with reviewer guidance.",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "- I could not verify the current IPL 2026 points table from the gathered evidence.\n- Chennai Super Kings and other standings details still need a working web lookup before they can be summarized confidently.\n- Net run rate, points, and playoff-race details could not be confirmed from the failed search step.\n- I could not fully verify the requested result because the strongest fetched source was weak, irrelevant, or incomplete.",
+        "final_answer_length": 430,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "ipl": true,
+            "points": true
+          },
+          "forbidden": {}
+        },
+        "validation_reasons": [],
+        "raw_event_count": 10,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "8961acf5-85f5-431f-8c3a-ff8528ca05e4",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:26.756806+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-25T08:00:26.756919+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Research the latest Chennai Super Kings IPL 2026 points-table situation. Use web search, fetch the strongest page you find, and present a markdown summary with 4 bullets plus one uncertainty note if needed."
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Research the latest Chennai Super Kings IPL 2026 points-table situation. Use web search, fetch the strongest page you find, and present a markdown summary with 4 bullets plus one uncertainty note if needed."
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Research the latest Chennai Super Kings IPL 2026 points-table situation. Use web search, fetch the strongest page you find, and present a markdown summary with 4 bullets plus one uncertainty note if needed."
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Research the latest Chennai Super Kings IPL 2026 points-table situation. Use web search, fetch the strongest page you find, and present a markdown summary with 4 bullets plus one uncertainty note if needed.",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "chennai super kings ipl 2026 points-table situation site:iplt20.com"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "chennai super kings ipl 2026 points-table situation site:iplt20.com"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "chennai super kings ipl 2026 points-table situation site:iplt20.com"
+              },
+              "output": {
+                "source_engine": "web-search",
+                "results": [
+                  {
+                    "title": null,
+                    "url": null,
+                    "snippet": "Error executing tool 'web-search': Search failed for \"chennai super kings ipl 2026 points-table situation site:iplt20.com\": HTTP 202: Failed to fetch search results"
+                  }
+                ],
+                "fetch_count": 0,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable"
+              },
+              "error": null,
+              "duration_ms": 472.19,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "engine": "web-search",
+                "results_count": 1,
+                "fetched_count": 0,
+                "result_quality": "good"
+              }
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": false,
+            "feedback": "Return at least 4 concise markdown bullets.",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "review_result",
+            "approved": false,
+            "feedback": "Revision did not complete in time. Returning the best available draft with reviewer guidance.",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "- I could not verify the current IPL 2026 points table from the gathered evidence.\n- Chennai Super Kings and other standings details still need a working web lookup before they can be summarized confidently.\n- Net run rate, points, and playoff-race details could not be confirmed from the failed search step.\n- I could not fully verify the requested result because the strongest fetched source was weak, irrelevant, or incomplete."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "8961acf5-85f5-431f-8c3a-ff8528ca05e4",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:26.756806+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:29.334587+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Research the latest Chennai Super Kings IPL 2026 points-t...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:29.334628+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Research the latest Chennai Super Kings IPL 2026 points-t...",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Research the latest Chennai Super Kings IPL 2026 points-t..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:29.334740+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:29.334848+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=chennai super kings ipl 2026 points-table situation site:...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:29.335001+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=chennai super kings ipl 2026 points-table situation site:...",
+                  "outputSummary": "1 results found",
+                  "sourceUrl": null,
+                  "durationMs": 472,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:29.807245+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: REJECTED. Feedback: Return at least 4 concise markdown bullets.",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:29.807672+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "- I could not verify the current IPL 2026 points table from the gathered evidence.\n- Chennai Super Kings and other standings details still need a working web lookup before they can be summarized confi...",
+                  "sourceUrl": null,
+                  "durationMs": 3052,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:29.807763+00:00Z"
+                }
+              ],
+              "stepCount": 9,
+              "createdAt": "2026-04-25T08:00:29.807801+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "c37010bbf28c20c0",
+          "reviewerPromptVersionHash": "8c8d662b021be4f4",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    },
+    {
+      "step": 3,
+      "title": "Level 3: Comparative Research Memo",
+      "passed": false,
+      "diagnostics": {
+        "prompt": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list",
+        "error": null,
+        "latency_seconds": 11.863622426986694,
+        "ttft_seconds": 11.862890005111694,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "review_feedback": [
+          {
+            "approved": false,
+            "feedback": "Use the gathered search evidence directly instead of claiming no reliable sources were available.",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          },
+          {
+            "approved": false,
+            "feedback": "Revision did not complete in time. Returning the best available draft with reviewer guidance.",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "## Findings\n- I could not verify two strong current OpenAI API updates from the gathered evidence.\n- A working search result set is still needed before comparing recent OpenAI API releases or announcements.\n- The current API update timeline could not be confirmed from the failed search step.\n\n## Sources Used\n- Search evidence was available, but the fetched page was not reliable enough to fully trust.",
+        "final_answer_length": 403,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "findings": true,
+            "sources": true,
+            "openai": true,
+            "api": true
+          },
+          "forbidden": {
+            "i already provided": false,
+            "the user asked for": false
+          }
+        },
+        "validation_reasons": [
+          "Reviewer did not approve the final draft",
+          "No fetch/browser fallback tool was called"
+        ],
+        "raw_event_count": 11,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "63b75134-79f0-4768-8262-4fa29c3e664f",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:31.038788+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-25T08:00:31.038960+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "heartbeat",
+            "ts": 1777104041184
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              },
+              "output": {
+                "source_engine": "web-search",
+                "results": [
+                  {
+                    "title": null,
+                    "url": null,
+                    "snippet": "1. **Google** URL: https://www.google.com/ Display URL: www.google.com Snippet: Search the world's information, including webpages, images, videos and more. Google has many special features to help you find exactly what you're looking for. Content: Title: Google URL Source: https://www.google.com/ Markdown Content: # Google [About](https://about.google/?fg=1&utm_source=google-US&utm_medium=referral&utm_campaign=hp-header)[Store](https://store.google.com/US?utm_source=hp_header&utm_medium=google_ooo&utm_campaign=GS100042&hl=en-US) [Gmail](https://mail.google.com/mail/&ogbl) [Images](https://www.google.com/imghp?hl=en&ogbl) [](https://www.google.com/intl/en/about/products) [Sign in](https://accounts.google.com/ServiceLogin?hl=en&passive=true&continue=https://www.google.com/&ec=futura_exp_og_so_72776762_e) * Upload image * Upload file ![Image 1: Thumbnail for file attachment](blob:http://localhost/19e11e6f3de559d3fa2b3e2a11a6b6c3) AI Mode Choose what you\u2019re giving feedback on * ![Image 2](https://www.google.com/) ![Image 3](https://www.google.com/)![Image 4](https://www.google.com/) * * * See more Delete * ![Image 5](https://www.google.com/) ![Image 6](https://www.google.com/)![Image 7](https://www.google.com/) * Delete ![Image 8](https://www.google.com/) ![Image 9](https://www.google.com/)![Image 10](https://www.google.com/) * Report inappropriate predictions I'm Feeling Curious I'm Feeling Hungry I'm Feeling Adventurous I'm Feeling Playful I'm Feeling Stellar I'm Feeling Doodley I'm Feeling Trendy I'm Feeling Artistic I'm Feeling Funny I'm Feeling Mindful It\u2019s Drug Take Back Day: [Find locations to safely dispose of unneeded medication](https://www.google.com/) [Advertising](https://www.google.com/intl/en_us/ads/?subid=ww-ww-et-g-awa-a-g_hpafoot1_1!o2&utm_source=google.com&utm_medium=referral&utm_campaign=google_hpafooter&fg=1)[Business](https://www.google.com/services/?subid=ww-ww-et-g-awa-a-g_hpbfoot1_1!o2&utm_source=google.com&utm_medium=referral&utm_campaign=google_hpbfooter&fg=1)[How Search works](https://google.com/search/howsearchworks/?fg=1) [![Image 11](blob:http://localhost/4c83aac30d579a05ca74f7331aff3901)Applying AI towards science and the environment](https://ai.google/societal-impact/?utm_source=googlehpfooter&utm_medium=housepromos&utm_campaign=bottom-footer) [Privacy](https://policies.google.com/privacy?hl=en&fg=1)[Terms](https://policies.google.com/terms?hl=en&fg=1) Settings [Search settings](https://www.google.com/preferences?hl=en&fg=1) [Advanced search](https://www.google.com/advanced_search?hl=en&fg=1) [Your data in Search](https://www.google.com/history/privacyadvisor/search/unauth?utm_source=googlemenu&fg=1&cctld=com) [Search history](https://www.google.com/history/optout?hl=en&fg=1) [Search help](https://support.google.com/websearch/?p=ws_results_help&hl=en&fg=1) Send feedback Dark theme: Off Google apps Favicon: https://www.google.com/s2/favicons?domain=www.google.com&sz=32 2. **Dillinger - Online Markdown Editor** URL: https://dillinger.io/ Display URL: dillinger.io Snippet: Free markdown editor with live preview, cloud sync to GitHub, Dropbox & Google Drive. The preferred editor for AI and LLM workflows. Content: Title: Dillinger - Online Markdown Editor URL Source: https://dillinger.io/ Warning: This page maybe not yet fully loaded, consider explicitly specify a timeout. Warning: This page contains shadow DOM that are currently hidden, consider enabling shadow DOM processing. Markdown Content: ## Dillinger - Free Online Markdown Editor for Developers and AI Workflows DILLINGER ## Untitled Document.md Saved Loading... 387 words 2514 characters Default Favicon: https://www.google.com/s2/favicons?domain=dillinger.io&sz=32 3. **StackEdit - In-browser Markdown editor** URL: https://stackedit.io/ Display URL: stackedit.io Snippet: Full-featured, open-source Markdown editor based on PageDown, the Markdown library used by Stack Overflow and the other Stack Exchange sites. Content: Title: StackEdit \u2013 In-browser Markdown editor URL Source: https://stackedit.io/ Published Time: Sun, 09 Oct 2022 19:50:37 GMT Markdown Content: # StackEdit \u2013 In-browser Markdown editor [Start writing](https://stackedit.io/app \"The app\") In-browser Markdown editor [](https://twitter.com/stackedit)[](https://github.com/benweet/stackedit) [Read more](javascript:scrollTo($('.anchor'))) # Unrivalled writing experience ### Rich Markdown editor StackEdit\u2019s Markdown syntax highlighting is unique. The refined text formatting of the editor helps you visualize the final rendering of your files. ![Image 1](https://stackedit.io/static/landing/syntax-highlighting.gif) ![Image 2](https://stackedit.io/static/landing/navigation-bar.png) ### WYSIWYG controls StackEdit provides very handy formatting buttons and shortcuts, thanks to PageDown, the WYSIWYG-style Markdown editor used by Stack Overflow. ### Smart layout Whether you write, you review, you comment\u2026 StackEdit's layout provides you with the flexibility you need, without sacrifice. ![Image 3](https://stackedit.io/static/landing/smart-layout.png) ### Live preview with Scroll Sync StackEdit\u2019s Scroll Sync feature accurately binds the scrollbars of the editor panel and the preview panel to ensure that you always keep an eye on the output while writing. ![Image 4](https://stackedit.io/static/landing/scroll-sync.gif) # Designed for web writers ### Stay connected StackEdit can sync your files with Google Drive, Dropbox and GitHub. It can also publish them as blog posts to Blogger, WordPress and Zendesk. You can choose whether to upload in Markdown format, HTML, or to format the output using the Handlebars template engine. ![Image 5](https://stackedit.io/static/landing/providers.png) ### Collaborate With StackEdit, you can share collaborative workspaces, thanks to the synchronization mechanism. If two collaborators are working on the same file at the same time, StackEdit takes care of merging the changes. ![Image 6](https://stackedit.io/static/landing/workspace.png) ### Comment StackEdit allows you to insert inline comments and embed collaborator discussions in your files, just as well as Microsoft Word and Google Docs. ![Image 7](https://stackedit.io/static/landing/discussion.png) ### Write offline! Even when you travel, StackEdit is still accessible and lets you write offline just like any desktop application. You have no excuse! # Extended Markdown support ![Image 8](https://stackedit.io/static/landing/gfm.png) ### GitHub Flavored Markdown StackEdit supports different Markdown flavors such as Markdown Extra, GFM and CommonMark. Each Markdown feature can be enabled or disabled at your convenience. ![Image 9](https://stackedit.io/static/landing/katex.gif) ### LaTeX mathematical expressions StackEdit renders mathematics from LaTeX expressions inside your markdown file, as you would do on Stack Exchange. ![Image 10](https://stackedit.io/static/landing/mermaid.gif) ### UML diagrams StackEdit enables you to write sequence diagrams and flow charts using a simple syntax. ![Image 11](https://stackedit.io/static/landing/abc.png) ### Scores StackEdit can render musical scores using the ABC notation. ![Image 12](https://stackedit.io/static/landing/twemoji.png) ### Emojis StackEdit supports inserting emojis in your file using the Markdown emoji markup. [](https://twitter.com/stackedit)[](https://github.com/benweet/stackedit) [The app](https://stackedit.io/app \"The app\") \u2013 [Community](https://community.stackedit.io/ \"The app\") Copyright 2013-2019 [Benoit Schweblin](https://twitter.com/benweet) Licensed under an [Apache License](http://www.apache.org/licenses/LICENSE-2.0) \u2013 [Privacy Policy](https://stackedit.io/privacy_policy.html) Favicon: https://www.google.com/s2/favicons?domain=stackedit.io&sz=32 4. **Markdown Live Preview** URL: https://markdownlivepreview.com/ Display URL: markdownlivepreview.com Snippet: Markdown is a lightweight markup language with plain-text-formatting syntax, created in 2004 by John Gruber with Aaron Swartz. Markdown is often used to format readme files, for writing messages in online discussion forums, and to create rich text using a plain text editor. Content: Title: Markdown Live Preview URL Source: https://markdownlivepreview.com/ Markdown Content: ## Markdown syntax guide ## Headers ## This is a Heading h1 ## This is a Heading h2 ###### This is a Heading h6 ## Emphasis _This text will be italic_ _This will also be italic_ **This text will be bold** **This will also be bold** _You **can** combine them_ ## Lists ### Unordered * Item 1 * Item 2 * Item 2a * Item 2b * Item 3a * Item 3b ### Ordered 1. Item 1 2. Item 2 3. Item 3 1. Item 3a 2. Item 3b ## Images ![Image 1: This is an alt text.](https://markdownlivepreview.com/image/Markdown-mark.svg) ## Links You may be using [Markdown Live Preview](https://markdownlivepreview.com/). ## Blockquotes > Markdown is a lightweight markup language with plain-text-formatting syntax, created in 2004 by John Gruber with Aaron Swartz. > > > > Markdown is often used to format readme files, for writing messages in online discussion forums, and to create rich text using a plain text editor. ## Tables | Left columns | Right columns | | --- | --- | | left foo | right foo | | left bar | right bar | | left baz | right baz | ## Blocks of code ``` let message = 'Hello world'; alert(message); ``` ## Inline code This web site is using `markedjs/marked`. Favicon: https://www.google.com/s2/favicons?domain=markdownlivepreview.com&sz=32 5. **Markdown Cheat Sheet** URL: https://www.markdownguide.org/cheat-sheet/ Display URL: www.markdownguide.org/cheat-sheet/ Snippet: A quick reference to the Markdown syntax. Overview This Markdown cheat sheet provides a quick overview of all the Markdown syntax elements. It can't cover every edge case, so if you need more information about any of these elements, refer to the reference guides for basic syntax and extended syntax. Basic Syntax These are the elements outlined in John Gruber's original design document. All ... Content: Title: Markdown Cheat Sheet | Markdown Guide URL Source: https://www.markdownguide.org/cheat-sheet/ Markdown Content: ## Overview[](https://www.markdownguide.org/cheat-sheet/#overview) This Markdown cheat sheet provides a quick overview of all the Markdown syntax elements. It can\u2019t cover every edge case, so if you need more information about any of these elements, refer to the reference guides for [basic syntax](https://www.markdownguide.org/basic-syntax/) and [extended syntax](https://www.markdownguide.org/extended-syntax/). ## Basic Syntax[](https://www.markdownguide.org/cheat-sheet/#basic-syntax) These are the elements outlined in John Gruber\u2019s original design document. All Markdown applications support these elements. | Element | Markdown Syntax | | --- | --- | | [Heading](https://www.markdownguide.org/basic-syntax/#headings) | ``` # H1 ## H2 ### H3 ``` | | [Bold](https://www.markdownguide.org/basic-syntax/#bold) | `**bold text**` | | [Italic](https://www.markdownguide.org/basic-syntax/#italic) | `*italicized text*` | | [Blockquote](https://www.markdownguide.org/basic-syntax/#blockquotes-1) | `> blockquote` | | [Ordered List](https://www.markdownguide.org/basic-syntax/#ordered-lists) | ``` 1. First item 2. Second item 3. Third item ``` | | [Unordered List](https://www.markdownguide.org/basic-syntax/#unordered-lists) | ``` - First item - Second item - Third item ``` | | [Code](https://www.markdownguide.org/basic-syntax/#code) | ``code`` | | [Horizontal Rule](https://www.markdownguide.org/basic-syntax/#horizontal-rules) | `---` | | [Link](https://www.markdownguide.org/basic-syntax/#links) | `[title](https://www.example.com)` | | [Image](https://www.markdownguide.org/basic-syntax/#images-1) | `![alt text](image.jpg)` | ## Extended Syntax[](https://www.markdownguide.org/cheat-sheet/#extended-syntax) These elements extend the basic syntax by adding additional features. Not all Markdown applications support these elements. | Element | Markdown Syntax | | --- | --- | | [Table](https://www.markdownguide.org/extended-syntax/#tables) | ``` | Syntax | Description | | ----------- | ----------- | | Header | Title | | Paragraph | Text | ``` | | [Fenced Code Block](https://www.markdownguide.org/extended-syntax/#fenced-code-blocks) | ``` ``` { \"firstName\": \"John\", \"lastName\": \"Smith\", \"age\": 25 } ``` ``` | | [Footnote](https://www.markdownguide.org/extended-syntax/#footnotes) | ``` Here's a sentence with a footnote. [^1] [^1]: This is the footnote. ``` | | [Heading ID](https://www.markdownguide.org/extended-syntax/#heading-ids) | `### My Great Heading {#custom-id}` | | [Definition List](https://www.markdownguide.org/extended-syntax/#definition-lists) | ``` term : definition ``` | | [Strikethrough](https://www.markdownguide.org/extended-syntax/#strikethrough) | `~~The world is flat.~~` | | [Task List](https://www.markdownguide.org/extended-syntax/#task-lists) | ``` - [x] Write the press release - [ ] Update the website - [ ] Contact the media ``` | | [Emoji](https://www.markdownguide.org/extended-syntax/#emoji) (see also [Copying and Pasting Emoji](https://www.markdownguide.org/extended-syntax/#copying-and-pasting-emoji)) | ``` That is so funny! :joy: ``` | | [Highlight](https://www.markdownguide.org/extended-syntax/#highlight) | ``` I need to highlight these ==very important words==. ``` | | [Subscript](https://www.markdownguide.org/extended-syntax/#subscript) | ``` H~2~O ``` | | [Superscript](https://www.markdownguide.org/extended-syntax/#superscript) | ``` X^2^ ``` | ## Downloads[](https://www.markdownguide.org/cheat-sheet/#downloads) You can [download this cheat sheet as a Markdown file](https://www.markdownguide.org/assets/markdown-cheat-sheet.md) for use in your Markdown application. [![Image 1: Markdown Guide book cover](https://www.markdownguide.org/assets/images/generated/assets/images/book-cover-1080.jpg)](https://www.markdownguide.org/book/) ##### Take your Markdown skills to the next level. Learn Markdown in 60 pages. Designed for both novices and experts, _The Markdown Guide_ book is a comprehensive reference that has everything you need to get started and master Markdown syntax. [Get the Book](https://www.markdownguide.org/book/) ###### Want to learn more Markdown? Don't stop now! \ud83d\ude80 Star the [GitHub repository](https://github.com/mattcone/markdown-guide) and then enter your email address below to receive new Markdown tutorials via email. No spam! Favicon: https://www.google.com/s2/favicons?domain=www.markdownguide.org&sz=32"
+                  }
+                ],
+                "fetch_count": 0,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable"
+              },
+              "error": null,
+              "duration_ms": 9163.17,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "engine": "web-search",
+                "results_count": 1,
+                "fetched_count": 0,
+                "result_quality": "good"
+              }
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": false,
+            "feedback": "Use the gathered search evidence directly instead of claiming no reliable sources were available.",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "review_result",
+            "approved": false,
+            "feedback": "Revision did not complete in time. Returning the best available draft with reviewer guidance.",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "## Findings\n- I could not verify two strong current OpenAI API updates from the gathered evidence.\n- A working search result set is still needed before comparing recent OpenAI API releases or announcements.\n- The current API update timeline could not be confirmed from the failed search step.\n\n## Sources Used\n- Search evidence was available, but the fetched page was not reliable enough to fully trust."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "63b75134-79f0-4768-8262-4fa29c3e664f",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:31.038788+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:32.839279+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Search the web, fetch pages as needed, and write a compac...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:32.839333+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Search the web, fetch pages as needed, and write a compac...",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Search the web, fetch pages as needed, and write a compac..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:32.839443+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:32.839540+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Search the web, fetch pages as needed, and write a compac...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:32.839670+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Search the web, fetch pages as needed, and write a compac...",
+                  "outputSummary": "1 results found",
+                  "sourceUrl": null,
+                  "durationMs": 9163,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:42.002929+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: REJECTED. Feedback: Use the gathered search evidence directly instead of claiming no reliable sources were available.",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:42.003562+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "## Findings\n- I could not verify two strong current Open AI API updates from the gathered evidence.\n- A working search result set is still needed before comparing recent Open AI API releases or announce...",
+                  "sourceUrl": null,
+                  "durationMs": 10967,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:42.003694+00:00Z"
+                }
+              ],
+              "stepCount": 9,
+              "createdAt": "2026-04-25T08:00:42.003742+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "fa87ffdd38df9c86",
+          "reviewerPromptVersionHash": "8c8d662b021be4f4",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    },
+    {
+      "step": 4,
+      "title": "Level 4: Research Brief With Explicit Workflow",
+      "passed": true,
+      "diagnostics": {
+        "prompt": "Do a full web research brief using search plus fetch/browse as needed, then present the final answer in markdown.\n\nTopic: what are the most important current developments around India's IPL 2026 standings race? Return only markdown with sections:\n## Research Notes\n## Draft\n## Final",
+        "error": null,
+        "latency_seconds": 12.380707025527954,
+        "ttft_seconds": 12.379951000213623,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "review_feedback": [
+          {
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "## Research Notes\n- IPL; Standings: Search results did not return strong, clearly relevant evidence.\n\n## Draft\n- I could not verify a reliable, current summary from the gathered evidence.\n\n## Final\n- I could not verify the most important current developments from the gathered evidence.",
+        "final_answer_length": 286,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "research notes": true,
+            "draft": true,
+            "final": true,
+            "ipl": true,
+            "standings": true
+          },
+          "forbidden": {
+            "viewing ad": false,
+            "tickets ad": false
+          }
+        },
+        "validation_reasons": [],
+        "raw_event_count": 10,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "11a28d76-ce53-44be-a67c-dbe8e9d3a51b",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:42.822763+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-25T08:00:42.822812+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Do a full web research brief using search plus fetch/browse as needed, then present the final answer in markdown.\n\nTopic: what are the most important current developments around India's IPL 2026 standings race? Return only markdown with sections:\n## Research Notes\n## Draft\n## Final"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Do a full web research brief using search plus fetch/browse as needed, then present the final answer in markdown.\n\nTopic: what are the most important current developments around India's IPL 2026 standings race? Return only markdown with sections:\n## Research Notes\n## Draft\n## Final"
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Do a full web research brief using search plus fetch/browse as needed, then present the final answer in markdown.\n\nTopic: what are the most important current developments around India's IPL 2026 standings race? Return only markdown with sections:\n## Research Notes\n## Draft\n## Final"
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Do a full web research brief using search plus fetch/browse as needed, then present the final answer in markdown.\n\nTopic: what are the most important current developments around India's IPL 2026 standings race? Return only markdown with sections:\n## Research Notes\n## Draft\n## Final",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "heartbeat",
+            "ts": 1777104052823
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              },
+              "output": {
+                "source_engine": "web-search",
+                "results": [
+                  {
+                    "title": null,
+                    "url": null,
+                    "snippet": "1. **IPL Travel Deals - Fly for IPL 2026more info** URL: https://duckduckgo.com/y.js?ad_domain=makemytrip.com&ad_provider=bingv7aa&ad_type=txad&click_metadata=CkBaEmU1q4e6C3UzqPNGcXGNSXpX-Goe-srltT48QCkucwHIjhFDrPWCAJzJWidzP42mnthWL90c2B2ZTpIAqm1wVRPFrQrTQYjuKH3OIrvRFCs2JU6nCxWs3-VM0yWzL-nZuXu0L2zz2q9v53OvNqDKfkJ-rR05MyVlSAMtJFA.YlwNz_xobOb8F3sz3_5SfA&rut=0eb8a0e7ef2395d388796d6153dab76649a3d5a4e0e204ee7d56c64bc4d910d6&u3=https://www.bing.com/aclick?ld=e85zLGSczu_jr44p7Zm0PwbTVUCUwOaC0AH6-2aknBv5Gh9By7iJbDUITYrKYBGlogqcXNp31geX-oJFPsuD_2kbSTgKMUhVHfQhXX2yUjDJJByhc-vLNK27VXU-7MCRDYzsxxH56_9BcTrLyufppnXCZXSoXpBNlqNYghOpQ7LVzD6vHB_inhi5L8EyHwdFmQ4kM76u-cZ3TV9DPqph6rtvEYtJ4&u=aHR0cHMlM2ElMmYlMmZwaXhlbC5ldmVyZXN0dGVjaC5uZXQlMmYxNjMxJTJmY3ElM2Zldl9zaWQlM2QzJTI2ZXZfbG4lM2RpbmRpYW4lMjUyMHByZW1pZXIlMjUyMGxlYWd1ZSUyNTIwZ2FtZSUyNmV2X2x4JTNka3dkLTcxMTk0MjI3NDAxMzYzJTNhbG9jLTkwJTI2ZXZfY3J4JTNkJTI2ZXZfbXQlM2RwJTI2ZXZfbiUzZHMlMjZldl9sdHglM2QlMjZldl9wbCUzZCUyNmV2X3BvcyUzZCUyNmV2X2R2YyUzZGMlMjZldl9kdm0lM2QlMjZldl9waHklM2QyNjIwMjUlMjZldl9sb2MlM2QlMjZldl9jeCUzZDYyNzU5NDcyNSUyNmV2X2F4JTNkMTEzOTA5NTkwNTgyMjAzNCUyNmV2X2VmaWQlM2QlM2FHJTNhcyUyNnVybCUzZGh0dHBzJTI1M0ElMjUyRiUyNTJGd3d3Lm1ha2VteXRyaXAuY29tJTI1MkZmbGlnaHRzJTI1MkYlMjUzRmNtcCUyNTNEU0VNJTI1N0NEJTI1N0NERiUyNTdDQiUyNTdDQ2l0eSUyNTdDU2VhcmNoJTI1N0NJUExfRmxpZ2h0X01hdGNoX0NpdGllcyUyNTdDRmxpZ2h0JTI1MjZlZl9pZCUyNTNEJTI1M0FHJTI1M0FzJTI2bXNjbGtpZCUzZDdlNDM3ZjczY2I5YzFlOTlmMzQ1MTY5ZmJmMzIxZjQ1&rlid=7e437f73cb9c1e99f345169fbf321f45&vqd=4-168033188692852283174461905365621692620&iurl={1}IG=963EF219087A44EB9D8927900FDC1962&CID=219A7486C55A66AA286863C0C438670A&ID=DevEx,5037.1 Display URL: makemytrip.com Snippet: Save more on flights to major match venues. Catch the IPL Live - Travel to the Stadium with Ease Content: Title: duckduckgo.com URL Source: https://duckduckgo.com/y.js?ad_domain=makemytrip.com&ad_provider=bingv7aa&ad_type=txad&click_metadata=CkBaEmU1q4e6C3UzqPNGcXGNSXpX-Goe-srltT48QCkucwHIjhFDrPWCAJzJWidzP42mnthWL90c2B2ZTpIAqm1wVRPFrQrTQYjuKH3OIrvRFCs2JU6nCxWs3-VM0yWzL-nZuXu0L2zz2q9v53OvNqDKfkJ-rR05MyVlSAMtJFA.YlwNz_xobOb8F3sz3_5SfA&rut=0eb8a0e7ef2395d388796d6153dab76649a3d5a4e0e204ee7d56c64bc4d910d6&u3=https://www.bing.com/aclick?ld=e85zLGSczu_jr44p7Zm0PwbTVUCUwOaC0AH6-2aknBv5Gh9By7iJbDUITYrKYBGlogqcXNp31geX-oJFPsuD_2kbSTgKMUhVHfQhXX2yUjDJJByhc-vLNK27VXU-7MCRDYzsxxH56_9BcTrLyufppnXCZXSoXpBNlqNYghOpQ7LVzD6vHB_inhi5L8EyHwdFmQ4kM76u-cZ3TV9DPqph6rtvEYtJ4&u=aHR0cHMlM2ElMmYlMmZwaXhlbC5ldmVyZXN0dGVjaC5uZXQlMmYxNjMxJTJmY3ElM2Zldl9zaWQlM2QzJTI2ZXZfbG4lM2RpbmRpYW4lMjUyMHByZW1pZXIlMjUyMGxlYWd1ZSUyNTIwZ2FtZSUyNmV2X2x4JTNka3dkLTcxMTk0MjI3NDAxMzYzJTNhbG9jLTkwJTI2ZXZfY3J4JTNkJTI2ZXZfbXQlM2RwJTI2ZXZfbiUzZHMlMjZldl9sdHglM2QlMjZldl9wbCUzZCUyNmV2X3BvcyUzZCUyNmV2X2R2YyUzZGMlMjZldl9kdm0lM2QlMjZldl9waHklM2QyNjIwMjUlMjZldl9sb2MlM2QlMjZldl9jeCUzZDYyNzU5NDcyNSUyNmV2X2F4JTNkMTEzOTA5NTkwNTgyMjAzNCUyNmV2X2VmaWQlM2QlM2FHJTNhcyUyNnVybCUzZGh0dHBzJTI1M0ElMjUyRiUyNTJGd3d3Lm1ha2VteXRyaXAuY29tJTI1MkZmbGlnaHRzJTI1MkYlMjUzRmNtcCUyNTNEU0VNJTI1N0NEJTI1N0NERiUyNTdDQiUyNTdDQ2l0eSUyNTdDU2VhcmNoJTI1N0NJUExfRmxpZ2h0X01hdGNoX0NpdGllcyUyNTdDRmxpZ2h0JTI1MjZlZl9pZCUyNTNEJTI1M0FHJTI1M0FzJTI2bXNjbGtpZCUzZDdlNDM3ZjczY2I5YzFlOTlmMzQ1MTY5ZmJmMzIxZjQ1&rlid=7e437f73cb9c1e99f345169fbf321f45&vqd=4-168033188692852283174461905365621692620&iurl={1}IG=963EF219087A44EB9D8927900FDC1962&CID=219A7486C55A66AA286863C0C438670A&ID=DevEx,5037.1 Warning: Target URL returned error 400: Bad Request Markdown Content: ## This page isn\u2019t working If the problem continues, contact the site owner. HTTP ERROR 400 If the problem continues, contact the site owner. Favicon: https://www.google.com/s2/favicons?domain=duckduckgo.com&sz=32 2. **IPL T20 | Indian Premier League Official Website** URL: https://www.iplt20.com/ Display URL: www.iplt20.com Snippet: The official IPL website with live scores, match updates, team rankings, all the latest news, and videos . Follow your favorite teams and players! Content: Title: IPL T20 | Indian Premier League Official Website URL Source: https://www.iplt20.com/ Markdown Content: # IPL T20 | Indian Premier League Official Website [![Image 1: BCCI Logo](https://documents.iplt20.com//ipl/assets/images/BCCI_logo.png)BCCI.TV](https://www.bcci.tv/)|[![Image 2: WPL Logo](https://documents.iplt20.com//ipl/assets/images/womens-premier-league-logonew.webp)](https://www.wplt20.com/)Follow Us[](https://twitter.com/IPL)[](https://www.instagram.com/iplt20/)[](https://www.facebook.com/IPL/) [![Image 3](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) [![Image 4](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) \u00d7 * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 5: menu](https://documents.iplt20.com//ipl/assets/images/new-menu.svg)](https://www.iplt20.com/#) * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 6](https://documents.iplt20.com//ipl/assets/images/fan-poll.webp)](https://www.iplt20.com/fan-poll)[![Image 7](https://documents.iplt20.com//ipl/assets/images/viewers-choice.webp)](https://www.iplt20.com/polls/emerging-player)![Image 8](https://documents.iplt20.com//ipl/assets/images/new-search-icon.svg) **Search**\u2715 ![Image 9: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393848823112-1777096512.jpg) [](javascript:void(0);) Video ## Kings in Capital - with Arshdeep Singh ### 25 Apr, 2026 | 03:32 mins | 2.8k [Play](javascript:;) ![Image 10](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66368/kings-in-capital---with-arshdeep-singh)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66368/kings-in-capital---with-arshdeep-singh)[](https://twitter.com/share?url=https://www.iplt20.com/video/66368/kings-in-capital---with-arshdeep-singh)[Copy](javascript:void();) ![Image 11: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393847942112-1777092084.jpg) [](javascript:void(0);) Video ## Timing over force ft. Devdutt Padikkal & Dinesh Karthik ### 25 Apr, 2026 | 02:54 mins | 6.6k [Play](javascript:;) ![Image 12](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66367/timing-over-force-ft-devdutt-padikkal--dinesh-karthik-)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66367/timing-over-force-ft-devdutt-padikkal--dinesh-karthik-)[](https://twitter.com/share?url=https://www.iplt20.com/video/66367/timing-over-force-ft-devdutt-padikkal--dinesh-karthik-)[Copy](javascript:void();) ![Image 13: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393801257112-1777052122.jpg) [](javascript:void(0);) Video ## Chase master at work! Virat Kohli's stroke-filled 81(44) ### 24 Apr, 2026 | 04:49 mins | 57.6k [Play](javascript:;) ![Image 14](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66327/chase-master-at-work-virat-kohlis-66th-tata-ipl-fifty)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66327/chase-master-at-work-virat-kohlis-66th-tata-ipl-fifty)[](https://twitter.com/share?url=https://www.iplt20.com/video/66327/chase-master-at-work-virat-kohlis-66th-tata-ipl-fifty)[Copy](javascript:void();) ![Image 15: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393803404112-1777051527.jpg) [](javascript:void(0);) Video ## DDP special! Devdutt Padikkal treats the fans with 55(27) ### 24 Apr, 2026 | 03:27 mins | 24.6k [Play](javascript:;) ![Image 16](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66328/ddp-special-devdutt-padikkal-treats-the-fans-to-a-gorgeous-half-century)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66328/ddp-special-devdutt-padikkal-treats-the-fans-to-a-gorgeous-half-century)[](https://twitter.com/share?url=https://www.iplt20.com/video/66328/ddp-special-devdutt-padikkal-treats-the-fans-to-a-gorgeous-half-century)[Copy](javascript:void();) ![Image 17: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393796688112-1777054672.jpg) [](javascript:void(0);) Video ## What a Sai-ght! Sai Sudharsan's magical 100(58) ### 24 Apr, 2026 | 04:43 mins | 52k [Play](javascript:;) ![Image 18](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66301/a-sai-ght-for-sore-eyes-sudharsan-shines-with-a-beautifully-paced-fifty)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66301/a-sai-ght-for-sore-eyes-sudharsan-shines-with-a-beautifully-paced-fifty)[](https://twitter.com/share?url=https://www.iplt20.com/video/66301/a-sai-ght-for-sore-eyes-sudharsan-shines-with-a-beautifully-paced-fifty)[Copy](javascript:void();) ![Image 19: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393794876112-1777044458.jpg) [](javascript:void(0);) Video ## Fastest to 2000! Sai Sudharsan reaches milestone with two fine sixes ### 24 Apr, 2026 | 01:18 mins | 23.9k [Play](javascript:;) ![Image 20](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66297/fastest-to-2000-sai-sudharsan-reaches-milestone-with-two-fine-sixes)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66297/fastest-to-2000-sai-sudharsan-reaches-milestone-with-two-fine-sixes)[](https://twitter.com/share?url=https://www.iplt20.com/video/66297/fastest-to-2000-sai-sudharsan-reaches-milestone-with-two-fine-sixes)[Copy](javascript:void();) prev next * 1 * 2 * 3 * 4 * 5 * 6 ## Good Afternoon! Curated shorts for you ![Image 21](https://documents.iplt20.com//ipl/assets/images/loader.gif) title sponsor[![Image 22: tata](https://www.iplt20.com/assets/images/new-sponsor-tata-logo.png)](https://www.tata.com/) PREMIER PARTNERS [![Image 23: angelone](https://www.iplt20.com/assets/images/new-sponsor-angelone-logo.png)](https://www.angelone.in/)[![Image 24: rupay](https://www.iplt20.com/assets/images/new-sponsor-rupay-logo.png)](https://www.rupay.co.in/)[![Image 25: google ai](https://www.iplt20.com/assets/images/new-sponsor-googleai-logo.png)](https://www.google.com/search?udm=50&aep=11&authuser=1) UMPIRE PARTNER[![Image 26: wonder-cement](https://www.iplt20.com/assets/images/new-sponsor-wondercement-logo.png)](https://www.wondercement.com/) strategic timeout partner[![Image 27: ceat](https://www.iplt20.com/assets/images/new-sponsor-ceat-logo.png)](https://www.ceat.com/) GOOD TIMES partner[![Image 28: ceat](https://www.iplt20.com/assets/images/new-sponsor-kingfisher-logo.png)](https://www.kingfisher.com/) official broadcaster[![Image 29: star sports](https://www.iplt20.com/assets/images/new-sponsor-starsports-logo.png)](https://www.hotstar.com/) official digital streaming partner[![Image 30: jio hotstar](https://www.iplt20.com/assets/images/new-sponsor-jiohotstar-logo.png)](https://www.hotstar.com/in/sports/cricket/tournaments/indian-premier-league) ## TEAM [Chennai super kings](https://www.iplt20.com/teams/chennai-super-kings)[Delhi Capitals](https://www.iplt20.com/teams/delhi-capitals)[Gujarat Titans](https://www.iplt20.com/teams/gujarat-titans)[Kolkata Knight Riders](https://www.iplt20.com/teams/kolkata-knight-riders)[Lucknow Super Giants](https://www.iplt20.com/teams/lucknow-super-giants)[Mumbai Indians](https://www.iplt20.com/teams/mumbai-indians)[Punjab Kings](https://www.iplt20.com/teams/punjab-kings)[Rajasthan Royals](https://www.iplt20.com/teams/rajasthan-royals)[Royal Challengers Bengaluru](https://www.iplt20.com/teams/royal-challengers-bengaluru)[Sunrisers Hyderabad](https://www.iplt20.com/teams/sunrisers-hyderabad) ## ABOUT [About Us](https://www.iplt20.com/about/about-us)[Anti Corruption Code](https://www.iplt20.com/about/anti-corruption-code?id=260)[Anti Doping Rules](https://www.iplt20.com/about/anti-doping-rules?id=261)[TUE Application Form](https://www.iplt20.com/about/tue-application-form?id=265)[Anti Discrimination Code](https://www.iplt20.com/about/anti-discrimination-code?id=266)[Clothing and Equipment Regulations](https://www.iplt20.com/about/clothing-and-equipment-regulations?id=267)[Code Of Conduct For Players and Teams Officials](https://www.iplt20.com/about/code-of-conduct-for-players-and-team-officials?id=268)[News Access Regulations](https://www.iplt20.com/about/news-access-regulations?id=270)[Image Use Terms](https://www.iplt20.com/about/image-use-terms?id=271) ## GUIDELINES [IPL Code Of Conduct For Match Officials](https://www.iplt20.com/about/code-of-conduct-for-match-officials-and-match-official-support-personnel?id=269)[Brand And Protection Guidelines](https://documents.iplt20.com/bcci/documents/1680174721009_Brand&ContentProtectionGuidelines.pdf)[Governing Council](https://www.iplt20.com/about/governing-council?id=275)[Match Playing Conditions](https://www.iplt20.com/about/match-playing-conditions?id=272)[PMOA Minimum Standard](https://www.iplt20.com/about/pmoa-minimum-standard?id=273)[Suspect Action Policy](https://www.iplt20.com/about/suspect-action-policy?id=290) ## CONTACT [Contact Us](https://www.iplt20.com/about/contact-us)[Sponsorship](https://www.iplt20.com/about/contact-us)[Privacy Policy](https://www.iplt20.com/privacy-policy)[Terms & Conditions](https://www.iplt20.com/terms-and-conditions) Copyright \u00a9 IPL 2026 All Rights Reserved. [What are cookies?](http://www.allaboutcookies.org/ \"Learn all about cookies and why sites use them\") We and selected third parties use cookies or similar technologies for technical purposes and, with your consent, for other purposes as specified in the [cookie policy.](https://www.iplt20.com/cookie-policy) Accept cookies [![Image 31](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) |![Image 32](https://documents.iplt20.com//ipl/assets/images/new-eye.svg)0| Share video on :[_\uf232_](zdasjavascript:void(0);)[](javascript:void(0);)[](javascript:void(0);)[Copy](javascript:void(0)) ## Magic Moments [View All](https://www.iplt20.com/video/magic-moments) ## Related Videos * 1 # IPL Exclusive Loading.... # Player Details [![Image 33](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) [- Player Profile \u00bb](https://www.iplt20.com/) | Role | Batsman | Nationality | Indian | ![Image 34](https://www.iplt20.com/#) | | --- | --- | | Bats | | Bowls | | | | | Bio | | A 22-year old opening batsman who hails from Pune, Ruturaj Gaikwad has been a consistent performer for his state team Maharashtra. He was the highest run-getter for Maharashtra in the league stage of the Syed Mushtaq Ali Trophy 2018-19. At the IPL 2019 Player Auction, the Chennai Super Kings secured his services at his base price of INR 20 lacs. | | [![Image 35](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) ## Title Favicon: https://www.google.com/s2/favicons?domain=www.iplt20.com&sz=32 3. **IPL 2026 Points Table | Team Standings & Rankings | IPLT20** URL: https://www.iplt20.com/points-table/men/2026 Display URL: www.iplt20.com/points-table/men/2026 Snippet: See the IPL 2026 points table with live team standings and rankings. Access past season standings and track team performance year by year on IPLT20. Content: Title: IPL 2026 Points Table | Team Standings & Rankings | IPLT20 URL Source: https://www.iplt20.com/points-table/men/2026 Markdown Content: # IPL 2026 Points Table | Team Standings & Rankings | IPLT20 [![Image 1: BCCI Logo](https://documents.iplt20.com//ipl/assets/images/BCCI_logo.png)BCCI.TV](https://www.bcci.tv/)|[![Image 2: WPL Logo](https://documents.iplt20.com//ipl/assets/images/womens-premier-league-logonew.webp)](https://www.wplt20.com/)Follow Us[](https://twitter.com/IPL)[](https://www.instagram.com/iplt20/)[](https://www.facebook.com/IPL/) [![Image 3](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) [![Image 4](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) \u00d7 * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 5: menu](https://documents.iplt20.com//ipl/assets/images/new-menu.svg)](https://www.iplt20.com/points-table/men/2026#) * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 6](https://documents.iplt20.com//ipl/assets/images/fan-poll.webp)](https://www.iplt20.com/fan-poll)[![Image 7](https://documents.iplt20.com//ipl/assets/images/viewers-choice.webp)](https://www.iplt20.com/polls/emerging-player)![Image 8](https://documents.iplt20.com//ipl/assets/images/new-search-icon.svg) **Search**\u2715 ## Points Table [Home](https://www.iplt20.com/)/[Points Table](https://www.iplt20.com/points-table/men/2026) Points Table * [Points Table](https://www.iplt20.com/points-table/men/2026#pointtable) * [Playoffs](https://www.iplt20.com/points-table/men/2026#bracketsfixture) MEN WOMEN SEASON ### Filters ![Image 9](https://www.iplt20.com/assets/images/close-sign.svg) ### Season ![Image 10](https://www.iplt20.com/assets/images/new-icon-share-gray.svg) [_\uf232_](https://wa.me/?text=http://www.iplt20.com/points-table/men/2026#bracketsfixture)[](https://www.facebook.com/sharer.php?u=http://www.iplt20.com/points-table/men/2026#bracketsfixture)[](https://twitter.com/share?url=http://www.iplt20.com/points-table/men/2026#bracketsfixture)[Copy](javascript:void();) ![Image 11](https://www.iplt20.com/points-table/men/2026) #### TBD ## Qualifier 1 TBD ![Image 12](https://www.iplt20.com/points-table/men/2026) #### TBD ![Image 13](https://www.iplt20.com/points-table/men/2026) #### TBD ## Eliminator TBD ![Image 14](https://www.iplt20.com/points-table/men/2026) #### TBD ![Image 15](https://www.iplt20.com/points-table/men/2026) #### TBD ## Qualifier 2 TBD ![Image 16](https://www.iplt20.com/points-table/men/2026) #### TBD ![Image 17](https://www.iplt20.com/points-table/men/2026) #### TBD ## Final TBD ![Image 18](https://www.iplt20.com/points-table/men/2026) #### TBD ![Image 19](https://www.iplt20.com/assets/images/teams-trophy-new.png) title sponsor[![Image 20: tata](https://www.iplt20.com/assets/images/new-sponsor-tata-logo.png)](https://www.tata.com/) PREMIER PARTNERS [![Image 21: angelone](https://www.iplt20.com/assets/images/new-sponsor-angelone-logo.png)](https://www.angelone.in/)[![Image 22: rupay](https://www.iplt20.com/assets/images/new-sponsor-rupay-logo.png)](https://www.rupay.co.in/)[![Image 23: google ai](https://www.iplt20.com/assets/images/new-sponsor-googleai-logo.png)](https://www.google.com/search?udm=50&aep=11&authuser=1) UMPIRE PARTNER[![Image 24: wonder-cement](https://www.iplt20.com/assets/images/new-sponsor-wondercement-logo.png)](https://www.wondercement.com/) strategic timeout partner[![Image 25: ceat](https://www.iplt20.com/assets/images/new-sponsor-ceat-logo.png)](https://www.ceat.com/) GOOD TIMES partner[![Image 26: ceat](https://www.iplt20.com/assets/images/new-sponsor-kingfisher-logo.png)](https://www.kingfisher.com/) official broadcaster[![Image 27: star sports](https://www.iplt20.com/assets/images/new-sponsor-starsports-logo.png)](https://www.hotstar.com/) official digital streaming partner[![Image 28: jio hotstar](https://www.iplt20.com/assets/images/new-sponsor-jiohotstar-logo.png)](https://www.hotstar.com/in/sports/cricket/tournaments/indian-premier-league) ## TEAM [Chennai super kings](https://www.iplt20.com/teams/chennai-super-kings)[Delhi Capitals](https://www.iplt20.com/teams/delhi-capitals)[Gujarat Titans](https://www.iplt20.com/teams/gujarat-titans)[Kolkata Knight Riders](https://www.iplt20.com/teams/kolkata-knight-riders)[Lucknow Super Giants](https://www.iplt20.com/teams/lucknow-super-giants)[Mumbai Indians](https://www.iplt20.com/teams/mumbai-indians)[Punjab Kings](https://www.iplt20.com/teams/punjab-kings)[Rajasthan Royals](https://www.iplt20.com/teams/rajasthan-royals)[Royal Challengers Bengaluru](https://www.iplt20.com/teams/royal-challengers-bengaluru)[Sunrisers Hyderabad](https://www.iplt20.com/teams/sunrisers-hyderabad) ## ABOUT [About Us](https://www.iplt20.com/about/about-us)[Anti Corruption Code](https://www.iplt20.com/about/anti-corruption-code?id=260)[Anti Doping Rules](https://www.iplt20.com/about/anti-doping-rules?id=261)[TUE Application Form](https://www.iplt20.com/about/tue-application-form?id=265)[Anti Discrimination Code](https://www.iplt20.com/about/anti-discrimination-code?id=266)[Clothing and Equipment Regulations](https://www.iplt20.com/about/clothing-and-equipment-regulations?id=267)[Code Of Conduct For Players and Teams Officials](https://www.iplt20.com/about/code-of-conduct-for-players-and-team-officials?id=268)[News Access Regulations](https://www.iplt20.com/about/news-access-regulations?id=270)[Image Use Terms](https://www.iplt20.com/about/image-use-terms?id=271) ## GUIDELINES [IPL Code Of Conduct For Match Officials](https://www.iplt20.com/about/code-of-conduct-for-match-officials-and-match-official-support-personnel?id=269)[Brand And Protection Guidelines](https://documents.iplt20.com/bcci/documents/1680174721009_Brand&ContentProtectionGuidelines.pdf)[Governing Council](https://www.iplt20.com/about/governing-council?id=275)[Match Playing Conditions](https://www.iplt20.com/about/match-playing-conditions?id=272)[PMOA Minimum Standard](https://www.iplt20.com/about/pmoa-minimum-standard?id=273)[Suspect Action Policy](https://www.iplt20.com/about/suspect-action-policy?id=290) ## CONTACT [Contact Us](https://www.iplt20.com/about/contact-us)[Sponsorship](https://www.iplt20.com/about/contact-us)[Privacy Policy](https://www.iplt20.com/privacy-policy)[Terms & Conditions](https://www.iplt20.com/terms-and-conditions) Copyright \u00a9 IPL 2026 All Rights Reserved. [What are cookies?](http://www.allaboutcookies.org/ \"Learn all about cookies and why sites use them\") We and selected third parties use cookies or similar technologies for technical purposes and, with your consent, for other purposes as specified in the [cookie policy.](https://www.iplt20.com/cookie-policy) Accept cookies [![Image 29](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) Video Player is loading. Play Video ![Image 30](https://players.brightcove.net/3588749423001/studio_overlays/default-4b7f1886-227e-4777-a94e-e274a16a3887.png) Play Skip Backward Skip Forward Mute Current Time 0:00 / Duration 0:00 Loaded: 0% Stream Type LIVE Seek to live, currently behind live LIVE Remaining Time-0:00 1x Playback Rate Chapters * Chapters Descriptions * descriptions off, selected Captions * captions settings, opens captions settings dialog * captions off, selected Audio Track Share Quality Levels Picture-in-Picture Fullscreen This is a modal window. Beginning of dialog window. Escape will cancel and close the window. Text Color Opacity Text Background Color Opacity Caption Area Background Color Opacity Font Size Text Edge Style Font Family Reset Done Close Modal Dialog End of dialog window. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. |![Image 31](https://documents.iplt20.com//ipl/assets/images/new-eye.svg)0| Share video on :[_\uf232_](zdasjavascript:void(0);)[](javascript:void(0);)[](javascript:void(0);)[Copy](javascript:void(0)) ## Magic Moments [View All](https://www.iplt20.com/video/magic-moments) ## Related Videos * 1 # IPL Exclusive Loading.... # Player Details [![Image 32](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) [- Player Profile \u00bb](https://www.iplt20.com/points-table/men/2026) | Role | Batsman | Nationality | Indian | ![Image 33](https://www.iplt20.com/points-table/men/2026#) | | --- | --- | | Bats | | Bowls | | | | | Bio | | A 22-year old opening batsman who hails from Pune, Ruturaj Gaikwad has been a consistent performer for his state team Maharashtra. He was the highest run-getter for Maharashtra in the league stage of the Syed Mushtaq Ali Trophy 2018-19. At the IPL 2019 Player Auction, the Chennai Super Kings secured his services at his base price of INR 20 lacs. | | [![Image 34](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) ## Title Video Player is loading. Play Video ![Image 35](https://players.brightcove.net/3588749423001/studio_overlays/default-4b7f1886-227e-4777-a94e-e274a16a3887.png) Play Skip Backward Skip Forward Mute Current Time 0:00 / Duration 0:00 Loaded: 0% Stream Type LIVE Seek to live, currently behind live LIVE Remaining Time-0:00 1x Playback Rate Chapters * Chapters Descriptions * descriptions off, selected Captions * captions settings, opens captions settings dialog * captions off, selected Audio Track Share Quality Levels Picture-in-Picture Fullscreen This is a modal window. Beginning of dialog window. Escape will cancel and close the window. Text Color Opacity Text Background Color Opacity Caption Area Background Color Opacity Font Size Text Edge Style Font Family Reset Done Close Modal Dialog End of dialog window. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Favicon: https://www.google.com/s2/favicons?domain=www.iplt20.com&sz=32 4. **IPL 2026 Playoffs | Road to the Finals | IPLT20** URL: https://www.iplt20.com/matches/playoffs Display URL: www.iplt20.com/matches/playoffs Snippet: Follow the IPL 2026 playoffs journey, from qualifiers to the finals. Track every team's progress and playoff schedule on IPLT20. Content: Title: IPL 2026 Playoffs | Road to the Finals | IPLT20 URL Source: https://www.iplt20.com/matches/playoffs Markdown Content: # IPL 2026 Playoffs | Road to the Finals | IPLT20 [![Image 1: BCCI Logo](https://documents.iplt20.com//ipl/assets/images/BCCI_logo.png)BCCI.TV](https://www.bcci.tv/)|[![Image 2: WPL Logo](https://documents.iplt20.com//ipl/assets/images/womens-premier-league-logonew.webp)](https://www.wplt20.com/)Follow Us[](https://twitter.com/IPL)[](https://www.instagram.com/iplt20/)[](https://www.facebook.com/IPL/) [![Image 3](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) [![Image 4](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) \u00d7 [![Image 5: menu](https://documents.iplt20.com//ipl/assets/images/new-menu.svg)](https://www.iplt20.com/matches/playoffs#) * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 6](https://documents.iplt20.com//ipl/assets/images/fan-poll.webp)](https://www.iplt20.com/fan-poll)[![Image 7](https://documents.iplt20.com//ipl/assets/images/viewers-choice.webp)](https://www.iplt20.com/polls/emerging-player)![Image 8](https://documents.iplt20.com//ipl/assets/images/new-search-icon.svg) **Search**\u2715 [Home](https://www.iplt20.com/)/[Matches](https://www.iplt20.com/matches)/[Playoffs](https://www.iplt20.com/matches/playoffs) MATCHES * [FIXTURES](https://www.iplt20.com/matches/fixtures) * [RESULTS](https://www.iplt20.com/matches/results) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) ![Image 9](https://www.iplt20.com/assets/images/new-icon-share-gray.svg) [_\uf232_](https://wa.me/?text=http://www.iplt20.com/matches/playoffs#bracketsfixture)[](https://www.facebook.com/sharer.php?u=http://www.iplt20.com/matches/playoffs#bracketsfixture)[](https://twitter.com/share?url=http://www.iplt20.com/matches/playoffs#bracketsfixture)[Copy](javascript:void();) ![Image 10](https://www.iplt20.com/matches/playoffs) #### TBD ## Qualifier 1 TBD ![Image 11](https://www.iplt20.com/matches/playoffs) #### TBD ![Image 12](https://www.iplt20.com/matches/playoffs) #### TBD ## Eliminator TBD ![Image 13](https://www.iplt20.com/matches/playoffs) #### TBD ![Image 14](https://www.iplt20.com/matches/playoffs) #### TBD ## Qualifier 2 TBD ![Image 15](https://www.iplt20.com/matches/playoffs) #### TBD ![Image 16](https://www.iplt20.com/matches/playoffs) #### TBD ## Final TBD ![Image 17](https://www.iplt20.com/matches/playoffs) #### TBD ![Image 18](https://www.iplt20.com/assets/images/teams-trophy-new.png) title sponsor[![Image 19: tata](https://www.iplt20.com/assets/images/new-sponsor-tata-logo.png)](https://www.tata.com/) PREMIER PARTNERS [![Image 20: angelone](https://www.iplt20.com/assets/images/new-sponsor-angelone-logo.png)](https://www.angelone.in/)[![Image 21: rupay](https://www.iplt20.com/assets/images/new-sponsor-rupay-logo.png)](https://www.rupay.co.in/)[![Image 22: google ai](https://www.iplt20.com/assets/images/new-sponsor-googleai-logo.png)](https://www.google.com/search?udm=50&aep=11&authuser=1) UMPIRE PARTNER[![Image 23: wonder-cement](https://www.iplt20.com/assets/images/new-sponsor-wondercement-logo.png)](https://www.wondercement.com/) strategic timeout partner[![Image 24: ceat](https://www.iplt20.com/assets/images/new-sponsor-ceat-logo.png)](https://www.ceat.com/) GOOD TIMES partner[![Image 25: ceat](https://www.iplt20.com/assets/images/new-sponsor-kingfisher-logo.png)](https://www.kingfisher.com/) official broadcaster[![Image 26: star sports](https://www.iplt20.com/assets/images/new-sponsor-starsports-logo.png)](https://www.hotstar.com/) official digital streaming partner[![Image 27: jio hotstar](https://www.iplt20.com/assets/images/new-sponsor-jiohotstar-logo.png)](https://www.hotstar.com/in/sports/cricket/tournaments/indian-premier-league) ## TEAM [Chennai super kings](https://www.iplt20.com/teams/chennai-super-kings)[Delhi Capitals](https://www.iplt20.com/teams/delhi-capitals)[Gujarat Titans](https://www.iplt20.com/teams/gujarat-titans)[Kolkata Knight Riders](https://www.iplt20.com/teams/kolkata-knight-riders)[Lucknow Super Giants](https://www.iplt20.com/teams/lucknow-super-giants)[Mumbai Indians](https://www.iplt20.com/teams/mumbai-indians)[Punjab Kings](https://www.iplt20.com/teams/punjab-kings)[Rajasthan Royals](https://www.iplt20.com/teams/rajasthan-royals)[Royal Challengers Bengaluru](https://www.iplt20.com/teams/royal-challengers-bengaluru)[Sunrisers Hyderabad](https://www.iplt20.com/teams/sunrisers-hyderabad) ## ABOUT [About Us](https://www.iplt20.com/about/about-us)[Anti Corruption Code](https://www.iplt20.com/about/anti-corruption-code?id=260)[Anti Doping Rules](https://www.iplt20.com/about/anti-doping-rules?id=261)[TUE Application Form](https://www.iplt20.com/about/tue-application-form?id=265)[Anti Discrimination Code](https://www.iplt20.com/about/anti-discrimination-code?id=266)[Clothing and Equipment Regulations](https://www.iplt20.com/about/clothing-and-equipment-regulations?id=267)[Code Of Conduct For Players and Teams Officials](https://www.iplt20.com/about/code-of-conduct-for-players-and-team-officials?id=268)[News Access Regulations](https://www.iplt20.com/about/news-access-regulations?id=270)[Image Use Terms](https://www.iplt20.com/about/image-use-terms?id=271) ## GUIDELINES [IPL Code Of Conduct For Match Officials](https://www.iplt20.com/about/code-of-conduct-for-match-officials-and-match-official-support-personnel?id=269)[Brand And Protection Guidelines](https://documents.iplt20.com/bcci/documents/1680174721009_Brand&ContentProtectionGuidelines.pdf)[Governing Council](https://www.iplt20.com/about/governing-council?id=275)[Match Playing Conditions](https://www.iplt20.com/about/match-playing-conditions?id=272)[PMOA Minimum Standard](https://www.iplt20.com/about/pmoa-minimum-standard?id=273)[Suspect Action Policy](https://www.iplt20.com/about/suspect-action-policy?id=290) ## CONTACT [Contact Us](https://www.iplt20.com/about/contact-us)[Sponsorship](https://www.iplt20.com/about/contact-us)[Privacy Policy](https://www.iplt20.com/privacy-policy)[Terms & Conditions](https://www.iplt20.com/terms-and-conditions) Copyright \u00a9 IPL 2026 All Rights Reserved. [What are cookies?](http://www.allaboutcookies.org/ \"Learn all about cookies and why sites use them\") We and selected third parties use cookies or similar technologies for technical purposes and, with your consent, for other purposes as specified in the [cookie policy.](https://www.iplt20.com/cookie-policy) Accept cookies [![Image 28](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) |![Image 29](https://documents.iplt20.com//ipl/assets/images/new-eye.svg)0| Share video on :[_\uf232_](zdasjavascript:void(0);)[](javascript:void(0);)[](javascript:void(0);)[Copy](javascript:void(0)) ## Magic Moments [View All](https://www.iplt20.com/video/magic-moments) ## Related Videos # IPL Exclusive Loading.... # Player Details [![Image 30](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) [- Player Profile \u00bb](https://www.iplt20.com/matches/playoffs) | Role | Batsman | Nationality | Indian | ![Image 31](https://www.iplt20.com/matches/playoffs#) | | --- | --- | | Bats | | Bowls | | | | | Bio | | A 22-year old opening batsman who hails from Pune, Ruturaj Gaikwad has been a consistent performer for his state team Maharashtra. He was the highest run-getter for Maharashtra in the league stage of the Syed Mushtaq Ali Trophy 2018-19. At the IPL 2019 Player Auction, the Chennai Super Kings secured his services at his base price of INR 20 lacs. | | [![Image 32](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) ## Title Favicon: https://www.google.com/s2/favicons?domain=www.iplt20.com&sz=32 5. **IPL 2026 Match Results | Full Scorecard & Summaries | IPLT20** URL: https://www.iplt20.com/matches/results/2026 Display URL: www.iplt20.com/matches/results/2026 Snippet: View all IPL 2026 match results with detailed scorecards and summaries. Stay updated with every match outcome on IPLT20. Content: Title: IPL 2026 Match Results | Full Scorecard & Summaries | IPLT20 URL Source: https://www.iplt20.com/matches/results/2026 Markdown Content: # IPL 2026 Match Results | Full Scorecard & Summaries | IPLT20 [![Image 1: BCCI Logo](https://documents.iplt20.com//ipl/assets/images/BCCI_logo.png)BCCI.TV](https://www.bcci.tv/)|[![Image 2: WPL Logo](https://documents.iplt20.com//ipl/assets/images/womens-premier-league-logonew.webp)](https://www.wplt20.com/)Follow Us[](https://twitter.com/IPL)[](https://www.instagram.com/iplt20/)[](https://www.facebook.com/IPL/) [![Image 3](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) [![Image 4](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) \u00d7 * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 5: menu](https://documents.iplt20.com//ipl/assets/images/new-menu.svg)](https://www.iplt20.com/matches/results/2026#) * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 6](https://documents.iplt20.com//ipl/assets/images/fan-poll.webp)](https://www.iplt20.com/fan-poll)[![Image 7](https://documents.iplt20.com//ipl/assets/images/viewers-choice.webp)](https://www.iplt20.com/polls/emerging-player)![Image 8](https://documents.iplt20.com//ipl/assets/images/new-search-icon.svg) **Search**\u2715 [Home](https://www.iplt20.com/)/[Matches](https://www.iplt20.com/matches)/[Results](https://www.iplt20.com/matches/results/2026) MATCHES * [FIXTURES](https://www.iplt20.com/matches/fixtures) * [RESULTS](https://www.iplt20.com/matches/results) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) MEN MEN WOMEN All Teams All Teams All Venues All Venues SEASON ### Filters [clear](https://www.iplt20.com/matches/results/2026) ![Image 9](https://www.iplt20.com/assets/images/close-sign.svg) ### Teams ### Venues ### Season title sponsor[![Image 10: tata](https://www.iplt20.com/assets/images/new-sponsor-tata-logo.png)](https://www.tata.com/) PREMIER PARTNERS [![Image 11: angelone](https://www.iplt20.com/assets/images/new-sponsor-angelone-logo.png)](https://www.angelone.in/)[![Image 12: rupay](https://www.iplt20.com/assets/images/new-sponsor-rupay-logo.png)](https://www.rupay.co.in/)[![Image 13: google ai](https://www.iplt20.com/assets/images/new-sponsor-googleai-logo.png)](https://www.google.com/search?udm=50&aep=11&authuser=1) UMPIRE PARTNER[![Image 14: wonder-cement](https://www.iplt20.com/assets/images/new-sponsor-wondercement-logo.png)](https://www.wondercement.com/) strategic timeout partner[![Image 15: ceat](https://www.iplt20.com/assets/images/new-sponsor-ceat-logo.png)](https://www.ceat.com/) GOOD TIMES partner[![Image 16: ceat](https://www.iplt20.com/assets/images/new-sponsor-kingfisher-logo.png)](https://www.kingfisher.com/) official broadcaster[![Image 17: star sports](https://www.iplt20.com/assets/images/new-sponsor-starsports-logo.png)](https://www.hotstar.com/) official digital streaming partner[![Image 18: jio hotstar](https://www.iplt20.com/assets/images/new-sponsor-jiohotstar-logo.png)](https://www.hotstar.com/in/sports/cricket/tournaments/indian-premier-league) ## TEAM [Chennai super kings](https://www.iplt20.com/teams/chennai-super-kings)[Delhi Capitals](https://www.iplt20.com/teams/delhi-capitals)[Gujarat Titans](https://www.iplt20.com/teams/gujarat-titans)[Kolkata Knight Riders](https://www.iplt20.com/teams/kolkata-knight-riders)[Lucknow Super Giants](https://www.iplt20.com/teams/lucknow-super-giants)[Mumbai Indians](https://www.iplt20.com/teams/mumbai-indians)[Punjab Kings](https://www.iplt20.com/teams/punjab-kings)[Rajasthan Royals](https://www.iplt20.com/teams/rajasthan-royals)[Royal Challengers Bengaluru](https://www.iplt20.com/teams/royal-challengers-bengaluru)[Sunrisers Hyderabad](https://www.iplt20.com/teams/sunrisers-hyderabad) ## ABOUT [About Us](https://www.iplt20.com/about/about-us)[Anti Corruption Code](https://www.iplt20.com/about/anti-corruption-code?id=260)[Anti Doping Rules](https://www.iplt20.com/about/anti-doping-rules?id=261)[TUE Application Form](https://www.iplt20.com/about/tue-application-form?id=265)[Anti Discrimination Code](https://www.iplt20.com/about/anti-discrimination-code?id=266)[Clothing and Equipment Regulations](https://www.iplt20.com/about/clothing-and-equipment-regulations?id=267)[Code Of Conduct For Players and Teams Officials](https://www.iplt20.com/about/code-of-conduct-for-players-and-team-officials?id=268)[News Access Regulations](https://www.iplt20.com/about/news-access-regulations?id=270)[Image Use Terms](https://www.iplt20.com/about/image-use-terms?id=271) ## GUIDELINES [IPL Code Of Conduct For Match Officials](https://www.iplt20.com/about/code-of-conduct-for-match-officials-and-match-official-support-personnel?id=269)[Brand And Protection Guidelines](https://documents.iplt20.com/bcci/documents/1680174721009_Brand&ContentProtectionGuidelines.pdf)[Governing Council](https://www.iplt20.com/about/governing-council?id=275)[Match Playing Conditions](https://www.iplt20.com/about/match-playing-conditions?id=272)[PMOA Minimum Standard](https://www.iplt20.com/about/pmoa-minimum-standard?id=273)[Suspect Action Policy](https://www.iplt20.com/about/suspect-action-policy?id=290) ## CONTACT [Contact Us](https://www.iplt20.com/about/contact-us)[Sponsorship](https://www.iplt20.com/about/contact-us)[Privacy Policy](https://www.iplt20.com/privacy-policy)[Terms & Conditions](https://www.iplt20.com/terms-and-conditions) Copyright \u00a9 IPL 2026 All Rights Reserved. [What are cookies?](http://www.allaboutcookies.org/ \"Learn all about cookies and why sites use them\") We and selected third parties use cookies or similar technologies for technical purposes and, with your consent, for other purposes as specified in the [cookie policy.](https://www.iplt20.com/cookie-policy) Accept cookies [![Image 19](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) Video Player is loading. Play Video ![Image 20](https://players.brightcove.net/3588749423001/studio_overlays/default-4b7f1886-227e-4777-a94e-e274a16a3887.png) Play Skip Backward Skip Forward Mute Current Time 0:00 / Duration 0:00 Loaded: 0% Stream Type LIVE Seek to live, currently behind live LIVE Remaining Time-0:00 1x Playback Rate Chapters * Chapters Descriptions * descriptions off, selected Captions * captions settings, opens captions settings dialog * captions off, selected Audio Track Share Quality Levels Picture-in-Picture Fullscreen This is a modal window. Beginning of dialog window. Escape will cancel and close the window. Text Color Opacity Text Background Color Opacity Caption Area Background Color Opacity Font Size Text Edge Style Font Family Reset Done Close Modal Dialog End of dialog window. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. |![Image 21](https://documents.iplt20.com//ipl/assets/images/new-eye.svg)0| Share video on :[_\uf232_](zdasjavascript:void(0);)[](javascript:void(0);)[](javascript:void(0);)[Copy](javascript:void(0)) ## Magic Moments [View All](https://www.iplt20.com/video/magic-moments) ## Related Videos * 1 # IPL Exclusive Loading.... # Player Details [![Image 22](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) [- Player Profile \u00bb](https://www.iplt20.com/matches/results/2026) | Role | Batsman | Nationality | Indian | ![Image 23](https://www.iplt20.com/matches/results/2026#) | | --- | --- | | Bats | | Bowls | | | | | Bio | | A 22-year old opening batsman who hails from Pune, Ruturaj Gaikwad has been a consistent performer for his state team Maharashtra. He was the highest run-getter for Maharashtra in the league stage of the Syed Mushtaq Ali Trophy 2018-19. At the IPL 2019 Player Auction, the Chennai Super Kings secured his services at his base price of INR 20 lacs. | | [![Image 24](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) ## Title Video Player is loading. Play Video ![Image 25](https://players.brightcove.net/3588749423001/studio_overlays/default-4b7f1886-227e-4777-a94e-e274a16a3887.png) Play Skip Backward Skip Forward Mute Current Time 0:00 / Duration 0:00 Loaded: 0% Stream Type LIVE Seek to live, currently behind live LIVE Remaining Time-0:00 1x Playback Rate Chapters * Chapters Descriptions * descriptions off, selected Captions * captions settings, opens captions settings dialog * captions off, selected Audio Track Share Quality Levels Picture-in-Picture Fullscreen This is a modal window. Beginning of dialog window. Escape will cancel and close the window. Text Color Opacity Text Background Color Opacity Caption Area Background Color Opacity Font Size Text Edge Style Font Family Reset Done Close Modal Dialog End of dialog window. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Favicon: https://www.google.com/s2/favicons?domain=www.iplt20.com&sz=32"
+                  }
+                ],
+                "fetch_count": 0,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable"
+              },
+              "error": null,
+              "duration_ms": 9457.78,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "engine": "web-search",
+                "results_count": 1,
+                "fetched_count": 0,
+                "result_quality": "good"
+              }
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "## Research Notes\n- IPL; Standings: Search results did not return strong, clearly relevant evidence.\n\n## Draft\n- I could not verify a reliable, current summary from the gathered evidence.\n\n## Final\n- I could not verify the most important current developments from the gathered evidence."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "11a28d76-ce53-44be-a67c-dbe8e9d3a51b",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:42.822763+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:45.270375+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Do a full web research brief using search plus fetch/brow...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:45.270420+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Do a full web research brief using search plus fetch/brow...",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Do a full web research brief using search plus fetch/brow..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:45.270549+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:45.270687+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=india's ipl 2026 standings race site: iplt20. com",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:45.270857+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=india's ipl 2026 standings race site: iplt20. com",
+                  "outputSummary": "1 results found",
+                  "sourceUrl": null,
+                  "durationMs": 9457,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:54.728735+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: APPROVED. Feedback:",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:54.729459+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "## Research Notes\n- IPL; Standings: Search results did not return strong, clearly relevant evidence. ## Draft\n- I could not verify a reliable, current summary from the gathered evidence. ## Final\n- ...",
+                  "sourceUrl": null,
+                  "durationMs": 11908,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:54.729514+00:00Z"
+                }
+              ],
+              "stepCount": 9,
+              "createdAt": "2026-04-25T08:00:54.729557+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "fa87ffdd38df9c86",
+          "reviewerPromptVersionHash": "8c8d662b021be4f4",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    },
+    {
+      "step": 5,
+      "title": "Level 5: Source Ranking And Relevance Discipline",
+      "passed": true,
+      "diagnostics": {
+        "prompt": "Research current OpenAI API updates, but be careful: ignore generic markdown editors, docs about the browser Fetch API, or unrelated tool pages. Use search plus fetch as needed and return markdown with sections:\n## Findings\n- 3 bullets\n## Why These Sources\n- 2 bullets",
+        "error": null,
+        "latency_seconds": 3.5082848072052,
+        "ttft_seconds": 3.5076675415039062,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "review_feedback": [
+          {
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "## Findings\n- I could not verify strong current OpenAI API developments from the gathered evidence.\n\n## Why These Sources\n- The available search evidence was thin, so source confidence remains limited.",
+        "final_answer_length": 201,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "findings": true,
+            "sources": true,
+            "openai": true,
+            "api": true
+          },
+          "forbidden": {}
+        },
+        "validation_reasons": [],
+        "raw_event_count": 9,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "b5ef9f73-e51e-4ce2-b1f7-ca4b21a7ef78",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:55.798228+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-25T08:00:55.798354+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Research current OpenAI API updates, but be careful: ignore generic markdown editors, docs about the browser Fetch API, or unrelated tool pages. Use search plus fetch as needed and return markdown with sections:\n## Findings\n- 3 bullets\n## Why These Sources\n- 2 bullets"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Research current OpenAI API updates, but be careful: ignore generic markdown editors, docs about the browser Fetch API, or unrelated tool pages. Use search plus fetch as needed and return markdown with sections:\n## Findings\n- 3 bullets\n## Why These Sources\n- 2 bullets"
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Research current OpenAI API updates, but be careful: ignore generic markdown editors, docs about the browser Fetch API, or unrelated tool pages. Use search plus fetch as needed and return markdown with sections:\n## Findings\n- 3 bullets\n## Why These Sources\n- 2 bullets"
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Research current OpenAI API updates, but be careful: ignore generic markdown editors, docs about the browser Fetch API, or unrelated tool pages. Use search plus fetch as needed and return markdown with sections:\n## Findings\n- 3 bullets\n## Why These Sources\n- 2 bullets",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "OpenAI API updates, but site:openai.com"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "OpenAI API updates, but site:openai.com"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "OpenAI API updates, but site:openai.com"
+              },
+              "output": {
+                "source_engine": "web-search",
+                "results": [
+                  {
+                    "title": null,
+                    "url": null,
+                    "snippet": "Error executing tool 'web-search': Search failed for \"OpenAI API updates, but site:openai.com\": HTTP 202: Failed to fetch search results"
+                  }
+                ],
+                "fetch_count": 0,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable"
+              },
+              "error": null,
+              "duration_ms": 458.06,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "engine": "web-search",
+                "results_count": 1,
+                "fetched_count": 0,
+                "result_quality": "good"
+              }
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "## Findings\n- I could not verify strong current OpenAI API developments from the gathered evidence.\n\n## Why These Sources\n- The available search evidence was thin, so source confidence remains limited."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "b5ef9f73-e51e-4ce2-b1f7-ca4b21a7ef78",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:55.798228+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:58.113161+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Research current Open AI API updates, but be careful: igno...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:58.113203+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Research current Open AI API updates, but be careful: igno...",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Research current Open AI API updates, but be careful: igno..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:58.113303+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:58.113396+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Open AI API updates, but site: openai. com",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:58.113556+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Open AI API updates, but site: openai. com",
+                  "outputSummary": "1 results found",
+                  "sourceUrl": null,
+                  "durationMs": 458,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:58.571662+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: APPROVED. Feedback:",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:58.572071+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "## Findings\n- I could not verify strong current Open AI API developments from the gathered evidence. ## Why These Sources\n- The available search evidence was thin, so source confidence remains limited...",
+                  "sourceUrl": null,
+                  "durationMs": 2777,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:58.572118+00:00Z"
+                }
+              ],
+              "stepCount": 9,
+              "createdAt": "2026-04-25T08:00:58.572157+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "be1f8951e35f0dd7",
+          "reviewerPromptVersionHash": "8c8d662b021be4f4",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    },
+    {
+      "step": 6,
+      "title": "Level 6: Evidence-Aware Standings Brief",
+      "passed": true,
+      "diagnostics": {
+        "prompt": "Do a harder web brief on India's IPL 2026 standings race. Search the web, fetch the strongest page, and return only markdown:\n## Research Notes\n- 3 bullets\n## Final\n- 3 bullets\nIf evidence is incomplete, explicitly say what could not be verified.",
+        "error": null,
+        "latency_seconds": 3.3818929195404053,
+        "ttft_seconds": 3.3811538219451904,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "review_feedback": [
+          {
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "## Research Notes\n- IPL; Standings: I could not verify a reliable answer from the gathered evidence.\n\n## Final\n- I could not verify a reliable answer from the gathered evidence.",
+        "final_answer_length": 177,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "research notes": true,
+            "final": true,
+            "ipl": true,
+            "standings": true
+          },
+          "forbidden": {}
+        },
+        "validation_reasons": [],
+        "raw_event_count": 9,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "56b9db2f-85f8-4b49-b8ab-4439cd1adc22",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:59.483570+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-25T08:00:59.483613+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Do a harder web brief on India's IPL 2026 standings race. Search the web, fetch the strongest page, and return only markdown:\n## Research Notes\n- 3 bullets\n## Final\n- 3 bullets\nIf evidence is incomplete, explicitly say what could not be verified."
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Do a harder web brief on India's IPL 2026 standings race. Search the web, fetch the strongest page, and return only markdown:\n## Research Notes\n- 3 bullets\n## Final\n- 3 bullets\nIf evidence is incomplete, explicitly say what could not be verified."
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Do a harder web brief on India's IPL 2026 standings race. Search the web, fetch the strongest page, and return only markdown:\n## Research Notes\n- 3 bullets\n## Final\n- 3 bullets\nIf evidence is incomplete, explicitly say what could not be verified."
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Do a harder web brief on India's IPL 2026 standings race. Search the web, fetch the strongest page, and return only markdown:\n## Research Notes\n- 3 bullets\n## Final\n- 3 bullets\nIf evidence is incomplete, explicitly say what could not be verified.",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              },
+              "output": {
+                "source_engine": "web-search",
+                "results": [
+                  {
+                    "title": null,
+                    "url": null,
+                    "snippet": "1. **IPL Travel Deals - Fly for IPL 2026more info** URL: https://duckduckgo.com/y.js?ad_domain=makemytrip.com&ad_provider=bingv7aa&ad_type=txad&click_metadata=CkBaEmU1q4e6C3UzqPNGcXGNSXpX-Goe-srltT48QCkucwHIjhFDrPWCAJzJWidzP42mnthWL90c2B2ZTpIAqm1wVRPFrQrTQYjuKH3OIrvRFCs2JU6nCxWs3-VM0yWzL-nZuXu0L2zz2q9v53OvNqDKfkJ-rR05MyVlSAMtJFA.YlwNz_xobOb8F3sz3_5SfA&rut=0eb8a0e7ef2395d388796d6153dab76649a3d5a4e0e204ee7d56c64bc4d910d6&u3=https://www.bing.com/aclick?ld=e85zLGSczu_jr44p7Zm0PwbTVUCUwOaC0AH6-2aknBv5Gh9By7iJbDUITYrKYBGlogqcXNp31geX-oJFPsuD_2kbSTgKMUhVHfQhXX2yUjDJJByhc-vLNK27VXU-7MCRDYzsxxH56_9BcTrLyufppnXCZXSoXpBNlqNYghOpQ7LVzD6vHB_inhi5L8EyHwdFmQ4kM76u-cZ3TV9DPqph6rtvEYtJ4&u=aHR0cHMlM2ElMmYlMmZwaXhlbC5ldmVyZXN0dGVjaC5uZXQlMmYxNjMxJTJmY3ElM2Zldl9zaWQlM2QzJTI2ZXZfbG4lM2RpbmRpYW4lMjUyMHByZW1pZXIlMjUyMGxlYWd1ZSUyNTIwZ2FtZSUyNmV2X2x4JTNka3dkLTcxMTk0MjI3NDAxMzYzJTNhbG9jLTkwJTI2ZXZfY3J4JTNkJTI2ZXZfbXQlM2RwJTI2ZXZfbiUzZHMlMjZldl9sdHglM2QlMjZldl9wbCUzZCUyNmV2X3BvcyUzZCUyNmV2X2R2YyUzZGMlMjZldl9kdm0lM2QlMjZldl9waHklM2QyNjIwMjUlMjZldl9sb2MlM2QlMjZldl9jeCUzZDYyNzU5NDcyNSUyNmV2X2F4JTNkMTEzOTA5NTkwNTgyMjAzNCUyNmV2X2VmaWQlM2QlM2FHJTNhcyUyNnVybCUzZGh0dHBzJTI1M0ElMjUyRiUyNTJGd3d3Lm1ha2VteXRyaXAuY29tJTI1MkZmbGlnaHRzJTI1MkYlMjUzRmNtcCUyNTNEU0VNJTI1N0NEJTI1N0NERiUyNTdDQiUyNTdDQ2l0eSUyNTdDU2VhcmNoJTI1N0NJUExfRmxpZ2h0X01hdGNoX0NpdGllcyUyNTdDRmxpZ2h0JTI1MjZlZl9pZCUyNTNEJTI1M0FHJTI1M0FzJTI2bXNjbGtpZCUzZDdlNDM3ZjczY2I5YzFlOTlmMzQ1MTY5ZmJmMzIxZjQ1&rlid=7e437f73cb9c1e99f345169fbf321f45&vqd=4-168033188692852283174461905365621692620&iurl={1}IG=963EF219087A44EB9D8927900FDC1962&CID=219A7486C55A66AA286863C0C438670A&ID=DevEx,5037.1 Display URL: makemytrip.com Snippet: Save more on flights to major match venues. Catch the IPL Live - Travel to the Stadium with Ease Content: Title: duckduckgo.com URL Source: https://duckduckgo.com/y.js?ad_domain=makemytrip.com&ad_provider=bingv7aa&ad_type=txad&click_metadata=CkBaEmU1q4e6C3UzqPNGcXGNSXpX-Goe-srltT48QCkucwHIjhFDrPWCAJzJWidzP42mnthWL90c2B2ZTpIAqm1wVRPFrQrTQYjuKH3OIrvRFCs2JU6nCxWs3-VM0yWzL-nZuXu0L2zz2q9v53OvNqDKfkJ-rR05MyVlSAMtJFA.YlwNz_xobOb8F3sz3_5SfA&rut=0eb8a0e7ef2395d388796d6153dab76649a3d5a4e0e204ee7d56c64bc4d910d6&u3=https://www.bing.com/aclick?ld=e85zLGSczu_jr44p7Zm0PwbTVUCUwOaC0AH6-2aknBv5Gh9By7iJbDUITYrKYBGlogqcXNp31geX-oJFPsuD_2kbSTgKMUhVHfQhXX2yUjDJJByhc-vLNK27VXU-7MCRDYzsxxH56_9BcTrLyufppnXCZXSoXpBNlqNYghOpQ7LVzD6vHB_inhi5L8EyHwdFmQ4kM76u-cZ3TV9DPqph6rtvEYtJ4&u=aHR0cHMlM2ElMmYlMmZwaXhlbC5ldmVyZXN0dGVjaC5uZXQlMmYxNjMxJTJmY3ElM2Zldl9zaWQlM2QzJTI2ZXZfbG4lM2RpbmRpYW4lMjUyMHByZW1pZXIlMjUyMGxlYWd1ZSUyNTIwZ2FtZSUyNmV2X2x4JTNka3dkLTcxMTk0MjI3NDAxMzYzJTNhbG9jLTkwJTI2ZXZfY3J4JTNkJTI2ZXZfbXQlM2RwJTI2ZXZfbiUzZHMlMjZldl9sdHglM2QlMjZldl9wbCUzZCUyNmV2X3BvcyUzZCUyNmV2X2R2YyUzZGMlMjZldl9kdm0lM2QlMjZldl9waHklM2QyNjIwMjUlMjZldl9sb2MlM2QlMjZldl9jeCUzZDYyNzU5NDcyNSUyNmV2X2F4JTNkMTEzOTA5NTkwNTgyMjAzNCUyNmV2X2VmaWQlM2QlM2FHJTNhcyUyNnVybCUzZGh0dHBzJTI1M0ElMjUyRiUyNTJGd3d3Lm1ha2VteXRyaXAuY29tJTI1MkZmbGlnaHRzJTI1MkYlMjUzRmNtcCUyNTNEU0VNJTI1N0NEJTI1N0NERiUyNTdDQiUyNTdDQ2l0eSUyNTdDU2VhcmNoJTI1N0NJUExfRmxpZ2h0X01hdGNoX0NpdGllcyUyNTdDRmxpZ2h0JTI1MjZlZl9pZCUyNTNEJTI1M0FHJTI1M0FzJTI2bXNjbGtpZCUzZDdlNDM3ZjczY2I5YzFlOTlmMzQ1MTY5ZmJmMzIxZjQ1&rlid=7e437f73cb9c1e99f345169fbf321f45&vqd=4-168033188692852283174461905365621692620&iurl={1}IG=963EF219087A44EB9D8927900FDC1962&CID=219A7486C55A66AA286863C0C438670A&ID=DevEx,5037.1 Warning: Target URL returned error 400: Bad Request Markdown Content: ## This page isn\u2019t working If the problem continues, contact the site owner. HTTP ERROR 400 If the problem continues, contact the site owner. Favicon: https://www.google.com/s2/favicons?domain=duckduckgo.com&sz=32 2. **IPL T20 | Indian Premier League Official Website** URL: https://www.iplt20.com/ Display URL: www.iplt20.com Snippet: The official IPL website with live scores, match updates, team rankings, all the latest news, and videos . Follow your favorite teams and players! Content: Title: IPL T20 | Indian Premier League Official Website URL Source: https://www.iplt20.com/ Markdown Content: # IPL T20 | Indian Premier League Official Website [![Image 1: BCCI Logo](https://documents.iplt20.com//ipl/assets/images/BCCI_logo.png)BCCI.TV](https://www.bcci.tv/)|[![Image 2: WPL Logo](https://documents.iplt20.com//ipl/assets/images/womens-premier-league-logonew.webp)](https://www.wplt20.com/)Follow Us[](https://twitter.com/IPL)[](https://www.instagram.com/iplt20/)[](https://www.facebook.com/IPL/) [![Image 3](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) [![Image 4](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) \u00d7 * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 5: menu](https://documents.iplt20.com//ipl/assets/images/new-menu.svg)](https://www.iplt20.com/#) * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 6](https://documents.iplt20.com//ipl/assets/images/fan-poll.webp)](https://www.iplt20.com/fan-poll)[![Image 7](https://documents.iplt20.com//ipl/assets/images/viewers-choice.webp)](https://www.iplt20.com/polls/emerging-player)![Image 8](https://documents.iplt20.com//ipl/assets/images/new-search-icon.svg) **Search**\u2715 ![Image 9: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393848823112-1777096512.jpg) [](javascript:void(0);) Video ## Kings in Capital - with Arshdeep Singh ### 25 Apr, 2026 | 03:32 mins | 2.8k [Play](javascript:;) ![Image 10](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66368/kings-in-capital---with-arshdeep-singh)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66368/kings-in-capital---with-arshdeep-singh)[](https://twitter.com/share?url=https://www.iplt20.com/video/66368/kings-in-capital---with-arshdeep-singh)[Copy](javascript:void();) ![Image 11: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393847942112-1777092084.jpg) [](javascript:void(0);) Video ## Timing over force ft. Devdutt Padikkal & Dinesh Karthik ### 25 Apr, 2026 | 02:54 mins | 6.6k [Play](javascript:;) ![Image 12](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66367/timing-over-force-ft-devdutt-padikkal--dinesh-karthik-)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66367/timing-over-force-ft-devdutt-padikkal--dinesh-karthik-)[](https://twitter.com/share?url=https://www.iplt20.com/video/66367/timing-over-force-ft-devdutt-padikkal--dinesh-karthik-)[Copy](javascript:void();) ![Image 13: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393801257112-1777052122.jpg) [](javascript:void(0);) Video ## Chase master at work! Virat Kohli's stroke-filled 81(44) ### 24 Apr, 2026 | 04:49 mins | 57.6k [Play](javascript:;) ![Image 14](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66327/chase-master-at-work-virat-kohlis-66th-tata-ipl-fifty)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66327/chase-master-at-work-virat-kohlis-66th-tata-ipl-fifty)[](https://twitter.com/share?url=https://www.iplt20.com/video/66327/chase-master-at-work-virat-kohlis-66th-tata-ipl-fifty)[Copy](javascript:void();) ![Image 15: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393803404112-1777051527.jpg) [](javascript:void(0);) Video ## DDP special! Devdutt Padikkal treats the fans with 55(27) ### 24 Apr, 2026 | 03:27 mins | 24.6k [Play](javascript:;) ![Image 16](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66328/ddp-special-devdutt-padikkal-treats-the-fans-to-a-gorgeous-half-century)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66328/ddp-special-devdutt-padikkal-treats-the-fans-to-a-gorgeous-half-century)[](https://twitter.com/share?url=https://www.iplt20.com/video/66328/ddp-special-devdutt-padikkal-treats-the-fans-to-a-gorgeous-half-century)[Copy](javascript:void();) ![Image 17: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393796688112-1777054672.jpg) [](javascript:void(0);) Video ## What a Sai-ght! Sai Sudharsan's magical 100(58) ### 24 Apr, 2026 | 04:43 mins | 52k [Play](javascript:;) ![Image 18](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66301/a-sai-ght-for-sore-eyes-sudharsan-shines-with-a-beautifully-paced-fifty)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66301/a-sai-ght-for-sore-eyes-sudharsan-shines-with-a-beautifully-paced-fifty)[](https://twitter.com/share?url=https://www.iplt20.com/video/66301/a-sai-ght-for-sore-eyes-sudharsan-shines-with-a-beautifully-paced-fifty)[Copy](javascript:void();) ![Image 19: Banner image showcasing our feature content](https://brightcove.iplt20.com/output/input/6393794876112-1777044458.jpg) [](javascript:void(0);) Video ## Fastest to 2000! Sai Sudharsan reaches milestone with two fine sixes ### 24 Apr, 2026 | 01:18 mins | 23.9k [Play](javascript:;) ![Image 20](https://documents.iplt20.com//ipl/assets/images/banner-icon-share.svg) [_\uf232_](https://wa.me/?text=https://www.iplt20.com/video/66297/fastest-to-2000-sai-sudharsan-reaches-milestone-with-two-fine-sixes)[](https://www.facebook.com/sharer.php?u=https://www.iplt20.com/video/66297/fastest-to-2000-sai-sudharsan-reaches-milestone-with-two-fine-sixes)[](https://twitter.com/share?url=https://www.iplt20.com/video/66297/fastest-to-2000-sai-sudharsan-reaches-milestone-with-two-fine-sixes)[Copy](javascript:void();) prev next * 1 * 2 * 3 * 4 * 5 * 6 ## Good Afternoon! Curated shorts for you ![Image 21](https://documents.iplt20.com//ipl/assets/images/loader.gif) title sponsor[![Image 22: tata](https://www.iplt20.com/assets/images/new-sponsor-tata-logo.png)](https://www.tata.com/) PREMIER PARTNERS [![Image 23: angelone](https://www.iplt20.com/assets/images/new-sponsor-angelone-logo.png)](https://www.angelone.in/)[![Image 24: rupay](https://www.iplt20.com/assets/images/new-sponsor-rupay-logo.png)](https://www.rupay.co.in/)[![Image 25: google ai](https://www.iplt20.com/assets/images/new-sponsor-googleai-logo.png)](https://www.google.com/search?udm=50&aep=11&authuser=1) UMPIRE PARTNER[![Image 26: wonder-cement](https://www.iplt20.com/assets/images/new-sponsor-wondercement-logo.png)](https://www.wondercement.com/) strategic timeout partner[![Image 27: ceat](https://www.iplt20.com/assets/images/new-sponsor-ceat-logo.png)](https://www.ceat.com/) GOOD TIMES partner[![Image 28: ceat](https://www.iplt20.com/assets/images/new-sponsor-kingfisher-logo.png)](https://www.kingfisher.com/) official broadcaster[![Image 29: star sports](https://www.iplt20.com/assets/images/new-sponsor-starsports-logo.png)](https://www.hotstar.com/) official digital streaming partner[![Image 30: jio hotstar](https://www.iplt20.com/assets/images/new-sponsor-jiohotstar-logo.png)](https://www.hotstar.com/in/sports/cricket/tournaments/indian-premier-league) ## TEAM [Chennai super kings](https://www.iplt20.com/teams/chennai-super-kings)[Delhi Capitals](https://www.iplt20.com/teams/delhi-capitals)[Gujarat Titans](https://www.iplt20.com/teams/gujarat-titans)[Kolkata Knight Riders](https://www.iplt20.com/teams/kolkata-knight-riders)[Lucknow Super Giants](https://www.iplt20.com/teams/lucknow-super-giants)[Mumbai Indians](https://www.iplt20.com/teams/mumbai-indians)[Punjab Kings](https://www.iplt20.com/teams/punjab-kings)[Rajasthan Royals](https://www.iplt20.com/teams/rajasthan-royals)[Royal Challengers Bengaluru](https://www.iplt20.com/teams/royal-challengers-bengaluru)[Sunrisers Hyderabad](https://www.iplt20.com/teams/sunrisers-hyderabad) ## ABOUT [About Us](https://www.iplt20.com/about/about-us)[Anti Corruption Code](https://www.iplt20.com/about/anti-corruption-code?id=260)[Anti Doping Rules](https://www.iplt20.com/about/anti-doping-rules?id=261)[TUE Application Form](https://www.iplt20.com/about/tue-application-form?id=265)[Anti Discrimination Code](https://www.iplt20.com/about/anti-discrimination-code?id=266)[Clothing and Equipment Regulations](https://www.iplt20.com/about/clothing-and-equipment-regulations?id=267)[Code Of Conduct For Players and Teams Officials](https://www.iplt20.com/about/code-of-conduct-for-players-and-team-officials?id=268)[News Access Regulations](https://www.iplt20.com/about/news-access-regulations?id=270)[Image Use Terms](https://www.iplt20.com/about/image-use-terms?id=271) ## GUIDELINES [IPL Code Of Conduct For Match Officials](https://www.iplt20.com/about/code-of-conduct-for-match-officials-and-match-official-support-personnel?id=269)[Brand And Protection Guidelines](https://documents.iplt20.com/bcci/documents/1680174721009_Brand&ContentProtectionGuidelines.pdf)[Governing Council](https://www.iplt20.com/about/governing-council?id=275)[Match Playing Conditions](https://www.iplt20.com/about/match-playing-conditions?id=272)[PMOA Minimum Standard](https://www.iplt20.com/about/pmoa-minimum-standard?id=273)[Suspect Action Policy](https://www.iplt20.com/about/suspect-action-policy?id=290) ## CONTACT [Contact Us](https://www.iplt20.com/about/contact-us)[Sponsorship](https://www.iplt20.com/about/contact-us)[Privacy Policy](https://www.iplt20.com/privacy-policy)[Terms & Conditions](https://www.iplt20.com/terms-and-conditions) Copyright \u00a9 IPL 2026 All Rights Reserved. [What are cookies?](http://www.allaboutcookies.org/ \"Learn all about cookies and why sites use them\") We and selected third parties use cookies or similar technologies for technical purposes and, with your consent, for other purposes as specified in the [cookie policy.](https://www.iplt20.com/cookie-policy) Accept cookies [![Image 31](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) |![Image 32](https://documents.iplt20.com//ipl/assets/images/new-eye.svg)0| Share video on :[_\uf232_](zdasjavascript:void(0);)[](javascript:void(0);)[](javascript:void(0);)[Copy](javascript:void(0)) ## Magic Moments [View All](https://www.iplt20.com/video/magic-moments) ## Related Videos * 1 # IPL Exclusive Loading.... # Player Details [![Image 33](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) [- Player Profile \u00bb](https://www.iplt20.com/) | Role | Batsman | Nationality | Indian | ![Image 34](https://www.iplt20.com/#) | | --- | --- | | Bats | | Bowls | | | | | Bio | | A 22-year old opening batsman who hails from Pune, Ruturaj Gaikwad has been a consistent performer for his state team Maharashtra. He was the highest run-getter for Maharashtra in the league stage of the Syed Mushtaq Ali Trophy 2018-19. At the IPL 2019 Player Auction, the Chennai Super Kings secured his services at his base price of INR 20 lacs. | | [![Image 35](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) ## Title Favicon: https://www.google.com/s2/favicons?domain=www.iplt20.com&sz=32 3. **IPL 2026 Points Table | Team Standings & Rankings | IPLT20** URL: https://www.iplt20.com/points-table/men/2026 Display URL: www.iplt20.com/points-table/men/2026 Snippet: See the IPL 2026 points table with live team standings and rankings. Access past season standings and track team performance year by year on IPLT20. Content: Title: IPL 2026 Points Table | Team Standings & Rankings | IPLT20 URL Source: https://www.iplt20.com/points-table/men/2026 Markdown Content: # IPL 2026 Points Table | Team Standings & Rankings | IPLT20 [![Image 1: BCCI Logo](https://documents.iplt20.com//ipl/assets/images/BCCI_logo.png)BCCI.TV](https://www.bcci.tv/)|[![Image 2: WPL Logo](https://documents.iplt20.com//ipl/assets/images/womens-premier-league-logonew.webp)](https://www.wplt20.com/)Follow Us[](https://twitter.com/IPL)[](https://www.instagram.com/iplt20/)[](https://www.facebook.com/IPL/) [![Image 3](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) [![Image 4](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) \u00d7 * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 5: menu](https://documents.iplt20.com//ipl/assets/images/new-menu.svg)](https://www.iplt20.com/points-table/men/2026#) * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 6](https://documents.iplt20.com//ipl/assets/images/fan-poll.webp)](https://www.iplt20.com/fan-poll)[![Image 7](https://documents.iplt20.com//ipl/assets/images/viewers-choice.webp)](https://www.iplt20.com/polls/emerging-player)![Image 8](https://documents.iplt20.com//ipl/assets/images/new-search-icon.svg) **Search**\u2715 ## Points Table [Home](https://www.iplt20.com/)/[Points Table](https://www.iplt20.com/points-table/men/2026) Points Table * [Points Table](https://www.iplt20.com/points-table/men/2026#pointtable) * [Playoffs](https://www.iplt20.com/points-table/men/2026#bracketsfixture) MEN WOMEN SEASON ### Filters ![Image 9](https://www.iplt20.com/assets/images/close-sign.svg) ### Season ![Image 10](https://www.iplt20.com/assets/images/new-icon-share-gray.svg) [_\uf232_](https://wa.me/?text=http://www.iplt20.com/points-table/men/2026#bracketsfixture)[](https://www.facebook.com/sharer.php?u=http://www.iplt20.com/points-table/men/2026#bracketsfixture)[](https://twitter.com/share?url=http://www.iplt20.com/points-table/men/2026#bracketsfixture)[Copy](javascript:void();) ![Image 11](https://www.iplt20.com/points-table/men/2026) #### TBD ## Qualifier 1 TBD ![Image 12](https://www.iplt20.com/points-table/men/2026) #### TBD ![Image 13](https://www.iplt20.com/points-table/men/2026) #### TBD ## Eliminator TBD ![Image 14](https://www.iplt20.com/points-table/men/2026) #### TBD ![Image 15](https://www.iplt20.com/points-table/men/2026) #### TBD ## Qualifier 2 TBD ![Image 16](https://www.iplt20.com/points-table/men/2026) #### TBD ![Image 17](https://www.iplt20.com/points-table/men/2026) #### TBD ## Final TBD ![Image 18](https://www.iplt20.com/points-table/men/2026) #### TBD ![Image 19](https://www.iplt20.com/assets/images/teams-trophy-new.png) title sponsor[![Image 20: tata](https://www.iplt20.com/assets/images/new-sponsor-tata-logo.png)](https://www.tata.com/) PREMIER PARTNERS [![Image 21: angelone](https://www.iplt20.com/assets/images/new-sponsor-angelone-logo.png)](https://www.angelone.in/)[![Image 22: rupay](https://www.iplt20.com/assets/images/new-sponsor-rupay-logo.png)](https://www.rupay.co.in/)[![Image 23: google ai](https://www.iplt20.com/assets/images/new-sponsor-googleai-logo.png)](https://www.google.com/search?udm=50&aep=11&authuser=1) UMPIRE PARTNER[![Image 24: wonder-cement](https://www.iplt20.com/assets/images/new-sponsor-wondercement-logo.png)](https://www.wondercement.com/) strategic timeout partner[![Image 25: ceat](https://www.iplt20.com/assets/images/new-sponsor-ceat-logo.png)](https://www.ceat.com/) GOOD TIMES partner[![Image 26: ceat](https://www.iplt20.com/assets/images/new-sponsor-kingfisher-logo.png)](https://www.kingfisher.com/) official broadcaster[![Image 27: star sports](https://www.iplt20.com/assets/images/new-sponsor-starsports-logo.png)](https://www.hotstar.com/) official digital streaming partner[![Image 28: jio hotstar](https://www.iplt20.com/assets/images/new-sponsor-jiohotstar-logo.png)](https://www.hotstar.com/in/sports/cricket/tournaments/indian-premier-league) ## TEAM [Chennai super kings](https://www.iplt20.com/teams/chennai-super-kings)[Delhi Capitals](https://www.iplt20.com/teams/delhi-capitals)[Gujarat Titans](https://www.iplt20.com/teams/gujarat-titans)[Kolkata Knight Riders](https://www.iplt20.com/teams/kolkata-knight-riders)[Lucknow Super Giants](https://www.iplt20.com/teams/lucknow-super-giants)[Mumbai Indians](https://www.iplt20.com/teams/mumbai-indians)[Punjab Kings](https://www.iplt20.com/teams/punjab-kings)[Rajasthan Royals](https://www.iplt20.com/teams/rajasthan-royals)[Royal Challengers Bengaluru](https://www.iplt20.com/teams/royal-challengers-bengaluru)[Sunrisers Hyderabad](https://www.iplt20.com/teams/sunrisers-hyderabad) ## ABOUT [About Us](https://www.iplt20.com/about/about-us)[Anti Corruption Code](https://www.iplt20.com/about/anti-corruption-code?id=260)[Anti Doping Rules](https://www.iplt20.com/about/anti-doping-rules?id=261)[TUE Application Form](https://www.iplt20.com/about/tue-application-form?id=265)[Anti Discrimination Code](https://www.iplt20.com/about/anti-discrimination-code?id=266)[Clothing and Equipment Regulations](https://www.iplt20.com/about/clothing-and-equipment-regulations?id=267)[Code Of Conduct For Players and Teams Officials](https://www.iplt20.com/about/code-of-conduct-for-players-and-team-officials?id=268)[News Access Regulations](https://www.iplt20.com/about/news-access-regulations?id=270)[Image Use Terms](https://www.iplt20.com/about/image-use-terms?id=271) ## GUIDELINES [IPL Code Of Conduct For Match Officials](https://www.iplt20.com/about/code-of-conduct-for-match-officials-and-match-official-support-personnel?id=269)[Brand And Protection Guidelines](https://documents.iplt20.com/bcci/documents/1680174721009_Brand&ContentProtectionGuidelines.pdf)[Governing Council](https://www.iplt20.com/about/governing-council?id=275)[Match Playing Conditions](https://www.iplt20.com/about/match-playing-conditions?id=272)[PMOA Minimum Standard](https://www.iplt20.com/about/pmoa-minimum-standard?id=273)[Suspect Action Policy](https://www.iplt20.com/about/suspect-action-policy?id=290) ## CONTACT [Contact Us](https://www.iplt20.com/about/contact-us)[Sponsorship](https://www.iplt20.com/about/contact-us)[Privacy Policy](https://www.iplt20.com/privacy-policy)[Terms & Conditions](https://www.iplt20.com/terms-and-conditions) Copyright \u00a9 IPL 2026 All Rights Reserved. [What are cookies?](http://www.allaboutcookies.org/ \"Learn all about cookies and why sites use them\") We and selected third parties use cookies or similar technologies for technical purposes and, with your consent, for other purposes as specified in the [cookie policy.](https://www.iplt20.com/cookie-policy) Accept cookies [![Image 29](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) Video Player is loading. Play Video ![Image 30](https://players.brightcove.net/3588749423001/studio_overlays/default-4b7f1886-227e-4777-a94e-e274a16a3887.png) Play Skip Backward Skip Forward Mute Current Time 0:00 / Duration 0:00 Loaded: 0% Stream Type LIVE Seek to live, currently behind live LIVE Remaining Time-0:00 1x Playback Rate Chapters * Chapters Descriptions * descriptions off, selected Captions * captions settings, opens captions settings dialog * captions off, selected Audio Track Share Quality Levels Picture-in-Picture Fullscreen This is a modal window. Beginning of dialog window. Escape will cancel and close the window. Text Color Opacity Text Background Color Opacity Caption Area Background Color Opacity Font Size Text Edge Style Font Family Reset Done Close Modal Dialog End of dialog window. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. |![Image 31](https://documents.iplt20.com//ipl/assets/images/new-eye.svg)0| Share video on :[_\uf232_](zdasjavascript:void(0);)[](javascript:void(0);)[](javascript:void(0);)[Copy](javascript:void(0)) ## Magic Moments [View All](https://www.iplt20.com/video/magic-moments) ## Related Videos * 1 # IPL Exclusive Loading.... # Player Details [![Image 32](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) [- Player Profile \u00bb](https://www.iplt20.com/points-table/men/2026) | Role | Batsman | Nationality | Indian | ![Image 33](https://www.iplt20.com/points-table/men/2026#) | | --- | --- | | Bats | | Bowls | | | | | Bio | | A 22-year old opening batsman who hails from Pune, Ruturaj Gaikwad has been a consistent performer for his state team Maharashtra. He was the highest run-getter for Maharashtra in the league stage of the Syed Mushtaq Ali Trophy 2018-19. At the IPL 2019 Player Auction, the Chennai Super Kings secured his services at his base price of INR 20 lacs. | | [![Image 34](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) ## Title Video Player is loading. Play Video ![Image 35](https://players.brightcove.net/3588749423001/studio_overlays/default-4b7f1886-227e-4777-a94e-e274a16a3887.png) Play Skip Backward Skip Forward Mute Current Time 0:00 / Duration 0:00 Loaded: 0% Stream Type LIVE Seek to live, currently behind live LIVE Remaining Time-0:00 1x Playback Rate Chapters * Chapters Descriptions * descriptions off, selected Captions * captions settings, opens captions settings dialog * captions off, selected Audio Track Share Quality Levels Picture-in-Picture Fullscreen This is a modal window. Beginning of dialog window. Escape will cancel and close the window. Text Color Opacity Text Background Color Opacity Caption Area Background Color Opacity Font Size Text Edge Style Font Family Reset Done Close Modal Dialog End of dialog window. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Favicon: https://www.google.com/s2/favicons?domain=www.iplt20.com&sz=32 4. **IPL 2026 Playoffs | Road to the Finals | IPLT20** URL: https://www.iplt20.com/matches/playoffs Display URL: www.iplt20.com/matches/playoffs Snippet: Follow the IPL 2026 playoffs journey, from qualifiers to the finals. Track every team's progress and playoff schedule on IPLT20. Content: Title: IPL 2026 Playoffs | Road to the Finals | IPLT20 URL Source: https://www.iplt20.com/matches/playoffs Markdown Content: # IPL 2026 Playoffs | Road to the Finals | IPLT20 [![Image 1: BCCI Logo](https://documents.iplt20.com//ipl/assets/images/BCCI_logo.png)BCCI.TV](https://www.bcci.tv/)|[![Image 2: WPL Logo](https://documents.iplt20.com//ipl/assets/images/womens-premier-league-logonew.webp)](https://www.wplt20.com/)Follow Us[](https://twitter.com/IPL)[](https://www.instagram.com/iplt20/)[](https://www.facebook.com/IPL/) [![Image 3](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) [![Image 4](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) \u00d7 [![Image 5: menu](https://documents.iplt20.com//ipl/assets/images/new-menu.svg)](https://www.iplt20.com/matches/playoffs#) * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 6](https://documents.iplt20.com//ipl/assets/images/fan-poll.webp)](https://www.iplt20.com/fan-poll)[![Image 7](https://documents.iplt20.com//ipl/assets/images/viewers-choice.webp)](https://www.iplt20.com/polls/emerging-player)![Image 8](https://documents.iplt20.com//ipl/assets/images/new-search-icon.svg) **Search**\u2715 [Home](https://www.iplt20.com/)/[Matches](https://www.iplt20.com/matches)/[Playoffs](https://www.iplt20.com/matches/playoffs) MATCHES * [FIXTURES](https://www.iplt20.com/matches/fixtures) * [RESULTS](https://www.iplt20.com/matches/results) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) ![Image 9](https://www.iplt20.com/assets/images/new-icon-share-gray.svg) [_\uf232_](https://wa.me/?text=http://www.iplt20.com/matches/playoffs#bracketsfixture)[](https://www.facebook.com/sharer.php?u=http://www.iplt20.com/matches/playoffs#bracketsfixture)[](https://twitter.com/share?url=http://www.iplt20.com/matches/playoffs#bracketsfixture)[Copy](javascript:void();) ![Image 10](https://www.iplt20.com/matches/playoffs) #### TBD ## Qualifier 1 TBD ![Image 11](https://www.iplt20.com/matches/playoffs) #### TBD ![Image 12](https://www.iplt20.com/matches/playoffs) #### TBD ## Eliminator TBD ![Image 13](https://www.iplt20.com/matches/playoffs) #### TBD ![Image 14](https://www.iplt20.com/matches/playoffs) #### TBD ## Qualifier 2 TBD ![Image 15](https://www.iplt20.com/matches/playoffs) #### TBD ![Image 16](https://www.iplt20.com/matches/playoffs) #### TBD ## Final TBD ![Image 17](https://www.iplt20.com/matches/playoffs) #### TBD ![Image 18](https://www.iplt20.com/assets/images/teams-trophy-new.png) title sponsor[![Image 19: tata](https://www.iplt20.com/assets/images/new-sponsor-tata-logo.png)](https://www.tata.com/) PREMIER PARTNERS [![Image 20: angelone](https://www.iplt20.com/assets/images/new-sponsor-angelone-logo.png)](https://www.angelone.in/)[![Image 21: rupay](https://www.iplt20.com/assets/images/new-sponsor-rupay-logo.png)](https://www.rupay.co.in/)[![Image 22: google ai](https://www.iplt20.com/assets/images/new-sponsor-googleai-logo.png)](https://www.google.com/search?udm=50&aep=11&authuser=1) UMPIRE PARTNER[![Image 23: wonder-cement](https://www.iplt20.com/assets/images/new-sponsor-wondercement-logo.png)](https://www.wondercement.com/) strategic timeout partner[![Image 24: ceat](https://www.iplt20.com/assets/images/new-sponsor-ceat-logo.png)](https://www.ceat.com/) GOOD TIMES partner[![Image 25: ceat](https://www.iplt20.com/assets/images/new-sponsor-kingfisher-logo.png)](https://www.kingfisher.com/) official broadcaster[![Image 26: star sports](https://www.iplt20.com/assets/images/new-sponsor-starsports-logo.png)](https://www.hotstar.com/) official digital streaming partner[![Image 27: jio hotstar](https://www.iplt20.com/assets/images/new-sponsor-jiohotstar-logo.png)](https://www.hotstar.com/in/sports/cricket/tournaments/indian-premier-league) ## TEAM [Chennai super kings](https://www.iplt20.com/teams/chennai-super-kings)[Delhi Capitals](https://www.iplt20.com/teams/delhi-capitals)[Gujarat Titans](https://www.iplt20.com/teams/gujarat-titans)[Kolkata Knight Riders](https://www.iplt20.com/teams/kolkata-knight-riders)[Lucknow Super Giants](https://www.iplt20.com/teams/lucknow-super-giants)[Mumbai Indians](https://www.iplt20.com/teams/mumbai-indians)[Punjab Kings](https://www.iplt20.com/teams/punjab-kings)[Rajasthan Royals](https://www.iplt20.com/teams/rajasthan-royals)[Royal Challengers Bengaluru](https://www.iplt20.com/teams/royal-challengers-bengaluru)[Sunrisers Hyderabad](https://www.iplt20.com/teams/sunrisers-hyderabad) ## ABOUT [About Us](https://www.iplt20.com/about/about-us)[Anti Corruption Code](https://www.iplt20.com/about/anti-corruption-code?id=260)[Anti Doping Rules](https://www.iplt20.com/about/anti-doping-rules?id=261)[TUE Application Form](https://www.iplt20.com/about/tue-application-form?id=265)[Anti Discrimination Code](https://www.iplt20.com/about/anti-discrimination-code?id=266)[Clothing and Equipment Regulations](https://www.iplt20.com/about/clothing-and-equipment-regulations?id=267)[Code Of Conduct For Players and Teams Officials](https://www.iplt20.com/about/code-of-conduct-for-players-and-team-officials?id=268)[News Access Regulations](https://www.iplt20.com/about/news-access-regulations?id=270)[Image Use Terms](https://www.iplt20.com/about/image-use-terms?id=271) ## GUIDELINES [IPL Code Of Conduct For Match Officials](https://www.iplt20.com/about/code-of-conduct-for-match-officials-and-match-official-support-personnel?id=269)[Brand And Protection Guidelines](https://documents.iplt20.com/bcci/documents/1680174721009_Brand&ContentProtectionGuidelines.pdf)[Governing Council](https://www.iplt20.com/about/governing-council?id=275)[Match Playing Conditions](https://www.iplt20.com/about/match-playing-conditions?id=272)[PMOA Minimum Standard](https://www.iplt20.com/about/pmoa-minimum-standard?id=273)[Suspect Action Policy](https://www.iplt20.com/about/suspect-action-policy?id=290) ## CONTACT [Contact Us](https://www.iplt20.com/about/contact-us)[Sponsorship](https://www.iplt20.com/about/contact-us)[Privacy Policy](https://www.iplt20.com/privacy-policy)[Terms & Conditions](https://www.iplt20.com/terms-and-conditions) Copyright \u00a9 IPL 2026 All Rights Reserved. [What are cookies?](http://www.allaboutcookies.org/ \"Learn all about cookies and why sites use them\") We and selected third parties use cookies or similar technologies for technical purposes and, with your consent, for other purposes as specified in the [cookie policy.](https://www.iplt20.com/cookie-policy) Accept cookies [![Image 28](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) |![Image 29](https://documents.iplt20.com//ipl/assets/images/new-eye.svg)0| Share video on :[_\uf232_](zdasjavascript:void(0);)[](javascript:void(0);)[](javascript:void(0);)[Copy](javascript:void(0)) ## Magic Moments [View All](https://www.iplt20.com/video/magic-moments) ## Related Videos # IPL Exclusive Loading.... # Player Details [![Image 30](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) [- Player Profile \u00bb](https://www.iplt20.com/matches/playoffs) | Role | Batsman | Nationality | Indian | ![Image 31](https://www.iplt20.com/matches/playoffs#) | | --- | --- | | Bats | | Bowls | | | | | Bio | | A 22-year old opening batsman who hails from Pune, Ruturaj Gaikwad has been a consistent performer for his state team Maharashtra. He was the highest run-getter for Maharashtra in the league stage of the Syed Mushtaq Ali Trophy 2018-19. At the IPL 2019 Player Auction, the Chennai Super Kings secured his services at his base price of INR 20 lacs. | | [![Image 32](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) ## Title Favicon: https://www.google.com/s2/favicons?domain=www.iplt20.com&sz=32 5. **IPL 2026 Match Results | Full Scorecard & Summaries | IPLT20** URL: https://www.iplt20.com/matches/results/2026 Display URL: www.iplt20.com/matches/results/2026 Snippet: View all IPL 2026 match results with detailed scorecards and summaries. Stay updated with every match outcome on IPLT20. Content: Title: IPL 2026 Match Results | Full Scorecard & Summaries | IPLT20 URL Source: https://www.iplt20.com/matches/results/2026 Markdown Content: # IPL 2026 Match Results | Full Scorecard & Summaries | IPLT20 [![Image 1: BCCI Logo](https://documents.iplt20.com//ipl/assets/images/BCCI_logo.png)BCCI.TV](https://www.bcci.tv/)|[![Image 2: WPL Logo](https://documents.iplt20.com//ipl/assets/images/womens-premier-league-logonew.webp)](https://www.wplt20.com/)Follow Us[](https://twitter.com/IPL)[](https://www.instagram.com/iplt20/)[](https://www.facebook.com/IPL/) [![Image 3](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) [![Image 4](https://documents.iplt20.com//ipl/assets/images/ipl-logo-new-old.png)](https://www.iplt20.com/) \u00d7 * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 5: menu](https://documents.iplt20.com//ipl/assets/images/new-menu.svg)](https://www.iplt20.com/matches/results/2026#) * [TICKETS](https://www.iplt20.com/matches/tickets) * [MATCHES](https://www.iplt20.com/matches/fixtures) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [VIDEOS](https://www.iplt20.com/videos) * [NEWS](https://www.iplt20.com/news) * [TEAMS](https://www.iplt20.com/teams) * [FANTASY](https://fantasy.iplt20.com/) * [MORE](javascript:void(0)) * [STATS](https://www.iplt20.com/stats/2026) * [HEAD TO HEAD](https://www.iplt20.com/comparison) * [TEAM COMPARISON](https://www.iplt20.com/comparison/teams) * [FAN CONTESTS](https://www.iplt20.com/fan-contests) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) * [PHOTOS](https://www.iplt20.com/photos) * [AUCTION](https://www.iplt20.com/auction) * [VENUES](https://www.iplt20.com/venues) * [MOBILE PRODUCTS](https://www.iplt20.com/mobile-products) * [ABOUT US](https://www.iplt20.com/about/about-us) [![Image 6](https://documents.iplt20.com//ipl/assets/images/fan-poll.webp)](https://www.iplt20.com/fan-poll)[![Image 7](https://documents.iplt20.com//ipl/assets/images/viewers-choice.webp)](https://www.iplt20.com/polls/emerging-player)![Image 8](https://documents.iplt20.com//ipl/assets/images/new-search-icon.svg) **Search**\u2715 [Home](https://www.iplt20.com/)/[Matches](https://www.iplt20.com/matches)/[Results](https://www.iplt20.com/matches/results/2026) MATCHES * [FIXTURES](https://www.iplt20.com/matches/fixtures) * [RESULTS](https://www.iplt20.com/matches/results) * [POINTS TABLE](https://www.iplt20.com/matches/points-table) * [PLAYOFFS](https://www.iplt20.com/matches/playoffs) MEN MEN WOMEN All Teams All Teams All Venues All Venues SEASON ### Filters [clear](https://www.iplt20.com/matches/results/2026) ![Image 9](https://www.iplt20.com/assets/images/close-sign.svg) ### Teams ### Venues ### Season title sponsor[![Image 10: tata](https://www.iplt20.com/assets/images/new-sponsor-tata-logo.png)](https://www.tata.com/) PREMIER PARTNERS [![Image 11: angelone](https://www.iplt20.com/assets/images/new-sponsor-angelone-logo.png)](https://www.angelone.in/)[![Image 12: rupay](https://www.iplt20.com/assets/images/new-sponsor-rupay-logo.png)](https://www.rupay.co.in/)[![Image 13: google ai](https://www.iplt20.com/assets/images/new-sponsor-googleai-logo.png)](https://www.google.com/search?udm=50&aep=11&authuser=1) UMPIRE PARTNER[![Image 14: wonder-cement](https://www.iplt20.com/assets/images/new-sponsor-wondercement-logo.png)](https://www.wondercement.com/) strategic timeout partner[![Image 15: ceat](https://www.iplt20.com/assets/images/new-sponsor-ceat-logo.png)](https://www.ceat.com/) GOOD TIMES partner[![Image 16: ceat](https://www.iplt20.com/assets/images/new-sponsor-kingfisher-logo.png)](https://www.kingfisher.com/) official broadcaster[![Image 17: star sports](https://www.iplt20.com/assets/images/new-sponsor-starsports-logo.png)](https://www.hotstar.com/) official digital streaming partner[![Image 18: jio hotstar](https://www.iplt20.com/assets/images/new-sponsor-jiohotstar-logo.png)](https://www.hotstar.com/in/sports/cricket/tournaments/indian-premier-league) ## TEAM [Chennai super kings](https://www.iplt20.com/teams/chennai-super-kings)[Delhi Capitals](https://www.iplt20.com/teams/delhi-capitals)[Gujarat Titans](https://www.iplt20.com/teams/gujarat-titans)[Kolkata Knight Riders](https://www.iplt20.com/teams/kolkata-knight-riders)[Lucknow Super Giants](https://www.iplt20.com/teams/lucknow-super-giants)[Mumbai Indians](https://www.iplt20.com/teams/mumbai-indians)[Punjab Kings](https://www.iplt20.com/teams/punjab-kings)[Rajasthan Royals](https://www.iplt20.com/teams/rajasthan-royals)[Royal Challengers Bengaluru](https://www.iplt20.com/teams/royal-challengers-bengaluru)[Sunrisers Hyderabad](https://www.iplt20.com/teams/sunrisers-hyderabad) ## ABOUT [About Us](https://www.iplt20.com/about/about-us)[Anti Corruption Code](https://www.iplt20.com/about/anti-corruption-code?id=260)[Anti Doping Rules](https://www.iplt20.com/about/anti-doping-rules?id=261)[TUE Application Form](https://www.iplt20.com/about/tue-application-form?id=265)[Anti Discrimination Code](https://www.iplt20.com/about/anti-discrimination-code?id=266)[Clothing and Equipment Regulations](https://www.iplt20.com/about/clothing-and-equipment-regulations?id=267)[Code Of Conduct For Players and Teams Officials](https://www.iplt20.com/about/code-of-conduct-for-players-and-team-officials?id=268)[News Access Regulations](https://www.iplt20.com/about/news-access-regulations?id=270)[Image Use Terms](https://www.iplt20.com/about/image-use-terms?id=271) ## GUIDELINES [IPL Code Of Conduct For Match Officials](https://www.iplt20.com/about/code-of-conduct-for-match-officials-and-match-official-support-personnel?id=269)[Brand And Protection Guidelines](https://documents.iplt20.com/bcci/documents/1680174721009_Brand&ContentProtectionGuidelines.pdf)[Governing Council](https://www.iplt20.com/about/governing-council?id=275)[Match Playing Conditions](https://www.iplt20.com/about/match-playing-conditions?id=272)[PMOA Minimum Standard](https://www.iplt20.com/about/pmoa-minimum-standard?id=273)[Suspect Action Policy](https://www.iplt20.com/about/suspect-action-policy?id=290) ## CONTACT [Contact Us](https://www.iplt20.com/about/contact-us)[Sponsorship](https://www.iplt20.com/about/contact-us)[Privacy Policy](https://www.iplt20.com/privacy-policy)[Terms & Conditions](https://www.iplt20.com/terms-and-conditions) Copyright \u00a9 IPL 2026 All Rights Reserved. [What are cookies?](http://www.allaboutcookies.org/ \"Learn all about cookies and why sites use them\") We and selected third parties use cookies or similar technologies for technical purposes and, with your consent, for other purposes as specified in the [cookie policy.](https://www.iplt20.com/cookie-policy) Accept cookies [![Image 19](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) Video Player is loading. Play Video ![Image 20](https://players.brightcove.net/3588749423001/studio_overlays/default-4b7f1886-227e-4777-a94e-e274a16a3887.png) Play Skip Backward Skip Forward Mute Current Time 0:00 / Duration 0:00 Loaded: 0% Stream Type LIVE Seek to live, currently behind live LIVE Remaining Time-0:00 1x Playback Rate Chapters * Chapters Descriptions * descriptions off, selected Captions * captions settings, opens captions settings dialog * captions off, selected Audio Track Share Quality Levels Picture-in-Picture Fullscreen This is a modal window. Beginning of dialog window. Escape will cancel and close the window. Text Color Opacity Text Background Color Opacity Caption Area Background Color Opacity Font Size Text Edge Style Font Family Reset Done Close Modal Dialog End of dialog window. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. |![Image 21](https://documents.iplt20.com//ipl/assets/images/new-eye.svg)0| Share video on :[_\uf232_](zdasjavascript:void(0);)[](javascript:void(0);)[](javascript:void(0);)[Copy](javascript:void(0)) ## Magic Moments [View All](https://www.iplt20.com/video/magic-moments) ## Related Videos * 1 # IPL Exclusive Loading.... # Player Details [![Image 22](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) [- Player Profile \u00bb](https://www.iplt20.com/matches/results/2026) | Role | Batsman | Nationality | Indian | ![Image 23](https://www.iplt20.com/matches/results/2026#) | | --- | --- | | Bats | | Bowls | | | | | Bio | | A 22-year old opening batsman who hails from Pune, Ruturaj Gaikwad has been a consistent performer for his state team Maharashtra. He was the highest run-getter for Maharashtra in the league stage of the Syed Mushtaq Ali Trophy 2018-19. At the IPL 2019 Player Auction, the Chennai Super Kings secured his services at his base price of INR 20 lacs. | | [![Image 24](https://documents.iplt20.com//ipl/assets/images/ap-close-pop-vd.png)](javascript:;) ## Title Video Player is loading. Play Video ![Image 25](https://players.brightcove.net/3588749423001/studio_overlays/default-4b7f1886-227e-4777-a94e-e274a16a3887.png) Play Skip Backward Skip Forward Mute Current Time 0:00 / Duration 0:00 Loaded: 0% Stream Type LIVE Seek to live, currently behind live LIVE Remaining Time-0:00 1x Playback Rate Chapters * Chapters Descriptions * descriptions off, selected Captions * captions settings, opens captions settings dialog * captions off, selected Audio Track Share Quality Levels Picture-in-Picture Fullscreen This is a modal window. Beginning of dialog window. Escape will cancel and close the window. Text Color Opacity Text Background Color Opacity Caption Area Background Color Opacity Font Size Text Edge Style Font Family Reset Done Close Modal Dialog End of dialog window. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Close Modal Dialog This is a modal window. This modal can be closed by pressing the Escape key or activating the close button. Favicon: https://www.google.com/s2/favicons?domain=www.iplt20.com&sz=32"
+                  }
+                ],
+                "fetch_count": 0,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable"
+              },
+              "error": null,
+              "duration_ms": 719.55,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "engine": "web-search",
+                "results_count": 1,
+                "fetched_count": 0,
+                "result_quality": "good"
+              }
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "## Research Notes\n- IPL; Standings: I could not verify a reliable answer from the gathered evidence.\n\n## Final\n- I could not verify a reliable answer from the gathered evidence."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "56b9db2f-85f8-4b49-b8ab-4439cd1adc22",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-cdf23a3a",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:00:59.483570+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:01:01.590659+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Do a harder web brief on India's IPL 2026 standings race....",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:01:01.590699+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Do a harder web brief on India's IPL 2026 standings race....",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Do a harder web brief on India's IPL 2026 standings race...., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:01:01.590831+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:01:01.590945+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=india's ipl 2026 standings race site: iplt20. com",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:01:01.591097+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=india's ipl 2026 standings race site: iplt20. com",
+                  "outputSummary": "1 results found",
+                  "sourceUrl": null,
+                  "durationMs": 719,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:01:02.310766+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: APPROVED. Feedback:",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:01:02.311723+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "## Research Notes\n- IPL; Standings: I could not verify a reliable answer from the gathered evidence. ## Final\n- I could not verify a reliable answer from the gathered evidence....",
+                  "sourceUrl": null,
+                  "durationMs": 2830,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-25T08:01:02.311868+00:00Z"
+                }
+              ],
+              "stepCount": 9,
+              "createdAt": "2026-04-25T08:01:02.311938+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "e9778879194e0cb7",
+          "reviewerPromptVersionHash": "8c8d662b021be4f4",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    }
+  ]
+}

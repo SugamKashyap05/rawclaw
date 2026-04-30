@@ -8,6 +8,7 @@ from src.tools.builtin.datetime_tool import DateTimeTool
 from src.tools.builtin.search_web import DuckDuckGoSearchTool
 from src.tools.builtin.smart_web_search import SmartWebSearchTool
 from src.tools.builtin.web_fetch import WebFetchTool
+from src.tools.builtin.web_extract import WebExtractTool
 from src.tools.builtin.read_file import ReadFileTool
 from src.tools.builtin.smart_search import SmartSearchTool
 from src.tools.builtin.shell_execute import ShellExecuteTool
@@ -21,6 +22,7 @@ def register_builtin_tools() -> None:
     TOOL_REGISTRY.register(DuckDuckGoSearchTool())
     TOOL_REGISTRY.register(SmartWebSearchTool())
     TOOL_REGISTRY.register(WebFetchTool())
+    TOOL_REGISTRY.register(WebExtractTool())
     TOOL_REGISTRY.register(ReadFileTool())
     TOOL_REGISTRY.register(SmartSearchTool())
     TOOL_REGISTRY.register(ShellExecuteTool())
@@ -36,6 +38,7 @@ __all__ = [
     "DuckDuckGoSearchTool",
     "SmartWebSearchTool",
     "WebFetchTool",
+    "WebExtractTool",
     "ReadFileTool",
     "SmartSearchTool",
     "ShellExecuteTool",

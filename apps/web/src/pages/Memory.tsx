@@ -1,28 +1,37 @@
 import { CSSProperties, FormEvent, useEffect, useState } from 'react';
-import { FiDatabase, FiSearch, FiTrash2, FiUploadCloud } from 'react-icons/fi';
+import { FiBookOpen, FiDatabase, FiSearch, FiTrash2, FiUploadCloud, FiUser } from 'react-icons/fi';
+import { AssistantState, CommandMemoryOverview, MemoryEntry, MemorySearchResult, MemoryStats } from '@rawclaw/shared';
 import { api } from '../lib/api';
-import { MemorySearchResult, MemoryStats } from '@rawclaw/shared';
 
 export default function Memory() {
   const [stats, setStats] = useState<MemoryStats | null>(null);
+  const [overview, setOverview] = useState<CommandMemoryOverview | null>(null);
+  const [assistantState, setAssistantState] = useState<AssistantState | null>(null);
   const [results, setResults] = useState<MemorySearchResult[]>([]);
   const [query, setQuery] = useState('');
   const [tags, setTags] = useState('');
   const [source, setSource] = useState('');
-  const [collection, setCollection] = useState('default');
+  const [collection, setCollection] = useState('operator');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
-    void refreshStats();
+    void load();
     void runSearch();
   }, []);
 
-  const refreshStats = async () => {
-    const res = await api.get<MemoryStats>('/memory/stats');
-    setStats(res.data);
+  const load = async () => {
+    const [statsRes, overviewRes, stateRes] = await Promise.all([
+      api.get<MemoryStats>('/memory/stats').catch(() => null),
+      api.get<CommandMemoryOverview>('/memory/overview').catch(() => null),
+      api.get<AssistantState>('/assistant/state').catch(() => null),
+    ]);
+    setStats(statsRes?.data || null);
+    setOverview(overviewRes?.data || null);
+    setAssistantState(stateRes?.data || null);
   };
 
   const runSearch = async (event?: FormEvent) => {
@@ -60,13 +69,27 @@ export default function Memory() {
       });
       setContent('');
       setMessage('Memory entry saved successfully.');
-      await refreshStats();
+      await load();
       await runSearch();
     } catch (error) {
       console.error('Failed to add memory', error);
       setMessage('Unable to save memory entry.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const deleteEntry = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await api.delete(`/memory/entries/${id}`);
+      await load();
+      await runSearch();
+    } catch (error) {
+      console.error('Failed to delete memory entry', error);
+      setMessage('Unable to delete memory entry.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -81,7 +104,7 @@ export default function Memory() {
     try {
       await api.delete('/memory/clear', { params: collection ? { collection } : undefined });
       setMessage('Memory cleared.');
-      await refreshStats();
+      await load();
       await runSearch();
     } catch (error) {
       console.error('Failed to clear memory', error);
@@ -90,18 +113,54 @@ export default function Memory() {
   };
 
   return (
-    <div className="animate-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '2.2rem', fontWeight: 800, marginBottom: '0.5rem' }}>Memory Matrix</h1>
-          <p className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-            // LONG_TERM_RECALL // LOCAL_INDEX // RAG_FOUNDATION
-          </p>
+    <div className="animate-in" style={{ display: 'grid', gap: '1.25rem' }}>
+      <section className="glass-card" style={{ display: 'grid', gap: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: '2.15rem', fontWeight: 800, marginBottom: '0.45rem' }}>Command Memory</h1>
+            <p className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+              OPERATOR_PROFILE // MISSION_MEMORY // SESSION_RECALL
+            </p>
+          </div>
+          <button className="btn-ghost" onClick={clearMemory} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <FiTrash2 /> CLEAR_COLLECTION
+          </button>
         </div>
-        <button className="btn-ghost" onClick={clearMemory} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <FiTrash2 /> CLEAR_MEMORY
-        </button>
-      </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.85rem' }}>
+          <Metric label="Total Entries" value={String(stats?.totalEntries ?? 0)} />
+          <Metric label="Operator" value={String(overview?.operator.length ?? 0)} />
+          <Metric label="Mission" value={String(overview?.mission.length ?? 0)} />
+          <Metric label="Session" value={String(overview?.session.length ?? 0)} />
+        </div>
+      </section>
+
+      <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(320px, 0.95fr)', gap: '1.25rem', alignItems: 'start' }}>
+        <div className="glass-card" style={{ display: 'grid', gap: '0.9rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+            <FiUser />
+            <h2 style={{ fontSize: '1.05rem', margin: 0 }}>What RawClaw Knows</h2>
+          </div>
+          <Detail title="Operator" body={assistantState?.operatorProfile.name || 'Operator name not set yet.'} />
+          <Detail title="Preferences" body={(assistantState?.operatorProfile.preferences || []).join('; ') || 'No operator preferences stored yet.'} />
+          <Detail title="Mission Summary" body={assistantState?.missionSummary || 'No mission summary is pinned yet.'} />
+          <Detail title="Active Focus" body={(assistantState?.activeFocus || []).join('; ') || 'No active focus items are pinned.'} />
+          <Detail
+            title="Commitments"
+            body={assistantState?.commitments.filter((item) => item.status === 'active').map((item) => item.summary).join('; ') || 'No active commitments are being tracked.'}
+          />
+        </div>
+
+        <div className="glass-card" style={{ display: 'grid', gap: '0.9rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+            <FiBookOpen />
+            <h2 style={{ fontSize: '1.05rem', margin: 0 }}>Memory Layers</h2>
+          </div>
+          <LayerPreview title="Operator Memory" items={overview?.operator || []} />
+          <LayerPreview title="Mission Memory" items={overview?.mission || []} />
+          <LayerPreview title="Session Memory" items={overview?.session || []} />
+        </div>
+      </section>
 
       <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '1.5rem', alignItems: 'start' }}>
         <aside style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -123,7 +182,7 @@ export default function Memory() {
                 Embedding Mode: {stats?.embeddingModel ?? 'loading'}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.5rem' }}>
-                {stats?.collections.map((item: string) => (
+                {(stats?.collections || ['operator', 'mission', 'session', 'default']).map((item: string) => (
                   <button
                     key={item}
                     className="btn-ghost"
@@ -151,12 +210,12 @@ export default function Memory() {
               <textarea
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
-                placeholder="Store reusable context, operating notes, user preferences, or project facts..."
+                placeholder="Store operator facts, mission notes, or reusable context..."
                 rows={8}
                 style={textAreaStyle}
               />
               <input value={collection} onChange={(event) => setCollection(event.target.value)} placeholder="Collection" style={inputStyle} />
-              <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="Tags: project, skill, context" style={inputStyle} />
+              <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="Tags: operator, mission, preference" style={inputStyle} />
               <input value={source} onChange={(event) => setSource(event.target.value)} placeholder="Source label or URL" style={inputStyle} />
               <button className="btn-primary" disabled={saving || !content.trim()}>
                 {saving ? 'SAVING...' : 'SAVE_ENTRY'}
@@ -194,38 +253,83 @@ export default function Memory() {
               </div>
             ) : (
               results.map((entry) => (
-                <div
-                  key={entry.id}
-                  style={{
-                    border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    padding: '1rem',
-                    background: 'rgba(255,255,255,0.02)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', gap: '1rem' }}>
-                    <div className="mono" style={{ fontSize: '0.75rem', color: 'var(--neon-cyan)' }}>
-                      {entry.collection.toUpperCase()}
-                    </div>
-                    <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                      SCORE {entry.score}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.95rem', lineHeight: 1.6 }}>{entry.preview}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem' }}>
-                    {entry.tags.map((tag: string) => (
-                      <span key={tag} className="mono" style={tagStyle}>{tag}</span>
-                    ))}
-                    {entry.source && (
-                      <span className="mono" style={tagStyle}>SRC {entry.source}</span>
-                    )}
-                  </div>
-                </div>
+                <MemoryResultCard key={entry.id} entry={entry} deleting={deletingId === entry.id} onDelete={() => void deleteEntry(entry.id)} />
               ))
             )}
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function MemoryResultCard({ entry, deleting, onDelete }: { entry: MemorySearchResult; deleting: boolean; onDelete: () => void }) {
+  return (
+    <div
+      style={{
+        border: '1px solid var(--border-glass)',
+        borderRadius: '8px',
+        padding: '1rem',
+        background: 'rgba(255,255,255,0.02)',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', gap: '1rem' }}>
+        <div className="mono" style={{ fontSize: '0.75rem', color: 'var(--neon-cyan)' }}>
+          {entry.collection.toUpperCase()}
+        </div>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+          <div className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            SCORE {entry.score}
+          </div>
+          <button className="btn-ghost" onClick={onDelete} disabled={deleting} style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem' }}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </button>
+        </div>
+      </div>
+      <div style={{ fontSize: '0.95rem', lineHeight: 1.6 }}>{entry.preview}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem' }}>
+        {entry.tags.map((tag: string) => (
+          <span key={tag} className="mono" style={tagStyle}>{tag}</span>
+        ))}
+        {entry.source && (
+          <span className="mono" style={tagStyle}>SRC {entry.source}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LayerPreview({ title, items }: { title: string; items: MemoryEntry[] }) {
+  return (
+    <div style={{ display: 'grid', gap: '0.45rem' }}>
+      <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{title.toUpperCase()}</div>
+      {items.length === 0 ? (
+        <div style={{ color: 'var(--text-muted)' }}>Nothing stored yet.</div>
+      ) : (
+        items.slice(0, 3).map((item) => (
+          <div key={item.id} style={layerCardStyle}>
+            <div style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>{item.content}</div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function Detail({ title, body }: { title: string; body: string }) {
+  return (
+    <div style={{ display: 'grid', gap: '0.22rem' }}>
+      <div className="mono" style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{title.toUpperCase()}</div>
+      <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{body}</div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ border: '1px solid var(--border-glass)', borderRadius: '16px', padding: '1rem', background: 'rgba(255,255,255,0.05)' }}>
+      <div style={{ fontSize: '1.35rem', fontWeight: 800, marginBottom: '0.25rem' }}>{value}</div>
+      <div style={{ color: 'var(--text-secondary)', fontSize: '0.86rem' }}>{label}</div>
     </div>
   );
 }
@@ -257,4 +361,11 @@ const tagStyle: CSSProperties = {
   borderRadius: '999px',
   padding: '0.2rem 0.5rem',
   color: 'var(--text-secondary)',
+};
+
+const layerCardStyle: CSSProperties = {
+  border: '1px solid var(--border-glass)',
+  borderRadius: '12px',
+  padding: '0.75rem',
+  background: 'rgba(255,255,255,0.03)',
 };

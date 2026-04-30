@@ -1,0 +1,2188 @@
+{
+  "session_id": "web-research-128e5c14",
+  "model": "gemma4:31b-cloud",
+  "prompt_pack_id": "rawclaw-default",
+  "results": [
+    {
+      "step": 1,
+      "title": "Level 1: Fresh News Snapshot",
+      "passed": true,
+      "diagnostics": {
+        "prompt": "Search the web for the latest SpaceX Starship updates and present a concise markdown answer with 3 bullets.",
+        "error": null,
+        "latency_seconds": 18.63094139099121,
+        "ttft_seconds": 18.63027858734131,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "review_feedback": [
+          {
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "- Spacex; Starship: I could not verify a reliable answer from the gathered evidence.\n- I could not verify a reliable answer from the gathered evidence.\n- I could not verify a reliable answer from the gathered evidence.",
+        "final_answer_length": 218,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "spacex": true,
+            "starship": true
+          },
+          "forbidden": {}
+        },
+        "validation_reasons": [],
+        "provider_failure_tagged": false,
+        "raw_event_count": 10,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "1ec3c9e8-2010-457d-b67b-807128a259a8",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:58:45.241124+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-26T03:58:45.241176+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Search the web for the latest SpaceX Starship updates and present a concise markdown answer with 3 bullets."
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Search the web for the latest SpaceX Starship updates and present a concise markdown answer with 3 bullets."
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Search the web for the latest SpaceX Starship updates and present a concise markdown answer with 3 bullets."
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Search the web for the latest SpaceX Starship updates and present a concise markdown answer with 3 bullets.",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "SpaceX Starship"
+              }
+            }
+          },
+          {
+            "type": "heartbeat",
+            "ts": 1777175935245
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "SpaceX Starship"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "SpaceX Starship"
+              },
+              "output": {
+                "status": "ok",
+                "source_engine": "web-search",
+                "results": [
+                  {
+                    "title": "",
+                    "url": "",
+                    "snippet": "Error executing tool 'web-search': Search failed for \"SpaceX Starship\": HTTP 202: Failed to fetch search results"
+                  }
+                ],
+                "fetch_count": 0,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "SpaceX Starship",
+                    "status": "rate_limited",
+                    "error": "DuckDuckGo search failed (may be rate limited or network issue)."
+                  },
+                  {
+                    "provider": "web-search",
+                    "source": "MCP",
+                    "query": "SpaceX Starship",
+                    "status": "ok"
+                  }
+                ]
+              },
+              "error": null,
+              "duration_ms": 14548.15,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "status": "ok",
+                "engine": "web-search",
+                "results_count": 1,
+                "fetched_count": 0,
+                "result_quality": "good",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "SpaceX Starship",
+                    "status": "rate_limited",
+                    "error": "DuckDuckGo search failed (may be rate limited or network issue)."
+                  },
+                  {
+                    "provider": "web-search",
+                    "source": "MCP",
+                    "query": "SpaceX Starship",
+                    "status": "ok"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "- Spacex; Starship: I could not verify a reliable answer from the gathered evidence.\n- I could not verify a reliable answer from the gathered evidence.\n- I could not verify a reliable answer from the gathered evidence."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "1ec3c9e8-2010-457d-b67b-807128a259a8",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:58:45.241124+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:58:48.427331+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Search the web for the latest Space X Starship updates and...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:58:48.427367+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Search the web for the latest Space X Starship updates and...",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Search the web for the latest Space X Starship updates and..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:58:48.427465+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:58:48.427554+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Space X Starship",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:02.975884+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Space X Starship",
+                  "outputSummary": "1 results found",
+                  "sourceUrl": null,
+                  "durationMs": 14548,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:02.975920+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: APPROVED. Feedback:",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:02.976279+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "- Spacex; Starship: I could not verify a reliable answer from the gathered evidence.\n- I could not verify a reliable answer from the gathered evidence.\n- I could not verify a reliable answer from the ...",
+                  "sourceUrl": null,
+                  "durationMs": 17736,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:02.976338+00:00Z"
+                }
+              ],
+              "stepCount": 9,
+              "createdAt": "2026-04-26T03:59:02.976397+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "7b6b6ab4738d17b6",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    },
+    {
+      "step": 2,
+      "title": "Level 2: Search + Fetch Grounded Summary",
+      "passed": false,
+      "diagnostics": {
+        "prompt": "Research the latest Chennai Super Kings IPL 2026 points-table situation. Use web search, fetch the strongest page you find, and present a markdown summary with 4 bullets plus one uncertainty note if needed.",
+        "error": null,
+        "latency_seconds": 8.001068353652954,
+        "ttft_seconds": 8.000438690185547,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search",
+          "web_fetch"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search",
+          "web_fetch"
+        ],
+        "review_feedback": [
+          {
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "tool_call",
+          "tool_result",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "- **Fetched page check**: `IPL 2026 | Chennai Super Kings Match Results | IPLT20` - IPL 2026 | Chennai Super Kings Match Results | IPLT20 Home / Teams / Chennai Super Kings / Results Chennai Super Kings 2010, 2011, 2018, 2021, 2023 Official Team Site Captain - Rut\n- **IPL 2026 | Chennai Super Kings | Latest News, Team Updates and more**: Get the latest news and updates on Chennai Super Kings, including announcements, match reports, team previews, and more on the IPL Website.\n- **Chennai Super Kings Match Schedule & Live Scores - IPLT20**: Follow Chennai Super Kings' full IPL 2026 schedule, including all fixtures, live match updates, results of every match, and playoff games on IPL season.\n- **IPL 2026 | Chennai Super Kings Match Results | IPLT20**: View Chennai Super Kings' complete match results for IPL 2026, including detailed scores, highlights, and key moments from each game on IPL season.",
+        "final_answer_length": 906,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "ipl": true,
+            "points": false
+          },
+          "forbidden": {}
+        },
+        "validation_reasons": [
+          "Missing keyword: points"
+        ],
+        "provider_failure_tagged": false,
+        "raw_event_count": 11,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "20024717-fbae-40eb-99ba-4e1d70bf4138",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:04.542148+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-26T03:59:04.542190+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Research the latest Chennai Super Kings IPL 2026 points-table situation. Use web search, fetch the strongest page you find, and present a markdown summary with 4 bullets plus one uncertainty note if needed."
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Research the latest Chennai Super Kings IPL 2026 points-table situation. Use web search, fetch the strongest page you find, and present a markdown summary with 4 bullets plus one uncertainty note if needed."
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Research the latest Chennai Super Kings IPL 2026 points-table situation. Use web search, fetch the strongest page you find, and present a markdown summary with 4 bullets plus one uncertainty note if needed."
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Research the latest Chennai Super Kings IPL 2026 points-table situation. Use web search, fetch the strongest page you find, and present a markdown summary with 4 bullets plus one uncertainty note if needed.",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "Chennai Super Kings site:iplt20.com"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "Chennai Super Kings site:iplt20.com"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "Chennai Super Kings site:iplt20.com"
+              },
+              "output": {
+                "status": "ok",
+                "source_engine": "duckduckgo_search",
+                "results": [
+                  {
+                    "title": "Chennai Super Kings Match Schedule & Live Scores - IPLT20",
+                    "url": "https://www.iplt20.com/teams/chennai-super-kings/schedule",
+                    "snippet": "Follow Chennai Super Kings' full IPL 2026 schedule, including all fixtures, live match updates, results of every match, and playoff games on IPL season."
+                  },
+                  {
+                    "title": "IPL 2026 | Chennai Super Kings Match Results | IPLT20",
+                    "url": "https://www.iplt20.com/teams/chennai-super-kings/results",
+                    "snippet": "View Chennai Super Kings' complete match results for IPL 2026, including detailed scores, highlights, and key moments from each game on IPL season.",
+                    "full_content": "Chennai Super Kings | CSK 2026 Squad & Overview | IPLT20 Home / Teams / Chennai Super Kings Chennai Super Kings 2010, 2011, 2018, 2021, 2023 Official Team Site Captain - Ruturaj Gaikwad Coach - Stephen Fleming Owner - Chennai Super Kings Cricket Limited Venue - M. A. Chidambaram Stadium Squad Fixtures Results Videos News Archive Season 2026 Season 2025 Season 2024 Season 2023 Season 2022 Season 2021 Season 2020 Season 2019 Season 2018 Season 2015 Season 2014 Season 2013 Season 2012 Season 2011 Season 2010 Season 2009 Season 2008 Batters Ruturaj Gaikwad Batter MS Dhoni WK-Batter Sanju Samson WK-Batter Dewald Brevis Batter Kartik Sharma WK-Batter Sarfaraz Khan Batter Urvil Patel WK-Batter All Rounders Jamie Overton All-Rounder Ramakrishna Ghosh All-Rounder Prashant Veer All-Rounder Matthew William Short All-Rounder Aman Khan All-Rounder Zak Foulkes All-Rounder Shivam Dube All-Rounder Bowlers Khaleel Ahmed Bowler Noor Ahmad Bowler Anshul Kamboj Bowler Mukesh Choudhary Bowler Shreyas Gopal Bowler Gurjapneet Singh Bowler Akeal Hosein Bowler Matt Henry Bowler Rahul Chahar Bowler Spencer Johnson Bowler Akash Madhwal Bowler $(document).ready(function(){ $(\".SMbriefScoreWidget\").hide(); $(\".ap-copy\").css(\"paddingBottom\",\"15px\"); function isCookieSet() { // Replace"
+                  },
+                  {
+                    "title": "IPL 2026 | Chennai Super Kings | Latest News, Team Updates and more",
+                    "url": "https://www.iplt20.com/teams/chennai-super-kings/news",
+                    "snippet": "Get the latest news and updates on Chennai Super Kings, including announcements, match reports, team previews, and more on the IPL Website."
+                  }
+                ],
+                "fetch_count": 2,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "Chennai Super Kings site:iplt20.com",
+                    "status": "ok"
+                  }
+                ]
+              },
+              "error": null,
+              "duration_ms": 2842.21,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "status": "ok",
+                "engine": "duckduckgo_search",
+                "results_count": 3,
+                "fetched_count": 2,
+                "result_quality": "good",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "Chennai Super Kings site:iplt20.com",
+                    "status": "ok"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_fetch",
+              "arguments": {
+                "url": "https://www.iplt20.com/teams/chennai-super-kings/results",
+                "extract_text": true
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_fetch",
+              "arguments": {
+                "url": "https://www.iplt20.com/teams/chennai-super-kings/results",
+                "extract_text": true
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_fetch",
+              "input": {
+                "url": "https://www.iplt20.com/teams/chennai-super-kings/results",
+                "extract_text": true
+              },
+              "output": {
+                "url": "https://www.iplt20.com/teams/chennai-super-kings/results",
+                "title": "IPL 2026 | Chennai Super Kings Match Results | IPLT20",
+                "content": "IPL 2026 | Chennai Super Kings Match Results | IPLT20 Home / Teams / Chennai Super Kings / Results Chennai Super Kings 2010, 2011, 2018, 2021, 2023 Official Team Site Captain - Ruturaj Gaikwad Coach - Stephen Fleming Owner - Chennai Super Kings Cricket Limited Venue - M. A. Chidambaram Stadium Squad Fixtures Results Videos News Archive",
+                "word_count": 57,
+                "fetched_at": "2026-04-26T03:59:11Z"
+              },
+              "error": null,
+              "duration_ms": 454,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "- **Fetched page check**: `IPL 2026 | Chennai Super Kings Match Results | IPLT20` - IPL 2026 | Chennai Super Kings Match Results | IPLT20 Home / Teams / Chennai Super Kings / Results Chennai Super Kings 2010, 2011, 2018, 2021, 2023 Official Team Site Captain - Rut\n- **IPL 2026 | Chennai Super Kings | Latest News, Team Updates and more**: Get the latest news and updates on Chennai Super Kings, including announcements, match reports, team previews, and more on the IPL Website.\n- **Chennai Super Kings Match Schedule & Live Scores - IPLT20**: Follow Chennai Super Kings' full IPL 2026 schedule, including all fixtures, live match updates, results of every match, and playoff games on IPL season.\n- **IPL 2026 | Chennai Super Kings Match Results | IPLT20**: View Chennai Super Kings' complete match results for IPL 2026, including detailed scores, highlights, and key moments from each game on IPL season."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "20024717-fbae-40eb-99ba-4e1d70bf4138",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:04.542148+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:08.031271+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Research the latest Chennai Super Kings IPL 2026 points-t...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:08.031308+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Research the latest Chennai Super Kings IPL 2026 points-t...",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Research the latest Chennai Super Kings IPL 2026 points-t..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:08.031422+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:08.031546+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Chennai Super Kings site: iplt20. com",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:08.031731+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Chennai Super Kings site: iplt20. com",
+                  "outputSummary": "3 results found (first: Chennai Super Kings Match Schedule & Live Scores - IPLT20)",
+                  "sourceUrl": null,
+                  "durationMs": 2842,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:10.874023+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "tool_call",
+                  "toolName": "web_fetch",
+                  "inputSummary": "url=https://www. iplt20. com/teams/chennai-super-kings/results, extract_text=True",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:10.874592+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "tool_result",
+                  "toolName": "web_fetch",
+                  "inputSummary": "url=https://www. iplt20. com/teams/chennai-super-kings/results, extract_text=True",
+                  "outputSummary": "IPL 2026 | Chennai Super Kings Match Results | IPLT20 Home / Teams / Chennai Super Kings / Results Chennai Super Kings 2010, 2011, 2018, 2021, 2023 Official Team Site Captain - Ruturaj Gaikwad Coach - Stephen Fleming Owner - Chennai Super Kings Cricket Limited Venue - M. A. Chidambaram Stadium Squad Fixtures Results Videos News Archive",
+                  "sourceUrl": null,
+                  "durationMs": 454,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:11.329332+00:00Z"
+                },
+                {
+                  "stepIndex": 9,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: APPROVED. Feedback:",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:11.330064+00:00Z"
+                },
+                {
+                  "stepIndex": 10,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "- **Fetched page check**: `IPL 2026 | Chennai Super Kings Match Results | IPLT20` - IPL 2026 | Chennai Super Kings Match Results | IPLT20 Home / Teams / Chennai Super Kings / Results Chennai Super Kin...",
+                  "sourceUrl": null,
+                  "durationMs": 6789,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:11.330169+00:00Z"
+                }
+              ],
+              "stepCount": 11,
+              "createdAt": "2026-04-26T03:59:11.330257+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 4 tool(s): skill_grounded-web-summary, web_search, web_fetch, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_fetch"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "c37010bbf28c20c0",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    },
+    {
+      "step": 3,
+      "title": "Level 3: Comparative Research Memo",
+      "passed": false,
+      "diagnostics": {
+        "prompt": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list",
+        "error": null,
+        "latency_seconds": 9.807230949401855,
+        "ttft_seconds": 9.806446075439453,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "review_feedback": [
+          {
+            "approved": false,
+            "feedback": "Use the gathered search evidence directly instead of claiming no reliable sources were available.",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          },
+          {
+            "approved": false,
+            "feedback": "Revision did not complete in time. Returning the best available draft with reviewer guidance.",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "## Findings\n- I could not verify two strong current OpenAI API updates from the gathered evidence.\n- The available search results were too weak or too thin to support a reliable comparison.\n- The current OpenAI API update timeline could not be confirmed from the available evidence.\n\n## Sources Used\n- Search evidence was available, but the fetched page was not reliable enough to fully trust.",
+        "final_answer_length": 393,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "findings": true,
+            "sources": true,
+            "openai": true,
+            "api": true
+          },
+          "forbidden": {
+            "i already provided": false,
+            "the user asked for": false
+          }
+        },
+        "validation_reasons": [
+          "Reviewer did not approve the final draft",
+          "No fetch/browser fallback tool was called"
+        ],
+        "provider_failure_tagged": false,
+        "raw_event_count": 10,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "7e0591c2-54bf-4f4c-ab26-9314910fb6f9",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:13.014245+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-26T03:59:13.014285+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list"
+              },
+              "output": {
+                "status": "ok",
+                "source_engine": "web-search",
+                "results": [
+                  {
+                    "title": "",
+                    "url": "",
+                    "snippet": "Error executing tool 'web-search': Search failed for \"Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present: ## Findings - 3 bullets ## Sources Used - short source list\": HTTP 202: Failed to fetch search results"
+                  }
+                ],
+                "fetch_count": 0,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list",
+                    "status": "rate_limited",
+                    "error": "DuckDuckGo search failed (may be rate limited or network issue)."
+                  },
+                  {
+                    "provider": "web-search",
+                    "source": "MCP",
+                    "query": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list",
+                    "status": "ok"
+                  }
+                ]
+              },
+              "error": null,
+              "duration_ms": 5622.44,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "status": "ok",
+                "engine": "web-search",
+                "results_count": 1,
+                "fetched_count": 0,
+                "result_quality": "good",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list",
+                    "status": "rate_limited",
+                    "error": "DuckDuckGo search failed (may be rate limited or network issue)."
+                  },
+                  {
+                    "provider": "web-search",
+                    "source": "MCP",
+                    "query": "Search the web, fetch pages as needed, and write a compact markdown memo comparing two current OpenAI API updates. Present:\n## Findings\n- 3 bullets\n## Sources Used\n- short source list",
+                    "status": "ok"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": false,
+            "feedback": "Use the gathered search evidence directly instead of claiming no reliable sources were available.",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "review_result",
+            "approved": false,
+            "feedback": "Revision did not complete in time. Returning the best available draft with reviewer guidance.",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "## Findings\n- I could not verify two strong current OpenAI API updates from the gathered evidence.\n- The available search results were too weak or too thin to support a reliable comparison.\n- The current OpenAI API update timeline could not be confirmed from the available evidence.\n\n## Sources Used\n- Search evidence was available, but the fetched page was not reliable enough to fully trust."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "7e0591c2-54bf-4f4c-ab26-9314910fb6f9",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:13.014245+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:16.464108+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Search the web, fetch pages as needed, and write a compac...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:16.464143+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Search the web, fetch pages as needed, and write a compac...",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Search the web, fetch pages as needed, and write a compac..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:16.464247+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:16.464336+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Search the web, fetch pages as needed, and write a compac...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:16.464505+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Search the web, fetch pages as needed, and write a compac...",
+                  "outputSummary": "1 results found",
+                  "sourceUrl": null,
+                  "durationMs": 5622,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:22.087019+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Search returned no clearly relevant evidence; rendering weak-evidence answer without fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:22.087378+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: REJECTED. Feedback: Use the gathered search evidence directly instead of claiming no reliable sources were available.",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:22.087531+00:00Z"
+                },
+                {
+                  "stepIndex": 9,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "## Findings\n- I could not verify two strong current Open AI API updates from the gathered evidence.\n- The available search results were too weak or too thin to support a reliable comparison.\n- The curr...",
+                  "sourceUrl": null,
+                  "durationMs": 9074,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:22.087677+00:00Z"
+                }
+              ],
+              "stepCount": 10,
+              "createdAt": "2026-04-26T03:59:22.087744+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "fa87ffdd38df9c86",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    },
+    {
+      "step": 4,
+      "title": "Level 4: Research Brief With Explicit Workflow",
+      "passed": false,
+      "diagnostics": {
+        "prompt": "Do a full web research brief using search plus fetch/browse as needed, then present the final answer in markdown.\n\nTopic: what are the most important current developments around India's IPL 2026 standings race? Return only markdown with sections:\n## Research Notes\n## Draft\n## Final",
+        "error": null,
+        "latency_seconds": 18.291746377944946,
+        "ttft_seconds": 18.291133642196655,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "review_feedback": [
+          {
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "## Research Notes\n- IPL; Standings: Search results did not return strong, clearly relevant evidence.\n- Search results did not return strong, clearly relevant evidence.\n- Search results did not return strong, clearly relevant evidence.\n\n## Draft\n- I could not verify a reliable, current summary from the gathered evidence. ...\n\n## Final\n- I could not verify the most important current developments from the gathered evidence. ...",
+        "final_answer_length": 428,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "research notes": true,
+            "draft": true,
+            "final": true,
+            "ipl": true,
+            "standings": true
+          },
+          "forbidden": {
+            "viewing ad": false,
+            "tickets ad": false
+          }
+        },
+        "validation_reasons": [
+          "No fetch/browser fallback tool was called"
+        ],
+        "provider_failure_tagged": false,
+        "raw_event_count": 10,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "742f816a-8dad-4fa0-84d8-80e48d355c34",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:23.365384+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-26T03:59:23.365432+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Do a full web research brief using search plus fetch/browse as needed, then present the final answer in markdown.\n\nTopic: what are the most important current developments around India's IPL 2026 standings race? Return only markdown with sections:\n## Research Notes\n## Draft\n## Final"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Do a full web research brief using search plus fetch/browse as needed, then present the final answer in markdown.\n\nTopic: what are the most important current developments around India's IPL 2026 standings race? Return only markdown with sections:\n## Research Notes\n## Draft\n## Final"
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Do a full web research brief using search plus fetch/browse as needed, then present the final answer in markdown.\n\nTopic: what are the most important current developments around India's IPL 2026 standings race? Return only markdown with sections:\n## Research Notes\n## Draft\n## Final"
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Do a full web research brief using search plus fetch/browse as needed, then present the final answer in markdown.\n\nTopic: what are the most important current developments around India's IPL 2026 standings race? Return only markdown with sections:\n## Research Notes\n## Draft\n## Final",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "heartbeat",
+            "ts": 1777175973373
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              },
+              "output": {
+                "status": "ok",
+                "source_engine": "web-search",
+                "results": [
+                  {
+                    "title": "",
+                    "url": "",
+                    "snippet": "Error executing tool 'web-search': Search failed for \"india's ipl 2026 standings race site:iplt20.com\": HTTP 202: Failed to fetch search results"
+                  }
+                ],
+                "fetch_count": 0,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "india's ipl 2026 standings race site:iplt20.com",
+                    "status": "rate_limited",
+                    "error": "DuckDuckGo search failed (may be rate limited or network issue)."
+                  },
+                  {
+                    "provider": "web-search",
+                    "source": "MCP",
+                    "query": "india's ipl 2026 standings race site:iplt20.com",
+                    "status": "ok"
+                  }
+                ]
+              },
+              "error": null,
+              "duration_ms": 13997.52,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "status": "ok",
+                "engine": "web-search",
+                "results_count": 1,
+                "fetched_count": 0,
+                "result_quality": "good",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "india's ipl 2026 standings race site:iplt20.com",
+                    "status": "rate_limited",
+                    "error": "DuckDuckGo search failed (may be rate limited or network issue)."
+                  },
+                  {
+                    "provider": "web-search",
+                    "source": "MCP",
+                    "query": "india's ipl 2026 standings race site:iplt20.com",
+                    "status": "ok"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "## Research Notes\n- IPL; Standings: Search results did not return strong, clearly relevant evidence.\n- Search results did not return strong, clearly relevant evidence.\n- Search results did not return strong, clearly relevant evidence.\n\n## Draft\n- I could not verify a reliable, current summary from the gathered evidence. ...\n\n## Final\n- I could not verify the most important current developments from the gathered evidence. ..."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "742f816a-8dad-4fa0-84d8-80e48d355c34",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:23.365384+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:26.983394+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Do a full web research brief using search plus fetch/brow...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:26.983441+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Do a full web research brief using search plus fetch/brow...",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Do a full web research brief using search plus fetch/brow..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:26.983651+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:26.983784+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=india's ipl 2026 standings race site: iplt20. com",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:26.983955+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=india's ipl 2026 standings race site: iplt20. com",
+                  "outputSummary": "1 results found",
+                  "sourceUrl": null,
+                  "durationMs": 13997,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:40.981535+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Search returned no clearly relevant evidence; rendering weak-evidence answer without fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:40.981867+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: APPROVED. Feedback:",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:40.982117+00:00Z"
+                },
+                {
+                  "stepIndex": 9,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "## Research Notes\n- IPL; Standings: Search results did not return strong, clearly relevant evidence.\n- Search results did not return strong, clearly relevant evidence.\n- Search results did not return ...",
+                  "sourceUrl": null,
+                  "durationMs": 17618,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:40.982191+00:00Z"
+                }
+              ],
+              "stepCount": 10,
+              "createdAt": "2026-04-26T03:59:40.982255+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "fa87ffdd38df9c86",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    },
+    {
+      "step": 5,
+      "title": "Level 5: Source Ranking And Relevance Discipline",
+      "passed": false,
+      "diagnostics": {
+        "prompt": "Research current OpenAI API updates, but be careful: ignore generic markdown editors, docs about the browser Fetch API, or unrelated tool pages. Use search plus fetch as needed and return markdown with sections:\n## Findings\n- 3 bullets\n## Why These Sources\n- 2 bullets",
+        "error": null,
+        "latency_seconds": 6.903310060501099,
+        "ttft_seconds": 6.902714967727661,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "review_feedback": [
+          {
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "## Findings\n- I could not verify strong current OpenAI API developments from the gathered evidence. ...\n\n## Why These Sources\n- The available search evidence was thin, so source confidence remains limited.\n- The answer therefore stays cautious and grounded in the available evidence only.",
+        "final_answer_length": 288,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "findings": true,
+            "sources": true,
+            "openai": true,
+            "api": true
+          },
+          "forbidden": {}
+        },
+        "validation_reasons": [
+          "No fetch/browser fallback tool was called",
+          "Expected at least 5 markdown bullets, found 3"
+        ],
+        "provider_failure_tagged": false,
+        "raw_event_count": 9,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "cc4320db-8804-47d5-86bb-a2fe6ccfe01b",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:42.284835+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-26T03:59:42.284904+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Research current OpenAI API updates, but be careful: ignore generic markdown editors, docs about the browser Fetch API, or unrelated tool pages. Use search plus fetch as needed and return markdown with sections:\n## Findings\n- 3 bullets\n## Why These Sources\n- 2 bullets"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Research current OpenAI API updates, but be careful: ignore generic markdown editors, docs about the browser Fetch API, or unrelated tool pages. Use search plus fetch as needed and return markdown with sections:\n## Findings\n- 3 bullets\n## Why These Sources\n- 2 bullets"
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Research current OpenAI API updates, but be careful: ignore generic markdown editors, docs about the browser Fetch API, or unrelated tool pages. Use search plus fetch as needed and return markdown with sections:\n## Findings\n- 3 bullets\n## Why These Sources\n- 2 bullets"
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Research current OpenAI API updates, but be careful: ignore generic markdown editors, docs about the browser Fetch API, or unrelated tool pages. Use search plus fetch as needed and return markdown with sections:\n## Findings\n- 3 bullets\n## Why These Sources\n- 2 bullets",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "OpenAI API updates site:openai.com"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "OpenAI API updates site:openai.com"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "OpenAI API updates site:openai.com"
+              },
+              "output": {
+                "status": "ok",
+                "source_engine": "web-search",
+                "results": [
+                  {
+                    "title": "",
+                    "url": "",
+                    "snippet": "Error executing tool 'web-search': Search failed for \"OpenAI API updates site:openai.com\": HTTP 202: Failed to fetch search results"
+                  }
+                ],
+                "fetch_count": 0,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "OpenAI API updates site:openai.com",
+                    "status": "rate_limited",
+                    "error": "DuckDuckGo search failed (may be rate limited or network issue)."
+                  },
+                  {
+                    "provider": "web-search",
+                    "source": "MCP",
+                    "query": "OpenAI API updates site:openai.com",
+                    "status": "ok"
+                  }
+                ]
+              },
+              "error": null,
+              "duration_ms": 2614.89,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "status": "ok",
+                "engine": "web-search",
+                "results_count": 1,
+                "fetched_count": 0,
+                "result_quality": "good",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "OpenAI API updates site:openai.com",
+                    "status": "rate_limited",
+                    "error": "DuckDuckGo search failed (may be rate limited or network issue)."
+                  },
+                  {
+                    "provider": "web-search",
+                    "source": "MCP",
+                    "query": "OpenAI API updates site:openai.com",
+                    "status": "ok"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "## Findings\n- I could not verify strong current OpenAI API developments from the gathered evidence. ...\n\n## Why These Sources\n- The available search evidence was thin, so source confidence remains limited.\n- The answer therefore stays cautious and grounded in the available evidence only."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "cc4320db-8804-47d5-86bb-a2fe6ccfe01b",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:42.284835+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:45.737464+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Research current Open AI API updates, but be careful: igno...",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:45.737501+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Research current Open AI API updates, but be careful: igno...",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Research current Open AI API updates, but be careful: igno..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:45.737598+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:45.737692+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Open AI API updates site: openai. com",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:45.737915+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=Open AI API updates site: openai. com",
+                  "outputSummary": "1 results found",
+                  "sourceUrl": null,
+                  "durationMs": 2614,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:48.352853+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Search returned no clearly relevant evidence; rendering weak-evidence answer without fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:48.353216+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: APPROVED. Feedback:",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:48.353418+00:00Z"
+                },
+                {
+                  "stepIndex": 9,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "## Findings\n- I could not verify strong current Open AI API developments from the gathered evidence.\n- I could not verify strong current Open AI API developments from the gathered evidence.\n- I could no...",
+                  "sourceUrl": null,
+                  "durationMs": 6071,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:48.353496+00:00Z"
+                }
+              ],
+              "stepCount": 10,
+              "createdAt": "2026-04-26T03:59:48.353561+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "be1f8951e35f0dd7",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    },
+    {
+      "step": 6,
+      "title": "Level 6: Evidence-Aware Standings Brief",
+      "passed": false,
+      "diagnostics": {
+        "prompt": "Do a harder web brief on India's IPL 2026 standings race. Search the web, fetch the strongest page, and return only markdown:\n## Research Notes\n- 3 bullets\n## Final\n- 3 bullets\nIf evidence is incomplete, explicitly say what could not be verified.",
+        "error": null,
+        "latency_seconds": 7.319591045379639,
+        "ttft_seconds": 7.319064617156982,
+        "tool_call_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "tool_result_sequence": [
+          "skill_grounded-web-summary",
+          "web_search"
+        ],
+        "review_feedback": [
+          {
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud"
+          }
+        ],
+        "provenance_step_types": [
+          "plan",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "tool_call",
+          "tool_result",
+          "plan",
+          "review",
+          "synthesis"
+        ],
+        "final_answer_preview": "## Research Notes\n- IPL; Standings: Search results did not return strong, clearly relevant evidence.\n- Search results did not return strong, clearly relevant evidence.\n- Search results did not return strong, clearly relevant evidence.\n\n## Final\n- I could not verify a grounded final summary from the gathered evidence. ...",
+        "final_answer_length": 322,
+        "markdown_detected": true,
+        "keyword_checks": {
+          "required": {
+            "research notes": true,
+            "final": true,
+            "ipl": true,
+            "standings": true
+          },
+          "forbidden": {}
+        },
+        "validation_reasons": [
+          "No fetch/browser fallback tool was called",
+          "Expected at least 6 markdown bullets, found 4"
+        ],
+        "provider_failure_tagged": false,
+        "raw_event_count": 9,
+        "raw_events_preview": [
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "3ebed819-d6fc-4339-8c55-5b3d2f51ca3e",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:49.589402+00:00Z"
+                }
+              ],
+              "stepCount": 1,
+              "createdAt": "2026-04-26T03:59:49.589460+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": false,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "model",
+                "brief": "Answered directly from model knowledge. No tools were invoked.",
+                "lastAction": "Answered directly from model knowledge. No tools were invoked."
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Do a harder web brief on India's IPL 2026 standings race. Search the web, fetch the strongest page, and return only markdown:\n## Research Notes\n- 3 bullets\n## Final\n- 3 bullets\nIf evidence is incomplete, explicitly say what could not be verified."
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "skill_grounded-web-summary",
+              "arguments": {
+                "task": "Do a harder web brief on India's IPL 2026 standings race. Search the web, fetch the strongest page, and return only markdown:\n## Research Notes\n- 3 bullets\n## Final\n- 3 bullets\nIf evidence is incomplete, explicitly say what could not be verified."
+              }
+            },
+            "tool_result": {
+              "tool_name": "skill_grounded-web-summary",
+              "input": {
+                "task": "Do a harder web brief on India's IPL 2026 standings race. Search the web, fetch the strongest page, and return only markdown:\n## Research Notes\n- 3 bullets\n## Final\n- 3 bullets\nIf evidence is incomplete, explicitly say what could not be verified."
+              },
+              "output": {
+                "instructions": "# Grounded Web Summary\n\nUse this skill when the task involves current web information, fetched pages, or search results that may be partial, noisy, or conflicting.\n\n## Workflow\n\n1. Identify the strongest facts present in the provided tool results.\n2. Separate verified facts from inference.\n3. If the page or search results look incomplete, placeholder-like, or noisy, say that clearly.\n4. Prefer short bullet summaries with source-aware wording.\n\n## Rules\n\n- Do not claim an event did not happen unless the retrieved content explicitly proves that.\n- Use phrases like \"I could not verify\" when evidence is weak.\n- Avoid repeating navigation, footer, or boilerplate text from fetched pages.\n- If there is no reliable answer, state the limitation plainly.",
+                "task": "Do a harder web brief on India's IPL 2026 standings race. Search the web, fetch the strongest page, and return only markdown:\n## Research Notes\n- 3 bullets\n## Final\n- 3 bullets\nIf evidence is incomplete, explicitly say what could not be verified.",
+                "skill_path": "E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded-web-summary\\SKILL.md"
+              },
+              "error": null,
+              "duration_ms": 0,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": null
+            }
+          },
+          {
+            "type": "tool_call",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              }
+            }
+          },
+          {
+            "type": "tool_result",
+            "tool_call": {
+              "name": "web_search",
+              "arguments": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              }
+            },
+            "tool_result": {
+              "tool_name": "web_search",
+              "input": {
+                "query": "india's ipl 2026 standings race site:iplt20.com"
+              },
+              "output": {
+                "status": "ok",
+                "source_engine": "web-search",
+                "results": [
+                  {
+                    "title": "",
+                    "url": "",
+                    "snippet": "Error executing tool 'web-search': Search failed for \"india's ipl 2026 standings race site:iplt20.com\": HTTP 202: Failed to fetch search results"
+                  }
+                ],
+                "fetch_count": 0,
+                "result_quality": "good",
+                "quality_assessment": "Results appear reliable",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "india's ipl 2026 standings race site:iplt20.com",
+                    "status": "rate_limited",
+                    "error": "DuckDuckGo search failed (may be rate limited or network issue)."
+                  },
+                  {
+                    "provider": "web-search",
+                    "source": "MCP",
+                    "query": "india's ipl 2026 standings race site:iplt20.com",
+                    "status": "ok"
+                  }
+                ]
+              },
+              "error": null,
+              "duration_ms": 3271.42,
+              "sandboxed": false,
+              "is_truncated": false,
+              "source_url": null,
+              "provenance_hint": {
+                "status": "ok",
+                "engine": "web-search",
+                "results_count": 1,
+                "fetched_count": 0,
+                "result_quality": "good",
+                "provider_attempts": [
+                  {
+                    "provider": "duckduckgo_search",
+                    "source": "built-in",
+                    "query": "india's ipl 2026 standings race site:iplt20.com",
+                    "status": "rate_limited",
+                    "error": "DuckDuckGo search failed (may be rate limited or network issue)."
+                  },
+                  {
+                    "provider": "web-search",
+                    "source": "MCP",
+                    "query": "india's ipl 2026 standings race site:iplt20.com",
+                    "status": "ok"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "review_result",
+            "approved": true,
+            "feedback": "",
+            "reviewer_id": "ollama/gemma4:31b-cloud",
+            "attempt": 1
+          },
+          {
+            "type": "content",
+            "content": "## Research Notes\n- IPL; Standings: Search results did not return strong, clearly relevant evidence.\n- Search results did not return strong, clearly relevant evidence.\n- Search results did not return strong, clearly relevant evidence.\n\n## Final\n- I could not verify a grounded final summary from the gathered evidence. ..."
+          },
+          {
+            "type": "provenance",
+            "provenanceTrace": {
+              "runId": "3ebed819-d6fc-4339-8c55-5b3d2f51ca3e",
+              "steps": [
+                {
+                  "stepIndex": 0,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Initializing execution for session web-research-128e5c14",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:49.589402+00:00Z"
+                },
+                {
+                  "stepIndex": 1,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:52.902277+00:00Z"
+                },
+                {
+                  "stepIndex": 2,
+                  "stepType": "tool_call",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Do a harder web brief on India's IPL 2026 standings race....",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:52.902305+00:00Z"
+                },
+                {
+                  "stepIndex": 3,
+                  "stepType": "tool_result",
+                  "toolName": "skill_grounded-web-summary",
+                  "inputSummary": "task=Do a harder web brief on India's IPL 2026 standings race....",
+                  "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Do a harder web brief on India's IPL 2026 standings race...., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:52.902383+00:00Z"
+                },
+                {
+                  "stepIndex": 4,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Guided web workflow selected: grounded skill + search + fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:52.902454+00:00Z"
+                },
+                {
+                  "stepIndex": 5,
+                  "stepType": "tool_call",
+                  "toolName": "web_search",
+                  "inputSummary": "query=india's ipl 2026 standings race site: iplt20. com",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:52.902583+00:00Z"
+                },
+                {
+                  "stepIndex": 6,
+                  "stepType": "tool_result",
+                  "toolName": "web_search",
+                  "inputSummary": "query=india's ipl 2026 standings race site: iplt20. com",
+                  "outputSummary": "1 results found",
+                  "sourceUrl": null,
+                  "durationMs": 3271,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:56.174098+00:00Z"
+                },
+                {
+                  "stepIndex": 7,
+                  "stepType": "plan",
+                  "toolName": null,
+                  "inputSummary": "Search returned no clearly relevant evidence; rendering weak-evidence answer without fetch.",
+                  "outputSummary": null,
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:56.174513+00:00Z"
+                },
+                {
+                  "stepIndex": 8,
+                  "stepType": "review",
+                  "toolName": "ollama/gemma4:31b-cloud",
+                  "inputSummary": null,
+                  "outputSummary": "Result: APPROVED. Feedback:",
+                  "sourceUrl": null,
+                  "durationMs": 0,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:56.174685+00:00Z"
+                },
+                {
+                  "stepIndex": 9,
+                  "stepType": "synthesis",
+                  "toolName": null,
+                  "inputSummary": null,
+                  "outputSummary": "## Research Notes\n- IPL; Standings: Search results did not return strong, clearly relevant evidence.\n- Search results did not return strong, clearly relevant evidence.\n- Search results did not return ...",
+                  "sourceUrl": null,
+                  "durationMs": 6586,
+                  "sandboxed": false,
+                  "timestamp": "2026-04-26T03:59:56.174736+00:00Z"
+                }
+              ],
+              "stepCount": 10,
+              "createdAt": "2026-04-26T03:59:56.174797+00:00Z",
+              "runIds": [],
+              "summary": {
+                "hasTools": true,
+                "hasDocuments": false,
+                "hasTaskRun": false,
+                "mainSource": "tool",
+                "brief": "Executed 3 tool(s): skill_grounded-web-summary, web_search, ollama/gemma4:31b-cloud.",
+                "lastAction": "Completed web_search"
+              }
+            }
+          },
+          {
+            "type": "done"
+          }
+        ],
+        "persisted_prompt_metadata": {
+          "promptPackId": "rawclaw-default",
+          "promptVersionHash": "e9778879194e0cb7",
+          "reviewerPromptVersionHash": "bbf091718e2ef470",
+          "workflowPromptIds": [
+            "web-research-grounded"
+          ]
+        }
+      }
+    }
+  ]
+}

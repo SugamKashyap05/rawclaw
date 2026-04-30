@@ -1,0 +1,280 @@
+{
+  "session_id": "web-research-7081fe27",
+  "model": "gemma4:31b-cloud",
+  "results": [
+    {
+      "step": 1,
+      "title": "Level 1: Fresh News Snapshot",
+      "passed": false,
+      "latency": 98.69529271125793,
+      "reasons": [
+        "Maximum reasoning turns (10) reached. Try a more specific query."
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "skill_grounded-web-summary",
+        "sequential_thinking",
+        "sequential_thinking",
+        "sequential_thinking",
+        "sequential_thinking",
+        "sequential_thinking",
+        "sequential_thinking",
+        "sequential_thinking",
+        "sequential_thinking",
+        "sequential_thinking",
+        "sequential_thinking"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "fc4ab6cd-da62-40c5-8cc3-5d43f906210e",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-7081fe27",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:27:38.941638+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T11:27:38.941676+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    },
+    {
+      "step": 2,
+      "title": "Level 2: Search + Fetch Grounded Summary",
+      "passed": false,
+      "latency": 197.92877173423767,
+      "reasons": [
+        "The agent stopped responding. Please try again."
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "skill_grounded-web-summary",
+        "sequential_thinking",
+        "sequential_thinking",
+        "sequential_thinking",
+        "sequential_thinking"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "962afef6-2c80-4b26-be62-b8fa6d0741aa",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-7081fe27",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:29:17.704645+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T11:29:17.704679+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    },
+    {
+      "step": 3,
+      "title": "Level 3: Comparative Research Memo",
+      "passed": false,
+      "latency": 153.63338565826416,
+      "reasons": [
+        "The agent stopped responding. Please try again."
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "skill_grounded-web-summary"
+      ],
+      "content": "",
+      "review_events": [],
+      "provenance": {
+        "runId": "35fac941-7c21-49c3-9f77-f07ad0e885e5",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-7081fe27",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:32:35.599681+00:00Z"
+          }
+        ],
+        "stepCount": 1,
+        "createdAt": "2026-04-24T11:32:35.599737+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": false,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "model",
+          "brief": "Answered directly from model knowledge. No tools were invoked.",
+          "lastAction": "Answered directly from model knowledge. No tools were invoked."
+        }
+      }
+    },
+    {
+      "step": 4,
+      "title": "Level 4: Research Brief With Explicit Workflow",
+      "passed": false,
+      "latency": 36.67809724807739,
+      "reasons": [
+        "Raw leakage detected: {\"name\":",
+        "No search tool was called",
+        "No fetch/browser fallback tool was called",
+        "Final answer is not markdown-structured",
+        "Missing keyword: research notes",
+        "Missing keyword: draft",
+        "Missing keyword: final",
+        "Missing keyword: ipl",
+        "Missing keyword: standings"
+      ],
+      "tool_calls": [
+        "skill_grounded-web-summary",
+        "skill_grounded-web-summary",
+        "sequential_thinking"
+      ],
+      "content": "{\"name\":\"web-search\",\"arguments\":{\"mode\":\"detailed\",\"numResults\":5,\"query\":\"latestnews\"}}",
+      "review_events": [
+        {
+          "approved": true,
+          "feedback": "",
+          "reviewer_id": "ollama/gemma4:31b-cloud"
+        }
+      ],
+      "provenance": {
+        "runId": "4ed0fe9f-39e7-4009-82e7-aaac6845d29e",
+        "steps": [
+          {
+            "stepIndex": 0,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Initializing execution for session web-research-7081fe27",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:35:09.199430+00:00Z"
+          },
+          {
+            "stepIndex": 1,
+            "stepType": "plan",
+            "toolName": null,
+            "inputSummary": "Forced skill path selected for request: skill_grounded-web-summary",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:35:12.281248+00:00Z"
+          },
+          {
+            "stepIndex": 2,
+            "stepType": "tool_call",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Follow this workflow exactly as far as the available tool...",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:35:12.281282+00:00Z"
+          },
+          {
+            "stepIndex": 3,
+            "stepType": "tool_result",
+            "toolName": "skill_grounded-web-summary",
+            "inputSummary": "task=Follow this workflow exactly as far as the available tool...",
+            "outputSummary": "instructions=# Grounded Web Summary Use this skill when the task invo..., task=Follow this workflow exactly as far as the available tool..., skill_path=E:\\2026 final projects\\rawclaw\\apps\\agent\\skills\\grounded...",
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:35:12.281392+00:00Z"
+          },
+          {
+            "stepIndex": 4,
+            "stepType": "tool_call",
+            "toolName": "sequential_thinking",
+            "inputSummary": "next Thought Needed=True, thought=The user wants a comprehensive research report on India's..., thought Number=1, total Thoughts=6",
+            "outputSummary": null,
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:35:26.516621+00:00Z"
+          },
+          {
+            "stepIndex": 5,
+            "stepType": "tool_result",
+            "toolName": "sequential_thinking",
+            "inputSummary": "next Thought Needed=True, thought=The user wants a comprehensive research report on India's..., thought Number=1, total Thoughts=6",
+            "outputSummary": "status=thought_acknowledged, sequential_id=1, progress=1/6, continues=True",
+            "sourceUrl": null,
+            "durationMs": 0,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:35:26.516813+00:00Z"
+          },
+          {
+            "stepIndex": 6,
+            "stepType": "review",
+            "toolName": "ollama/gemma4:31b-cloud",
+            "inputSummary": null,
+            "outputSummary": "Result: APPROVED. Feedback:",
+            "sourceUrl": null,
+            "durationMs": 1672,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:35:44.525548+00:00Z"
+          },
+          {
+            "stepIndex": 7,
+            "stepType": "synthesis",
+            "toolName": null,
+            "inputSummary": null,
+            "outputSummary": "{\"name\":\"web-search\",\"arguments\":{\"mode\":\"detailed\",\"num Results\":5,\"query\":\"latestnews\"}}...",
+            "sourceUrl": null,
+            "durationMs": 35326,
+            "sandboxed": false,
+            "timestamp": "2026-04-24T11:35:44.525707+00:00Z"
+          }
+        ],
+        "stepCount": 8,
+        "createdAt": "2026-04-24T11:35:45.464806+00:00Z",
+        "runIds": [],
+        "summary": {
+          "hasTools": true,
+          "hasDocuments": false,
+          "hasTaskRun": false,
+          "mainSource": "tool",
+          "brief": "Executed 3 tool(s): skill_grounded-web-summary, sequential_thinking, ollama/gemma4:31b-cloud.",
+          "lastAction": "Completed sequential_thinking"
+        }
+      }
+    }
+  ]
+}

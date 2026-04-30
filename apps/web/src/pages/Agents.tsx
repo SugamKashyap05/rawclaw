@@ -2,6 +2,11 @@ import { FormEvent, useEffect, useState } from 'react';
 import { AgentProfile, CreateAgentRequest, SkillDefinition, UpdateAgentRequest } from '@rawclaw/shared';
 import { api } from '../lib/api';
 
+type PromptPack = {
+  id: string;
+  purpose: string;
+};
+
 const EMPTY_AGENT: CreateAgentRequest = {
   name: '',
   description: '',
@@ -25,6 +30,8 @@ Response style:
 - Clear, direct, and helpful.
 - Use structured output when it improves readability.
 - Do not expose hidden chain-of-thought.`,
+  promptPackId: 'rawclaw-default',
+  promptOverlay: '',
   skills: [],
   isDefault: false,
 };
@@ -32,15 +39,18 @@ Response style:
 export default function Agents() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [availableSkills, setAvailableSkills] = useState<SkillDefinition[]>([]);
+  const [promptPacks, setPromptPacks] = useState<PromptPack[]>([]);
   const [draft, setDraft] = useState<CreateAgentRequest>(EMPTY_AGENT);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [promptPackError, setPromptPackError] = useState<string | null>(null);
 
   useEffect(() => {
     void loadAgents();
     void loadSkills();
+    void loadPromptPacks();
   }, []);
 
   const loadAgents = async () => {
@@ -61,6 +71,38 @@ export default function Agents() {
       console.error('Failed to load skills', loadError);
     }
   };
+
+  const loadPromptPacks = async () => {
+    try {
+      const response = await api.get<PromptPack[]>('/prompts/packs');
+      setPromptPacks(response.data);
+      setPromptPackError(null);
+    } catch (loadError) {
+      console.error('Failed to load prompt packs', loadError);
+      setPromptPackError('Prompt packs could not be loaded, so the default pack will be used.');
+    }
+  };
+
+  const promptPackOptions = (() => {
+    const byId = new Map<string, PromptPack>();
+    for (const pack of promptPacks) {
+      byId.set(pack.id, pack);
+    }
+    if (!byId.has('rawclaw-default')) {
+      byId.set('rawclaw-default', {
+        id: 'rawclaw-default',
+        purpose: 'Fallback default prompt pack',
+      });
+    }
+    const currentDraftPack = draft.promptPackId?.trim();
+    if (currentDraftPack && !byId.has(currentDraftPack)) {
+      byId.set(currentDraftPack, {
+        id: currentDraftPack,
+        purpose: 'Currently assigned prompt pack',
+      });
+    }
+    return Array.from(byId.values());
+  })();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -93,6 +135,8 @@ export default function Agents() {
         name: agent.name,
         description: agent.description || '',
         systemPrompt: agent.systemPrompt,
+        promptPackId: agent.promptPackId || 'rawclaw-default',
+        promptOverlay: agent.promptOverlay || '',
         skills: agent.skills || [],
         isDefault: agent.isDefault,
       });
@@ -172,6 +216,11 @@ export default function Agents() {
                 </div>
               </div>
               {agent.description ? <div style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>{agent.description}</div> : null}
+              {agent.promptPackId ? (
+                <div className="mono" style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Prompt pack: {agent.promptPackId}
+                </div>
+              ) : null}
               {agent.skills?.length ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: '0.75rem' }}>
                   {agent.skills.map((skill) => (
@@ -182,7 +231,7 @@ export default function Agents() {
                 </div>
               ) : null}
               <pre className="custom-scrollbar" style={{ margin: 0, whiteSpace: 'pre-wrap', overflowX: 'auto', maxHeight: '220px' }}>
-                {agent.systemPrompt}
+                {agent.effectiveSystemPrompt || agent.systemPrompt}
               </pre>
             </div>
           ))}
@@ -204,6 +253,25 @@ export default function Agents() {
             onChange={(event) => setDraft((current) => ({ ...current, systemPrompt: event.target.value }))}
             placeholder="System prompt"
             rows={12}
+            style={{ ...fieldStyle, resize: 'vertical' }}
+          />
+          <select
+            value={draft.promptPackId || 'rawclaw-default'}
+            onChange={(event) => setDraft((current) => ({ ...current, promptPackId: event.target.value }))}
+            style={fieldStyle}
+          >
+            {promptPackOptions.map((pack) => (
+              <option key={pack.id} value={pack.id}>
+                {pack.id} - {pack.purpose}
+              </option>
+            ))}
+          </select>
+          {promptPackError ? <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>{promptPackError}</div> : null}
+          <textarea
+            value={draft.promptOverlay || ''}
+            onChange={(event) => setDraft((current) => ({ ...current, promptOverlay: event.target.value }))}
+            placeholder="Prompt overlay"
+            rows={5}
             style={{ ...fieldStyle, resize: 'vertical' }}
           />
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--text-secondary)' }}>
@@ -246,7 +314,7 @@ export default function Agents() {
             )}
           </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <button className="btn-primary" disabled={saving || !draft.name.trim() || !draft.systemPrompt.trim()}>
+            <button className="btn-primary" disabled={saving || !draft.name.trim() || (!draft.systemPrompt.trim() && !(draft.promptOverlay || '').trim())}>
               {saving ? 'Saving...' : editingId ? 'Update agent' : 'Create agent'}
             </button>
             {editingId ? (

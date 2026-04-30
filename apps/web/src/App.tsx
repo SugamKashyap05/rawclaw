@@ -9,10 +9,13 @@ import MCPServers from './pages/MCPServers';
 import Agents from './pages/Agents';
 import Skills from './pages/Skills';
 import Provenance from './pages/Provenance';
+import Gateway from './pages/Gateway';
+import Operator from './pages/Operator';
 import Integrations from './pages/Integrations';
 import Sandbox from './pages/Sandbox';
 import Settings from './pages/Settings';
 import Tools from './pages/Tools';
+import Learning from './pages/Learning';
 import ModelSelector from './components/ModelSelector';
 import { Sidebar } from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
@@ -53,16 +56,20 @@ function App() {
   const pageTitle = useMemo(() => {
     if (location.pathname.startsWith('/chat')) return 'Chat';
     if (location.pathname.startsWith('/agents')) return 'Agents';
-    if (location.pathname.startsWith('/mcp') || location.pathname.startsWith('/tools')) return 'MCP Servers';
+    if (location.pathname.startsWith('/mcp')) return 'MCP Servers';
+    if (location.pathname.startsWith('/tools')) return 'Tools';
     if (location.pathname.startsWith('/skills')) return 'Skills';
     if (location.pathname.startsWith('/memory')) return 'Memory';
     if (location.pathname.startsWith('/models')) return 'Models';
+    if (location.pathname.startsWith('/learning')) return 'Learning';
     if (location.pathname.startsWith('/integrations')) return 'Integrations';
     if (location.pathname.startsWith('/sandbox')) return 'Sandbox';
     if (location.pathname.startsWith('/settings')) return 'Settings';
     if (location.pathname.startsWith('/tasks')) return 'Tasks';
-    if (location.pathname.startsWith('/provenance')) return 'Provenance Explorer';
-    return 'Dashboard';
+    if (location.pathname.startsWith('/gateway')) return 'Gateway Runtime';
+    if (location.pathname.startsWith('/operator')) return 'Unified Operator Surface';
+    if (location.pathname.startsWith('/provenance')) return 'Operator Control Room';
+    return 'Command Center';
   }, [location.pathname]);
 
   if (authLoading) {
@@ -179,7 +186,7 @@ function App() {
           <div>
             <div style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '0.05rem' }}>{pageTitle}</div>
             <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem', lineHeight: 1.25 }}>
-              Use the rebuilt command center to operate agents, memory, tools, models, and tasks.
+              Use RawClaw as a calm command console for memory, research, tasks, tools, and guided execution.
             </div>
           </div>
 
@@ -213,8 +220,11 @@ function App() {
             <Route path="/skills" element={<Skills />} />
             <Route path="/memory" element={<Memory />} />
             <Route path="/models" element={<Models />} />
+            <Route path="/learning" element={<Learning />} />
             <Route path="/integrations" element={<Integrations />} />
             <Route path="/tasks" element={<Tasks />} />
+            <Route path="/gateway" element={<Gateway />} />
+            <Route path="/operator" element={<Operator />} />
             <Route path="/provenance" element={<Provenance />} />
             <Route path="/sandbox" element={<Sandbox />} />
             <Route path="/settings" element={<Settings />} />

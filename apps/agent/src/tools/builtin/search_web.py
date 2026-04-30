@@ -1,5 +1,6 @@
 import logging
 import time
+import re
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -38,6 +39,86 @@ class DuckDuckGoSearchTool(BaseTool):
     def __init__(self) -> None:
         pass
 
+    def _normalize_text(self, text: str) -> str:
+        return re.sub(r"\s+", " ", (text or "").strip().lower())
+
+    def _trim_repetitive_snippet(self, text: str) -> str:
+        snippet = re.sub(r"\s+", " ", (text or "")).strip()
+        if not snippet:
+            return ""
+
+        repeated_match = re.search(r"(.{40,120}?)(?:\s+\1){2,}", snippet, re.IGNORECASE)
+        if repeated_match:
+            return repeated_match.group(1).strip() + "..."
+
+        words = snippet.split()
+        if len(words) > 40:
+            window = " ".join(words[:16]).lower()
+            later = " ".join(words[16:]).lower()
+            if window and window in later:
+                return " ".join(words[:24]).strip() + "..."
+
+        return snippet
+
+    def _dedupe_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        deduped: List[Dict[str, Any]] = []
+        seen_keys = set()
+        for result in results:
+            title = self._normalize_text(result.get("title", ""))
+            url = self._normalize_text(result.get("url", ""))
+            snippet = self._trim_repetitive_snippet(result.get("snippet", ""))
+            snippet_norm = self._normalize_text(snippet)
+
+            dedupe_key = url or f"{title}|{snippet_norm[:160]}"
+            fuzzy_key = f"{title[:120]}|{snippet_norm[:120]}"
+
+            if dedupe_key in seen_keys or fuzzy_key in seen_keys:
+                continue
+
+            seen_keys.add(dedupe_key)
+            seen_keys.add(fuzzy_key)
+            deduped.append({
+                **result,
+                "snippet": snippet,
+            })
+
+        return deduped
+
+    def _should_skip_wikipedia_fallback(self, query: str) -> bool:
+        lowered = (query or "").lower()
+        if not lowered:
+            return False
+
+        operator_markers = [
+            "site:",
+            "filetype:",
+            "intitle:",
+            "inurl:",
+            "\"",
+            " after:",
+            " before:",
+        ]
+        if any(marker in lowered for marker in operator_markers):
+            return True
+
+        # Wikipedia is a poor fallback for freshness- or standings-driven queries.
+        if any(token in lowered for token in [
+            "latest",
+            "current",
+            "news",
+            "updates",
+            "standings",
+            "points table",
+            "rankings",
+            "nrr",
+            "openai api",
+            "ipl 2026",
+            "spacex starship",
+        ]):
+            return True
+
+        return False
+
     async def execute(self, input: Dict[str, Any]) -> ToolResult:
         start = time.time()
         query = input.get("query", "")
@@ -61,10 +142,18 @@ class DuckDuckGoSearchTool(BaseTool):
             return ToolResult(
                 tool_name=self.name,
                 input=input,
+                output={
+                    "status": "execution_failure",
+                    "results": [],
+                    "provider": source,
+                },
                 error=error_msg,
                 duration_ms=round((time.time() - start) * 1000, 2),
                 sandboxed=False,
+                provenance_hint={"status": "execution_failure", "provider": source},
             )
+
+        results = self._dedupe_results(results)
 
         # Build output with source URLs
         output_results = []
@@ -75,6 +164,7 @@ class DuckDuckGoSearchTool(BaseTool):
                 "url": r.get("url", ""),
                 "snippet": r.get("snippet", ""),
                 "source": source,
+                "confidence": "medium",
             })
             if r.get("url"):
                 sources.append(r["url"])
@@ -84,6 +174,7 @@ class DuckDuckGoSearchTool(BaseTool):
             input=input,
             output={
                 "source": source,
+                "status": "ok",
                 "results": output_results,
             },
             duration_ms=round((time.time() - start) * 1000, 2),
@@ -93,7 +184,7 @@ class DuckDuckGoSearchTool(BaseTool):
         )
 
     async def duckduckgo_search(self, query: str) -> Optional[List[Dict]]:
-        """Search using DuckDuckGo Html directly and fallback to Wikipedia if needed."""
+        """Search using DuckDuckGo HTML, then Instant Answer API, then Wikipedia."""
         results = []
         try:
             import bs4
@@ -118,7 +209,7 @@ class DuckDuckGoSearchTool(BaseTool):
                             if "uddg" in parsed:
                                 url = parsed["uddg"][0]
                         
-                        snippet = snippet_elem.text.strip()
+                        snippet = self._trim_repetitive_snippet(snippet_elem.text.strip())
                         results.append({
                             "title": title,
                             "url": url,
@@ -128,6 +219,53 @@ class DuckDuckGoSearchTool(BaseTool):
             logger.warning(f"DuckDuckGo search failed, will fallback: {e}")
 
         if not results:
+            try:
+                async with httpx.AsyncClient(timeout=5) as client:
+                    api_resp = await client.get(
+                        DUCKDUCKGO_API_URL,
+                        params={
+                            "q": query,
+                            "format": "json",
+                            "no_html": 1,
+                            "no_redirect": 1,
+                            "skip_disambig": 1,
+                        },
+                    )
+                    api_resp.raise_for_status()
+                    api_data = api_resp.json()
+
+                    abstract_text = self._trim_repetitive_snippet(str(api_data.get("AbstractText", "")).strip())
+                    abstract_url = str(api_data.get("AbstractURL", "")).strip()
+                    heading = str(api_data.get("Heading", "")).strip() or query
+                    if abstract_text and abstract_url:
+                        results.append({
+                            "title": heading,
+                            "snippet": abstract_text,
+                            "url": abstract_url,
+                        })
+
+                    for topic in api_data.get("RelatedTopics", []) or []:
+                        topic_items = topic.get("Topics") if isinstance(topic, dict) and isinstance(topic.get("Topics"), list) else [topic]
+                        for item in topic_items:
+                            if not isinstance(item, dict):
+                                continue
+                            text = self._trim_repetitive_snippet(str(item.get("Text", "")).strip())
+                            url = str(item.get("FirstURL", "")).strip()
+                            if text and url:
+                                title = text.split(" - ", 1)[0].strip() or query
+                                results.append({
+                                    "title": title,
+                                    "snippet": text,
+                                    "url": url,
+                                })
+                            if len(results) >= 10:
+                                break
+                        if len(results) >= 10:
+                            break
+            except Exception as e:
+                logger.warning(f"DuckDuckGo instant-answer fallback failed: {e}")
+
+        if not results and not self._should_skip_wikipedia_fallback(query):
             # Fallback to Wikipedia Opensearch if DuckDuckGo Html returns nothing
             try:
                 async with httpx.AsyncClient(timeout=5) as client:
@@ -146,7 +284,10 @@ class DuckDuckGoSearchTool(BaseTool):
                             })
             except Exception as e:
                 logger.warning(f"Wikipedia fallback failed: {e}")
+        elif not results:
+            logger.info(f"Skipping Wikipedia fallback for operator-heavy or freshness-driven query: {query}")
         
+        results = self._dedupe_results(results)
         return results if results else None
 
     async def health_check(self) -> str:

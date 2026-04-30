@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { RedisService } from './redis.service';
-import { ChatMessage, ChatResponse, ToolCall } from '@rawclaw/shared';
+import { AdvisoryEvent, ChatControlState, ChatMessage, ChatResponse, MemoryEvent, ToolCall, ReviewEvent, WorkflowState } from '@rawclaw/shared';
 import { ProvenanceSanitizer } from './common/provenance-sanitizer';
 
 interface Citation {
@@ -29,6 +29,10 @@ interface MessageWithRelations {
   errorMessage: string | null;
   attachments: string | null;
   durationMs: number | null;
+  promptPackId?: string | null;
+  promptVersionHash?: string | null;
+  reviewerPromptVersionHash?: string | null;
+  workflowPromptIds?: string | null;
   runIds?: string | null;
 }
 
@@ -40,6 +44,7 @@ export interface SessionWithMessages {
   createdAt: Date;
   updatedAt: Date;
   messages: ChatMessage[];
+  chatControls?: ChatControlState;
 }
 
 @Injectable()
@@ -49,6 +54,93 @@ export class ChatService {
     private readonly redis: RedisService
   ) {}
 
+  private normalizeSessionTitleContent(content: string): string {
+    return (content || '').replace(/\s+/g, ' ').trim();
+  }
+
+  private isLowSignalSessionPrompt(content: string): boolean {
+    const normalized = this.normalizeSessionTitleContent(content).toLowerCase();
+    if (!normalized) return true;
+
+    return /^(?:hi|hello|hey|yo|sup|thanks|thank you|ok|okay|cool|nice|test|ping|hola|hey there|hello there)(?:[.!?,\s]*)$/i.test(
+      normalized,
+    );
+  }
+
+  private deriveSessionTitle(content: string): string | null {
+    const normalized = this.normalizeSessionTitleContent(content);
+    if (!normalized || this.isLowSignalSessionPrompt(normalized)) {
+      return null;
+    }
+
+    return normalized.substring(0, 50) + (normalized.length > 50 ? '...' : '');
+  }
+
+  private deriveSessionTitleFromMessages(messages: MessageWithRelations[]): string | null {
+    const userMessages = messages.filter((message) => message.role === 'user');
+    for (const message of userMessages) {
+      const meaningful = this.deriveSessionTitle(message.content);
+      if (meaningful) {
+        return meaningful;
+      }
+    }
+
+    const fallback = userMessages
+      .map((message) => this.normalizeSessionTitleContent(message.content))
+      .find((content) => content.length > 0);
+
+    if (!fallback) {
+      return null;
+    }
+
+    return fallback.substring(0, 50) + (fallback.length > 50 ? '...' : '');
+  }
+
+  private parseSessionControls(metadataJson: string | null | undefined): ChatControlState | undefined {
+    if (!metadataJson) return undefined;
+    try {
+      const parsed = JSON.parse(metadataJson) as { chatControls?: ChatControlState } | ChatControlState;
+      const controls = (parsed as any)?.chatControls && typeof (parsed as any).chatControls === 'object'
+        ? (parsed as any).chatControls as ChatControlState
+        : (parsed as ChatControlState);
+      if (!controls || typeof controls !== 'object') return undefined;
+      return {
+        planMode: typeof controls.planMode === 'boolean' ? controls.planMode : undefined,
+        preferredWebMode: controls.preferredWebMode,
+        toolUseMode: controls.toolUseMode,
+        permissionMode: controls.permissionMode,
+        selectedPlugins: Array.isArray(controls.selectedPlugins) ? controls.selectedPlugins : [],
+        selectedTools: Array.isArray(controls.selectedTools) ? controls.selectedTools : [],
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  async upsertSessionControls(sessionId: string, chatControls: ChatControlState): Promise<void> {
+    const existing = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { metadataJson: true },
+    });
+    const currentControls = this.parseSessionControls(existing?.metadataJson) || {};
+    const nextControls: ChatControlState = {
+      ...currentControls,
+      ...chatControls,
+      selectedPlugins: chatControls.selectedPlugins ?? currentControls.selectedPlugins ?? [],
+      selectedTools: chatControls.selectedTools ?? currentControls.selectedTools ?? [],
+    };
+
+    await this.prisma.session.upsert({
+      where: { id: sessionId },
+      update: { metadataJson: JSON.stringify({ chatControls: nextControls }) },
+      create: {
+        id: sessionId,
+        title: null,
+        metadataJson: JSON.stringify({ chatControls: nextControls }),
+      },
+    });
+  }
+
   async createMessage(
     sessionId: string,
     role: string,
@@ -57,6 +149,7 @@ export class ChatService {
       toolCalls?: any[];
       toolResults?: any[];
       provenance?: any;
+      reviewEvents?: ReviewEvent[];
       citations?: Citation[];
       modelId?: string;
       isLocal?: boolean;
@@ -66,18 +159,39 @@ export class ChatService {
       error?: { type: string; message: string };
       attachments?: any[];
       durationMs?: number;
+      promptPackId?: string;
+      promptVersionHash?: string;
+      reviewerPromptVersionHash?: string;
+      workflowPromptIds?: string[];
       runIds?: string[];
+      workflowState?: WorkflowState;
+      memoryEvents?: MemoryEvent[];
+      advisoryEvents?: AdvisoryEvent[];
     }
   ): Promise<MessageWithRelations> {
+    const derivedTitle = role === 'user' ? this.deriveSessionTitle(content) : null;
+
     // Ensure session exists
     await this.prisma.session.upsert({
       where: { id: sessionId },
       update: { updatedAt: new Date() },
       create: {
         id: sessionId,
-        title: content.substring(0, 50) + (content.length > 50 ? '...' : '')
+        title: derivedTitle,
       },
     });
+
+    if (derivedTitle) {
+      await this.prisma.session.updateMany({
+        where: {
+          id: sessionId,
+          title: null,
+        },
+        data: {
+          title: derivedTitle,
+        },
+      });
+    }
 
     return this.prisma.message.create({
       data: {
@@ -86,7 +200,16 @@ export class ChatService {
         content,
         toolCalls: metadata?.toolCalls ? JSON.stringify(metadata.toolCalls) : null,
         toolResults: metadata?.toolResults ? JSON.stringify(metadata.toolResults) : null,
-        provenance: metadata?.provenance ? JSON.stringify(metadata.provenance) : null,
+        provenance:
+          metadata?.provenance || metadata?.reviewEvents?.length || metadata?.workflowState
+            ? JSON.stringify({
+                trace: metadata?.provenance || null,
+                reviewEvents: metadata?.reviewEvents || [],
+                workflowState: metadata?.workflowState || null,
+                memoryEvents: metadata?.memoryEvents || [],
+                advisoryEvents: metadata?.advisoryEvents || [],
+              })
+            : null,
         citations: metadata?.citations ? JSON.stringify(metadata.citations) : null,
         modelId: metadata?.modelId,
         isLocal: metadata?.isLocal,
@@ -97,6 +220,11 @@ export class ChatService {
         errorMessage: metadata?.error?.message,
         attachments: metadata?.attachments ? JSON.stringify(metadata.attachments) : null,
         durationMs: metadata?.durationMs,
+        promptPackId: metadata?.promptPackId,
+        promptVersionHash: metadata?.promptVersionHash,
+        reviewerPromptVersionHash: metadata?.reviewerPromptVersionHash,
+        // @ts-ignore - field present after prisma generate
+        workflowPromptIds: metadata?.workflowPromptIds ? JSON.stringify(metadata.workflowPromptIds) : null,
         // @ts-ignore - runIds is present in generated client but TS server is stale
         runIds: metadata?.runIds ? JSON.stringify(metadata.runIds) : null,
       },
@@ -113,12 +241,22 @@ export class ChatService {
   }
 
   private mapToChatMessage(m: MessageWithRelations): ChatMessage {
+    const parsedProvenance = m.provenance ? JSON.parse(m.provenance) : null;
+    const rawTrace = parsedProvenance?.trace || parsedProvenance;
+    const reviewEvents = Array.isArray(parsedProvenance?.reviewEvents) ? parsedProvenance.reviewEvents : undefined;
+    const workflowState = parsedProvenance?.workflowState && typeof parsedProvenance.workflowState === 'object'
+      ? parsedProvenance.workflowState
+      : undefined;
+    const memoryEvents = Array.isArray(parsedProvenance?.memoryEvents) ? parsedProvenance.memoryEvents : undefined;
+    const advisoryEvents = Array.isArray(parsedProvenance?.advisoryEvents) ? parsedProvenance.advisoryEvents : undefined;
+
     return {
+      id: m.id,
       role: m.role as 'user' | 'assistant' | 'system' | 'tool',
       content: m.content,
       tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
       toolResults: m.toolResults ? JSON.parse(m.toolResults) : undefined,
-      provenanceTrace: m.provenance ? ProvenanceSanitizer.processTrace(JSON.parse(m.provenance)) : undefined,
+      provenanceTrace: rawTrace ? ProvenanceSanitizer.processTrace(rawTrace) : undefined,
       runIds: m.runIds ? JSON.parse(m.runIds) : undefined,
       modelId: m.modelId || undefined,
       isLocal: m.isLocal ?? undefined,
@@ -129,6 +267,14 @@ export class ChatService {
       attachments: m.attachments ? JSON.parse(m.attachments) : undefined,
       createdAt: m.createdAt,
       durationMs: m.durationMs || undefined,
+      promptPackId: m.promptPackId || undefined,
+      promptVersionHash: m.promptVersionHash || undefined,
+      reviewerPromptVersionHash: m.reviewerPromptVersionHash || undefined,
+      workflowPromptIds: m.workflowPromptIds ? JSON.parse(m.workflowPromptIds) : undefined,
+      reviewEvents,
+      workflowState,
+      memoryEvents,
+      advisoryEvents,
     };
   }
 
@@ -145,12 +291,13 @@ export class ChatService {
 
     return sessions.map(session => ({
       id: session.id,
-      title: session.title,
+      title: session.title || this.deriveSessionTitleFromMessages(session.messages),
       workspaceId: session.workspaceId,
       senderIdentifier: session.senderIdentifier,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       messages: session.messages.map((m: MessageWithRelations) => this.mapToChatMessage(m)),
+      chatControls: this.parseSessionControls(session.metadataJson),
     }));
   }
 
@@ -168,12 +315,13 @@ export class ChatService {
 
     return {
       id: session.id,
-      title: session.title,
+      title: session.title || this.deriveSessionTitleFromMessages(session.messages),
       workspaceId: session.workspaceId,
       senderIdentifier: session.senderIdentifier,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       messages: session.messages.map((m: MessageWithRelations) => this.mapToChatMessage(m)),
+      chatControls: this.parseSessionControls(session.metadataJson),
     };
   }
 

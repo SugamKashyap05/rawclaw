@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskRunDto } from './dto/update-task-run.dto';
+import { UpdateTaskDto } from './dto/update-task.dto';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
@@ -24,6 +25,23 @@ export class TasksService {
         toolIds: JSON.stringify(dto.toolIds),
         schedule: dto.schedule,
         workspaceId: dto.workspaceId || 'default',
+      },
+    });
+  }
+
+  async updateDefinition(id: string, dto: UpdateTaskDto) {
+    const existing = await this.prisma.taskDefinition.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Task definition not found');
+
+    return this.prisma.taskDefinition.update({
+      where: { id },
+      data: {
+        name: dto.name,
+        description: dto.description,
+        agentId: dto.agentId === undefined ? undefined : (dto.agentId || null),
+        toolIds: dto.toolIds ? JSON.stringify(dto.toolIds) : undefined,
+        schedule: dto.schedule === undefined ? undefined : (dto.schedule || null),
+        workspaceId: dto.workspaceId,
       },
     });
   }

@@ -32,13 +32,32 @@ class MCPToolWrapper(BaseTool):
         self.name = mcp_tool['name']
         self.description = mcp_tool.get("description", f"MCP tool from {server_name}")
         self.parameters = mcp_tool.get("inputSchema", {})
-        self.capability_tags = ["mcp", server_name]
+        self.capability_tags = self._infer_capability_tags(server_name, self.name, self.description)
         self.requires_sandbox = False
         # MCP tools require confirmation by default, but web-search tools can run without
         self.requires_confirmation = not self._is_web_search_tool(mcp_tool['name'])
         self._mcp_tool_name = mcp_tool["name"]
         self._server_name = server_name
         self._gateway = gateway
+
+    def _infer_capability_tags(self, server_name: str, tool_name: str, description: str) -> List[str]:
+        tags = ["mcp", server_name]
+        haystack = f"{server_name} {tool_name} {description}".lower()
+        inferred = {
+            "crawl4ai": ["crawl4ai", "extract", "research"],
+            "playwright": ["playwright", "browser", "extract"],
+            "opencli": ["opencli", "browser", "interaction"],
+        }
+        for key, extra_tags in inferred.items():
+            if key in haystack:
+                tags.extend(extra_tags)
+        if any(token in haystack for token in ["extract", "scrape", "markdown", "content"]):
+            tags.append("extract")
+        if any(token in haystack for token in ["browser", "navigate", "click", "tab", "network", "dom"]):
+            tags.append("browser")
+        if any(token in haystack for token in ["search", "fetch", "browse", "web"]):
+            tags.append("network")
+        return list(dict.fromkeys(tags))
 
     def _is_web_search_tool(self, name: str) -> bool:
         """Check if this is a web search tool that can run without confirmation."""

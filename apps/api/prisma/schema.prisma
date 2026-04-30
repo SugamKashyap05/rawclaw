@@ -13,15 +13,172 @@ datasource db {
 model Session {
   id               String    @id @default(cuid())
   title            String?
+  metadataJson     String?
   workspaceId      String    @default("default")
   senderIdentifier String    @default("local")
   surfaceType      String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   messages         Message[]
+  binding          SessionBinding?
 
   @@index([workspaceId])
   @@map("sessions")
+}
+
+model SessionBinding {
+  id                String    @id @default(cuid())
+  routingKey        String    @unique
+  sessionId         String    @unique
+  workspaceId       String
+  senderIdentifier  String
+  surfaceType       String    @default("chat")
+  threadKey         String?
+  channelKey        String?
+  agentId           String?
+  affinityMode      String    @default("session")
+  resolutionSource  String    @default("global_default")
+  matchedRuleId     String?
+  matchedRuleName   String?
+  requestedSessionId String?
+  resolvedSessionId  String?
+  reused            Boolean   @default(false)
+  status            String    @default("idle")
+  parentSessionId   String?
+  parentRunId       String?
+  delegationDepth   Int       @default(0)
+  lastRunStartedAt  DateTime?
+  lastRunFinishedAt DateTime?
+  lastHeartbeatAt   DateTime?
+  lastError         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  childRuns ChildRun[]
+  automationJobs GatewayAutomationJob[]
+  automationRuns GatewayAutomationRun[]
+
+  @@index([workspaceId, senderIdentifier, surfaceType])
+  @@index([parentSessionId])
+  @@map("session_bindings")
+}
+
+model ChildRun {
+  id              String    @id @default(cuid())
+  bindingId       String    @unique
+  parentBindingId String?
+  parentSessionId String
+  parentRunId     String
+  childSessionId  String
+  agentId         String?
+  workspaceId     String
+  status          String    @default("queued")
+  mode            String    @default("background")
+  contextForkMode String    @default("recent")
+  announceBackMode String   @default("summary")
+  timeoutSeconds  Int?
+  summary         String?
+  fullOutput      String?
+  sourcesJson     String?
+  toolCallsJson   String?
+  provenanceJson  String?
+  errorMessage    String?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  binding SessionBinding @relation(fields: [bindingId], references: [id], onDelete: Cascade)
+
+  @@index([parentSessionId])
+  @@index([parentRunId])
+  @@index([parentBindingId])
+  @@map("child_runs")
+}
+
+model GatewayAutomationJob {
+  id              String    @id @default(cuid())
+  name            String
+  kind            String
+  status          String    @default("active")
+  schedule        String
+  prompt          String
+  workspaceId     String    @default("default")
+  agentId         String?
+  sessionId       String?
+  bindingId       String?
+  surfaceType     String?
+  senderIdentifier String?
+  threadKey       String?
+  channelKey      String?
+  toolIds         String?
+  model           String?
+  contextForkMode String    @default("recent")
+  maxConcurrency  Int       @default(1)
+  timeoutSeconds  Int       @default(600)
+  maxRetries      Int       @default(1)
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+  metadataJson    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  runs            GatewayAutomationRun[]
+
+  binding SessionBinding? @relation(fields: [bindingId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextRunAt])
+  @@index([workspaceId, agentId])
+  @@map("gateway_automation_jobs")
+}
+
+model GatewayAutomationRun {
+  id             String   @id @default(cuid())
+  jobId          String
+  bindingId      String?
+  sessionId      String?
+  agentId        String?
+  status         String   @default("queued")
+  attempt        Int      @default(1)
+  summary        String?
+  output         String?
+  sourcesJson    String?
+  toolCallsJson  String?
+  provenanceJson String?
+  errorMessage   String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  heartbeatAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  job     GatewayAutomationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  binding SessionBinding?      @relation(fields: [bindingId], references: [id], onDelete: SetNull)
+
+  @@index([jobId, status])
+  @@index([bindingId])
+  @@index([heartbeatAt])
+  @@map("gateway_automation_runs")
+}
+
+model BindingRule {
+  id               String   @id @default(cuid())
+  name             String
+  active           Boolean  @default(true)
+  priority         Int      @default(100)
+  workspaceId      String?
+  surfaceType      String?
+  senderIdentifier String?
+  threadKey        String?
+  channelKey       String?
+  targetAgentId    String?
+  affinityMode     String   @default("session")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([active, priority])
+  @@index([workspaceId, surfaceType])
+  @@map("binding_rules")
 }
 
 model ToolConfirmation {
@@ -57,6 +214,10 @@ model Message {
   attachments  String? // JSON stringified ChatAttachment[]
   durationMs   Int?
   runIds       String?  // JSON string array of background task IDs
+  promptPackId String?
+  promptVersionHash String?
+  reviewerPromptVersionHash String?
+  workflowPromptIds String? // JSON string array
 
   createdAt DateTime @default(now())
   
@@ -94,6 +255,10 @@ model TaskRun {
   errorMessage    String?
   resumedFromRunId String?
   sessionId       String?
+  promptPackId    String?
+  promptVersionHash String?
+  reviewerPromptVersionHash String?
+  workflowPromptIds String?
   createdAt       DateTime        @default(now())
   steps           RunStep[]
 
@@ -134,6 +299,8 @@ model AgentProfile {
   name         String   @unique
   description  String?
   systemPrompt String
+  promptPackId String?
+  promptOverlay String?
   status       String   @default("idle")
   isDefault    Boolean  @default(false)
   modelId      String?
@@ -142,6 +309,29 @@ model AgentProfile {
   updatedAt    DateTime @updatedAt
 
   @@map("agent_profiles")
+}
+
+model PromptImprovementProposal {
+  id                        String   @id @default(cuid())
+  sessionId                 String?
+  messageId                 String?
+  failureCategory           String
+  promptPackId              String?
+  promptVersionHash         String?
+  reviewerPromptVersionHash String?
+  workflowPromptIds         String?
+  rationale                 String
+  proposalJson              String
+  expectedImprovement       String?
+  status                    String   @default("pending")
+  evalStatus                String   @default("pending")
+  evalNotes                 String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([promptPackId])
+  @@map("prompt_improvement_proposals")
 }
 
 model McpServerConfig {
@@ -165,6 +355,52 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 
   @@map("app_settings")
+}
+
+model HarnessRun {
+  id             String   @id @default(cuid())
+  name           String
+  kind           String   @default("regression-pack")
+  status         String   @default("running")
+  modelId        String?
+  workspace      String?
+  metadataJson   String?
+  summaryJson    String?
+  artifactPaths  String?
+  startedAt      DateTime @default(now())
+  heartbeatAt    DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  processes      HarnessProcess[]
+
+  @@index([status])
+  @@map("harness_runs")
+}
+
+model HarnessProcess {
+  id               String     @id @default(cuid())
+  runId            String
+  run              HarnessRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  name             String
+  suiteKey         String?
+  status           String     @default("queued")
+  commandJson      String
+  pid              Int?
+  outputLog        String?
+  metadataJson     String?
+  summaryJson      String?
+  artifactPaths    String?
+  startedAt        DateTime   @default(now())
+  heartbeatAt      DateTime?
+  finishedAt       DateTime?
+  durationSeconds  Float?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([runId])
+  @@index([status])
+  @@map("harness_processes")
 }
 
 model MemoryEntry {

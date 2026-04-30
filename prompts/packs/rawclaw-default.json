@@ -1,0 +1,10 @@
+{
+  "id": "rawclaw-default",
+  "purpose": "Default RawClaw prompt pack for production chat behavior.",
+  "scope": "pack",
+  "coreBlockIds": ["core-chat"],
+  "defaultWorkflowIds": ["web-research-grounded"],
+  "reviewBlockId": "output-reviewer",
+  "repairBlockId": "repair-rewriter",
+  "tags": ["default", "production"]
+}

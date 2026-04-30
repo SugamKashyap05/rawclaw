@@ -25,3 +25,10 @@ export interface MemorySearchResult extends MemoryEntry {
   score: number;
   preview: string;
 }
+
+export interface CommandMemoryOverview {
+  operator: MemoryEntry[];
+  mission: MemoryEntry[];
+  session: MemoryEntry[];
+  recent: MemoryEntry[];
+}
