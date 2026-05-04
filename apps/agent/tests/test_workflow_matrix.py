@@ -333,6 +333,57 @@ def test_non_research_workflow_helpers_cover_memory_tool_and_interaction_paths(e
     assert forced_time.tool_name == "get_datetime"
 
 
+def test_live_sports_query_builder_preserves_year_team_and_metrics(executor: Executor):
+    query = "do a web search to find out about ipl 2026 csk match points with how many wins and losses"
+
+    built = executor._build_search_query(query, apply_domain_bias=False)
+    lowered = built.lower()
+
+    assert "2026" in built
+    assert "ipl" in lowered
+    assert "chennai super kings" in lowered
+    assert "points table" in lowered or "standings" in lowered
+    assert "wins" in lowered
+    assert "losses" in lowered
+
+
+def test_source_ranking_prefers_official_ipl_table_sources(executor: Executor):
+    ranked = executor._rank_search_results(
+        "IPL 2026 Chennai Super Kings points table wins losses",
+        [
+            {
+                "title": "Wikipedia IPL page",
+                "url": "https://en.wikipedia.org/wiki/2026_Indian_Premier_League",
+                "snippet": "Background article.",
+            },
+            {
+                "title": "IPL 2026 Points Table",
+                "url": "https://www.iplt20.com/matches/points-table",
+                "snippet": "Official table with points and net run rate.",
+                "quality_tags": ["official_page"],
+            },
+            {
+                "title": "CSK season recap",
+                "url": "https://example.com/csk-recap",
+                "snippet": "Fan recap of the season.",
+            },
+        ],
+    )
+
+    assert ranked
+    assert ranked[0]["url"] == "https://www.iplt20.com/matches/points-table"
+
+
+def test_direct_route_matches_ipl_csk_points_request(executor: Executor):
+    route = executor._find_direct_route("ipl 2026 csk match points with how many wins and losses")
+
+    assert route is not None
+    assert route["url"] == "https://www.iplt20.com/matches/points-table"
+    assert route["taskType"] == "factual_extract"
+    assert route["pageKind"] == "standings/table"
+    assert route["expectedFields"] == ["team", "position", "points", "nrr", "ranking_movement"]
+
+
 def test_typo_standings_query_still_classifies_as_sports_research(executor: Executor):
     plan = executor.research.planner.run("csk standing in ipl point tabel")
 

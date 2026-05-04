@@ -1,0 +1,10 @@
+{
+  "id": "rawclaw-app-builder",
+  "purpose": "Chat-first App Builder prompt pack for discovery, planning, and execution handoff.",
+  "scope": "pack",
+  "coreBlockIds": ["core-chat", "app-builder-core"],
+  "defaultWorkflowIds": [],
+  "reviewBlockId": "output-reviewer",
+  "repairBlockId": "repair-rewriter",
+  "tags": ["app-builder", "chat-first", "planning"]
+}

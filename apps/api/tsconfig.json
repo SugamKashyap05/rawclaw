@@ -10,6 +10,12 @@
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
+    "paths": {
+      "@rawclaw/app-sdk": ["../../packages/app-sdk/src/index.ts"],
+      "@rawclaw/app-sdk/*": ["../../packages/app-sdk/src/*"],
+      "@rawclaw/shared": ["../../packages/shared/src/index.ts"],
+      "@rawclaw/shared/*": ["../../packages/shared/src/*"]
+    },
     "incremental": true,
     "strict": true
   }

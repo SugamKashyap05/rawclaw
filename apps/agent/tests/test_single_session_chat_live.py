@@ -144,7 +144,7 @@ async def test_live_single_session_chat_recovers_csk_standing_from_real_iplt20_f
             event.get("type") == "content" and "How can I help you today?" in event.get("content", "")
             for event in greeting_events
         ),
-        "research_tools_called": tool_call_names == ["web_search", "web_extract"],
+        "research_tools_called": tool_call_names == ["web_extract"],
         "research_stage_metadata_present": {
             "research-planner",
             "extract-router",

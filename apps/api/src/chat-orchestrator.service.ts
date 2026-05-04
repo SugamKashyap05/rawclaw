@@ -5,8 +5,17 @@ import { ChatService } from './chat.service';
 import { DocsService } from './docs.service';
 import { AgentsService } from './agents.service';
 import { ModelsService } from './models.service';
-import { ChatControlState, ChatRequest, ChatMessage, AssistantLane, GatewayRoutingContext } from '@rawclaw/shared';
-import { response, Response } from 'express';
+import {
+  ChatControlState,
+  ChatRequest,
+  ChatMessage,
+  AssistantLane,
+  GatewayRoutingContext,
+  ChatNluAvailableTool,
+  ChatNluFrame,
+  ChatContextBudget,
+} from '@rawclaw/shared';
+import type { Response } from 'express';
 import { firstValueFrom } from 'rxjs';
 import { DocumentProcessorService } from './document-processor.service';
 import { PrismaService } from './prisma.service';
@@ -16,10 +25,76 @@ import { TasksService } from './tasks/tasks.service';
 import { PromptCatalogService } from './prompt-catalog.service';
 import { SelfImprovementService } from './self-improvement.service';
 import { AssistantService } from './assistant.service';
+import { EventEmitter } from 'events';
 import { existsSync, promises as fs } from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { GatewayRoutingService } from './gateway-routing.service';
+import { GatewayControlPlaneService } from './gateway-control-plane.service';
+import { ChatNluService } from './chat-nlu.service';
+
+type NonStreamingChatResult = {
+  content: string;
+  assistantLane?: AssistantLane | null;
+  toolCalls: any[];
+  toolResults: any[];
+  provenance?: any;
+  metadata?: Record<string, unknown> | null;
+  error?: {
+    statusCode?: number;
+    message: string;
+    details?: unknown;
+  } | null;
+};
+
+class MemoryResponseCollector {
+  public writableEnded = false;
+  public statusCode = 200;
+  public jsonPayload: unknown = null;
+  private readonly emitter = new EventEmitter();
+  private raw = '';
+
+  setHeader(): this {
+    return this;
+  }
+
+  getHeader(): undefined {
+    return undefined;
+  }
+
+  status(code: number): this {
+    this.statusCode = code;
+    return this;
+  }
+
+  json(payload: unknown): this {
+    this.jsonPayload = payload;
+    this.writableEnded = true;
+    return this;
+  }
+
+  write(chunk: unknown): boolean {
+    this.raw += String(chunk ?? '');
+    return true;
+  }
+
+  end(chunk?: unknown): this {
+    if (chunk !== undefined) {
+      this.write(chunk);
+    }
+    this.writableEnded = true;
+    return this;
+  }
+
+  on(event: string, handler: (...args: any[]) => void): this {
+    this.emitter.on(event, handler);
+    return this;
+  }
+
+  rawOutput(): string {
+    return this.raw;
+  }
+}
 
 @Injectable()
 export class ChatOrchestratorService {
@@ -41,6 +116,8 @@ export class ChatOrchestratorService {
     private readonly selfImprovementService: SelfImprovementService,
     private readonly assistantService: AssistantService,
     private readonly gatewayRoutingService: GatewayRoutingService,
+    private readonly gatewayControlPlane: GatewayControlPlaneService,
+    private readonly chatNluService: ChatNluService,
   ) {}
 
   private readonly MAX_TOTAL_PROMPT_CHARS = 180000;
@@ -113,6 +190,46 @@ export class ChatOrchestratorService {
 
       return browserPluginEnabled;
     });
+  }
+
+  private normalizeToolsForNlu(tools: any[]): ChatNluAvailableTool[] {
+    return (tools || [])
+      .filter((tool) => typeof tool?.name === 'string' && tool.name.trim().length > 0)
+      .map((tool) => {
+        const name = String(tool.name);
+        const capabilityTags: string[] = Array.isArray(tool.capability_tags)
+          ? tool.capability_tags.map((tag: unknown) => String(tag)).filter((tag: string) => tag.length > 0)
+          : [];
+        const lowerTags = capabilityTags.map((tag: string) => tag.toLowerCase());
+        const serverTag = capabilityTags.find((tag: string) => tag.startsWith('server:') || tag.startsWith('mcp-server:'));
+        const serverFromTag = serverTag?.split(':').slice(1).join(':') || undefined;
+        const serverDisplayName =
+          tool.serverDisplayName ||
+          tool.server_name ||
+          tool.serverName ||
+          serverFromTag ||
+          lowerTags.find((tag: string) => tag !== 'mcp' && tag.includes('mcp'));
+        const type: ChatNluAvailableTool['type'] = name.startsWith('skill_')
+          ? 'skill'
+          : lowerTags.includes('mcp') || Boolean(serverDisplayName)
+            ? 'mcp'
+            : 'native';
+        return {
+          name,
+          description: typeof tool.description === 'string' ? tool.description : undefined,
+          type,
+          capabilityTags,
+          serverId: tool.serverId || tool.server_id || serverFromTag,
+          serverDisplayName: serverDisplayName ? String(serverDisplayName) : undefined,
+        };
+      });
+  }
+
+  private getPreviousAssistantNlu(history: ChatMessage[]): ChatNluFrame | null {
+    const previous = [...(history || [])]
+      .reverse()
+      .find((message) => message.role === 'assistant' && message.workflowState?.nlu);
+    return previous?.workflowState?.nlu || null;
   }
 
   private shouldEnableOutputReview(request: ChatRequest, latestUserContent: string): boolean {
@@ -368,6 +485,7 @@ export class ChatOrchestratorService {
     toolsSchema: any[] | undefined,
     chatControls?: ChatControlState,
     selectedAgent?: { skills?: string[] } | null,
+    nluFrame?: ChatNluFrame | null,
   ): any[] | undefined {
     if (!toolsSchema?.length) {
       return toolsSchema;
@@ -379,6 +497,15 @@ export class ChatOrchestratorService {
     const toolUseMode = chatControls?.toolUseMode || 'auto';
     const explicitTools = new Set((chatControls?.selectedTools || []).filter(Boolean));
     const limitedToExplicitTools = explicitTools.size > 0 && toolUseMode !== 'auto';
+    const nluRecommended = new Map(
+      (nluFrame?.recommendedTools || []).map((tool) => [tool.name, tool]),
+    );
+    const nluToolEntityNames = new Set(
+      (nluFrame?.entities || [])
+        .filter((entity) => entity.type === 'tool_name')
+        .map((entity) => entity.value),
+    );
+    const applyNluBoosts = Boolean(nluFrame && nluFrame.intent !== 'conversation');
 
     const candidateTools = limitedToExplicitTools
       ? toolsSchema.filter((tool) => explicitTools.has(String(tool?.function?.name || '')))
@@ -394,6 +521,7 @@ export class ChatOrchestratorService {
 
         const isSearch = ['web_search', 'duckduckgo_search', 'smart_search', 'iask-search', 'web-search', 'google:search'].includes(name);
         const isFetch = ['web_extract', 'web_fetch', 'fetch_url', 'browser_fetch', 'browser_open', 'browser_navigate'].includes(name);
+        const isBrowser = ['browser_fetch', 'browser_open', 'browser_navigate'].includes(name) || name.toLowerCase().includes('browser');
         const isSkill = name.startsWith('skill_');
 
         if (selectedSkillTools.has(name)) score += 100;
@@ -406,6 +534,17 @@ export class ChatOrchestratorService {
         if (preferredWebMode === 'read_page' && isFetch) score += 180;
         if (preferredWebMode === 'browser' && ['browser_fetch', 'browser_open', 'browser_navigate'].includes(name)) score += 220;
         if (preferredWebMode === 'browser' && isSearch) score -= 30;
+        if (applyNluBoosts) {
+          const recommendation = nluRecommended.get(name);
+          if (nluFrame?.intent === 'research') {
+            if (isSearch) score += 120;
+            if (isFetch || isBrowser) score += 90;
+          }
+          if (nluToolEntityNames.has(name)) score += 160;
+          if (recommendation?.type === 'mcp') score += 120;
+          if (recommendation?.type === 'skill' || selectedSkillTools.has(name)) score += 95;
+          if (recommendation?.reason === 'matched explicit chat control') score += 160;
+        }
         if (name === 'sequential_thinking' && ['compare', 'memo', 'brief', 'workflow'].some((q) => lower.includes(q))) score += 15;
         if (name === 'read_file' && ['read ', 'file', 'workspace', 'repository'].some((q) => lower.includes(q))) score += 25;
         if (name === 'list_dir' && ['workspace', 'repository', 'repo', 'directory', 'files'].some((q) => lower.includes(q))) score += 20;
@@ -468,8 +607,10 @@ export class ChatOrchestratorService {
       promptVersionHash?: string;
       reviewerPromptVersionHash?: string;
       workflowPromptIds?: string[];
-      memoryEvents?: Array<{ layer: 'session' | 'operator' | 'mission'; action: 'captured' | 'updated'; summary: string; entryId?: string }>;
+      memoryEvents?: Array<{ layer: 'session' | 'operator' | 'mission'; action: 'captured' | 'updated' | 'recalled'; summary: string; entryId?: string }>;
       advisoryEvents?: Array<{ category: 'next_step' | 'follow_up' | 'reminder' | 'blocker' | 'briefing'; summary: string; actionState: 'suggested' | 'queued' | 'executed' }>;
+      nluFrame?: ChatNluFrame | null;
+      contextBudget?: ChatContextBudget | null;
     },
   ): Promise<boolean> {
     const lower = (latestUserContent || '').toLowerCase();
@@ -479,7 +620,7 @@ export class ChatOrchestratorService {
       extra: {
         toolCalls?: any[];
         toolResults?: any[];
-        memoryEvents?: Array<{ layer: 'session' | 'operator' | 'mission'; action: 'captured' | 'updated'; summary: string; entryId?: string }>;
+        memoryEvents?: Array<{ layer: 'session' | 'operator' | 'mission'; action: 'captured' | 'updated' | 'recalled'; summary: string; entryId?: string }>;
         advisoryEvents?: Array<{ category: 'next_step' | 'follow_up' | 'reminder' | 'blocker' | 'briefing'; summary: string; actionState: 'suggested' | 'queued' | 'executed' }>;
       } = {},
     ) => {
@@ -519,6 +660,8 @@ export class ChatOrchestratorService {
           runIds: [],
           assistantLane,
           confidenceState: 'direct',
+          nlu: context?.nluFrame || undefined,
+          contextBudget: context?.contextBudget ?? null,
         },
       });
     };
@@ -729,19 +872,141 @@ export class ChatOrchestratorService {
     return false;
   }
 
+  private resolveEffectiveSelectedAgent(
+    request: ChatRequest,
+    selectedAgent:
+      | {
+          id?: string;
+          name?: string | null;
+          modelId?: string | null;
+          skills?: string[];
+          promptPackId?: string | null;
+          promptOverlay?: string | null;
+          systemPrompt?: string | null;
+        }
+      | null,
+  ) {
+    const defaultPromptPackId = request.surfaceType === 'app_builder' ? 'rawclaw-app-builder' : null;
+    const promptPackId = request.promptPackId || selectedAgent?.promptPackId || defaultPromptPackId;
+    const promptOverlay = [selectedAgent?.promptOverlay, request.promptOverlay]
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      .join('\n\n')
+      .trim();
+
+    if (!selectedAgent && !promptPackId && !promptOverlay) {
+      return selectedAgent;
+    }
+
+    return {
+      ...(selectedAgent || {}),
+      name: selectedAgent?.name ?? undefined,
+      modelId: selectedAgent?.modelId ?? undefined,
+      systemPrompt: selectedAgent?.systemPrompt ?? undefined,
+      skills: selectedAgent?.skills ?? undefined,
+      promptPackId: promptPackId || null,
+      promptOverlay: promptOverlay || null,
+    };
+  }
+
+  private parseCollectedChatResult(collector: MemoryResponseCollector): NonStreamingChatResult {
+    if (collector.jsonPayload && collector.statusCode >= 400) {
+      const payload = collector.jsonPayload as Record<string, unknown>;
+      return {
+        content: '',
+        toolCalls: [],
+        toolResults: [],
+        error: {
+          statusCode: collector.statusCode,
+          message: String(payload?.error || payload?.message || `Chat request failed with status ${collector.statusCode}`),
+          details: payload,
+        },
+      };
+    }
+
+    const result: NonStreamingChatResult = {
+      content: '',
+      assistantLane: null,
+      toolCalls: [],
+      toolResults: [],
+      provenance: null,
+      metadata: null,
+      error: null,
+    };
+
+    const blocks = collector.rawOutput().split('\n\n').map((item) => item.trim()).filter(Boolean);
+    for (const block of blocks) {
+      const payload = block
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trim())
+        .join('\n');
+
+      if (!payload) {
+        continue;
+      }
+
+      let event: Record<string, any>;
+      try {
+        event = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+
+      switch (event.type) {
+        case 'content':
+          result.content += String(event.content || '');
+          break;
+        case 'tool_call':
+          if (event.tool_call) result.toolCalls.push(event.tool_call);
+          break;
+        case 'tool_result':
+          if (event.tool_result) result.toolResults.push(event.tool_result);
+          break;
+        case 'provenance':
+          result.provenance = event.provenanceTrace || event.provenance || null;
+          break;
+        case 'metadata':
+          result.metadata = event.metadata || null;
+          break;
+        case 'error':
+          result.error = {
+            message: String(event.message || event.error || 'Chat stream failed.'),
+            details: event,
+          };
+          break;
+        default:
+          break;
+      }
+    }
+
+    return result;
+  }
+
+  async processNonStreamingChat(
+    request: ChatRequest,
+    options: { skipPromptPersistence?: boolean } = {},
+  ): Promise<NonStreamingChatResult> {
+    const collector = new MemoryResponseCollector();
+    await this.processAndStreamChat(request, collector as unknown as Response, options);
+    return this.parseCollectedChatResult(collector);
+  }
+
   async processAndStreamChat(request: ChatRequest, res: Response, options: { skipPromptPersistence?: boolean } = {}): Promise<void> {
     const agentUrl = this.configService.get<string>('agentUrl');
     const systemContext = await this.docsService.getSystemContext();
-    const latestUserContent = (request.messages || []).filter(m => m.role === 'user').slice(-1)[0]?.content || '';
-    const assistantLane = this.promptCatalog.resolveAssistantLane(latestUserContent);
+    const latestUserMessage = (request.messages || []).filter(m => m.role === 'user').slice(-1)[0];
+    const latestUserContent = latestUserMessage?.content || '';
+    let assistantLane = this.promptCatalog.resolveAssistantLane(latestUserContent);
     const assistantState = await this.assistantService.getState();
-    const assistantStateText = this.assistantService.formatStateForPrompt(assistantState);
+    let assistantStateText = this.assistantService.formatStateForPrompt(assistantState);
     const promptedAgent = !request.agent_id ? await this.maybeResolveAgentFromPrompt(latestUserContent) : null;
     if (promptedAgent && !request.agent_id) {
       request.agent_id = promptedAgent.id;
       this.logger.log(`Resolved agent switch from prompt to '${promptedAgent.name}' (${promptedAgent.id})`);
     }
     let selectedAgent = promptedAgent || await this.agentsService.getOptional(request.agent_id);
+    let effectiveSelectedAgent = this.resolveEffectiveSelectedAgent(request, selectedAgent);
     if (request.agent_id && !selectedAgent) {
       if (!res.writableEnded) {
         res.status(404).json({ error: `Unknown agent profile '${request.agent_id}'` });
@@ -768,6 +1033,7 @@ export class ChatOrchestratorService {
 
     if (!selectedAgent || selectedAgent.id !== (request.agent_id || 'main')) {
       selectedAgent = await this.agentsService.getOptional(request.agent_id);
+      effectiveSelectedAgent = this.resolveEffectiveSelectedAgent(request, selectedAgent);
     }
 
     const sessionSnapshot = await this.chatService.getSession(request.session_id);
@@ -785,12 +1051,38 @@ export class ChatOrchestratorService {
     request.selectedPlugins = effectiveChatControls.selectedPlugins;
     request.selectedTools = effectiveChatControls.selectedTools;
 
-    const preTurnSignals = latestUserContent
-      ? await this.assistantService.ingestUserTurn(request.session_id, latestUserContent)
-      : { memoryEvents: [], advisoryEvents: [] };
+    let nluFrame: ChatNluFrame | null = null;
+    let contextBudget: ChatContextBudget | null = null;
+    let preTurnSignals: Awaited<ReturnType<AssistantService['ingestUserTurn']>> = { memoryEvents: [], advisoryEvents: [] };
 
-    const gatewayRunId = randomUUID();
-    await this.gatewayRoutingService.markRunStarted(resolvedBinding.binding.id, gatewayRunId);
+      const gatewayRunId = randomUUID();
+      await this.gatewayControlPlane.createRun({
+        id: gatewayRunId,
+        kind: 'foreground_chat',
+        status: 'running',
+        executionMode: 'foreground',
+        sessionId: request.session_id,
+        bindingId: resolvedBinding.binding.id,
+        agentId: request.agent_id || selectedAgent?.id || null,
+        summary: `Foreground chat run started for session ${request.session_id}`,
+        queueMetadata: {
+          executionMode: 'foreground',
+          queuedRoles: [],
+          workerAssignments: [],
+          queueFallbackUsed: false,
+        },
+        guardianOutcome: null,
+        terminalOutcome: null,
+        metadata: {
+          surfaceType: request.surfaceType || 'chat',
+          threadKey: request.threadKey || null,
+          channelKey: request.channelKey || null,
+          preferredWebMode: request.preferredWebMode || 'auto',
+          toolUseMode: request.toolUseMode || 'auto',
+          permissionMode: request.permissionMode || 'workspace_default',
+        },
+      });
+      await this.gatewayRoutingService.markRunStarted(resolvedBinding.binding.id, gatewayRunId);
 
     // Respect the selected agent's preferred model when the request itself
     // did not explicitly choose one. Without this, agent-bound modelIds are
@@ -837,6 +1129,7 @@ export class ChatOrchestratorService {
     // Fetch available tools from agent and pass them to the model
     let toolsSchema: any[] | undefined;
     let availableSkills: Array<{ name: string; description: string; capabilityTags: string[] }> = [];
+    let availableNluTools: ChatNluAvailableTool[] = [];
     try {
       const toolsRes = await firstValueFrom(
         this.httpService.get(`${agentUrl}/api/tools`)
@@ -844,6 +1137,7 @@ export class ChatOrchestratorService {
       // Agent returns { tools: [...], count: N }
       const rawTools = Array.isArray(toolsRes.data.tools) ? toolsRes.data.tools : [];
       const tools = this.filterRawToolsByPluginSelection(rawTools, effectiveChatControls.selectedPlugins || []);
+      availableNluTools = this.normalizeToolsForNlu(tools);
       this.logger.log(`[TOOL_TRACE] Fetched ${tools.length} tools from agent: ${tools.map((t: any) => t.name || 'unnamed').join(', ')}`);
       // Convert ToolSchema[] to OpenAI function format
       toolsSchema = tools.map((t: any) => ({
@@ -861,18 +1155,88 @@ export class ChatOrchestratorService {
           description: t.description || '',
           capabilityTags: Array.isArray(t.capability_tags) ? t.capability_tags : [],
         }));
-      toolsSchema = this.selectRelevantTools(latestUserContent, toolsSchema, effectiveChatControls, selectedAgent);
-      const allowedToolNames = new Set((toolsSchema || []).map((tool: any) => tool?.function?.name).filter(Boolean));
-      availableSkills = availableSkills.filter((skill) => allowedToolNames.has(`skill_${skill.name}`));
-      this.logger.log(`[TOOL_TRACE] Converted to OpenAI format, passing ${toolsSchema?.length || 0} filtered tools to agent`);
     } catch (e: any) {
       this.logger.warn('[TOOL_TRACE] Could not fetch tools from agent:', e?.message || String(e));
       toolsSchema = undefined;
       availableSkills = [];
+      availableNluTools = [];
+    }
+
+    try {
+      if (latestUserContent) {
+        const pendingClarification = sessionSnapshot?.pendingNluClarification || await this.chatService.getPendingNluClarification(request.session_id);
+        const nluInput = {
+            sessionId: request.session_id,
+            latestUserContent,
+            chatControlsSubset: {
+              preferredWebMode: effectiveChatControls.preferredWebMode,
+              toolUseMode: effectiveChatControls.toolUseMode,
+              selectedTools: effectiveChatControls.selectedTools || [],
+              selectedPlugins: effectiveChatControls.selectedPlugins || [],
+            },
+            selectedAgent: effectiveSelectedAgent
+              ? {
+                  id: effectiveSelectedAgent.id,
+                  name: effectiveSelectedAgent.name,
+                  skills: effectiveSelectedAgent.skills || [],
+                }
+              : null,
+            availableTools: availableNluTools,
+            attachments: latestUserMessage?.attachments || [],
+            selection: request.selection || latestUserMessage?.selection || null,
+            assistantStateSummary: assistantStateText.slice(0, 1500),
+            pendingClarification,
+            nluOverride: request.nluOverride || null,
+            previousAssistantNlu: this.getPreviousAssistantNlu(history),
+          };
+        let nluResult = await this.chatNluService.analyzeTurn(nluInput);
+        if (nluResult.pendingClarificationUpdate) {
+          const updateResult = await this.chatService.applyNluClarificationUpdate(request.session_id, nluResult.pendingClarificationUpdate);
+          if (!updateResult.applied && updateResult.reason === 'stale') {
+            this.logger.warn(`Pending NLU clarification update was stale for session ${request.session_id}; rerunning without pending clarification.`);
+            nluResult = await this.chatNluService.analyzeTurn({
+              ...nluInput,
+              pendingClarification: null,
+            });
+          }
+        }
+        nluFrame = nluResult.frame;
+      } else {
+        nluFrame = null;
+      }
+      if (nluFrame?.recommendedLane) {
+        assistantLane = nluFrame.recommendedLane;
+      }
+    } catch (e: any) {
+      this.logger.warn(`Chat NLU analysis failed; continuing with legacy routing: ${e?.message || String(e)}`);
+      nluFrame = null;
+    }
+
+    preTurnSignals = latestUserContent
+      ? await this.assistantService.ingestUserTurn(request.session_id, latestUserContent, nluFrame)
+      : { memoryEvents: [], advisoryEvents: [] };
+    const nluMemoryQuery = latestUserContent
+      ? await this.assistantService.queryMemoryForNlu(request.session_id, latestUserContent, nluFrame)
+      : { promptText: null, memoryEvents: [] };
+    if (nluMemoryQuery.promptText) {
+      assistantStateText = [assistantStateText, nluMemoryQuery.promptText].filter(Boolean).join('\n\n');
+    }
+    if (nluMemoryQuery.memoryEvents.length) {
+      preTurnSignals = {
+        ...preTurnSignals,
+        memoryEvents: [...preTurnSignals.memoryEvents, ...nluMemoryQuery.memoryEvents],
+      };
+    }
+
+    if (toolsSchema?.length) {
+      toolsSchema = this.selectRelevantTools(latestUserContent, toolsSchema, effectiveChatControls, effectiveSelectedAgent, nluFrame);
+      const allowedToolNames = new Set((toolsSchema || []).map((tool: any) => tool?.function?.name).filter(Boolean));
+      availableSkills = availableSkills.filter((skill) => allowedToolNames.has(`skill_${skill.name}`));
+      this.logger.log(`[TOOL_TRACE] Converted to OpenAI format, passing ${toolsSchema?.length || 0} filtered tools to agent`);
     }
 
     const toolGuidance = this.buildToolGuidance(toolsSchema);
-    const skillGuidance = this.buildSkillGuidance(availableSkills, selectedAgent);
+    const skillGuidance = this.buildSkillGuidance(availableSkills, effectiveSelectedAgent);
 
     let editPrompt: string | null = null;
     if (request.editRequest) {
@@ -886,19 +1250,20 @@ Context after: "${request.editRequest.contextAfter.slice(0, 200)}..."
 Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit_suggestion> tags. Do not include original text, conversational filler, or markdown fences outside the tags.`;
     }
 
-    const activeAgentSkillsText = this.buildActiveAgentSkillsText(selectedAgent, availableSkills);
+    const activeAgentSkillsText = this.buildActiveAgentSkillsText(effectiveSelectedAgent, availableSkills);
     const composedPrompt = this.promptCatalog.composeChatPrompt({
       systemContext,
       workspaceFiles,
       toolGuidance,
       skillGuidance,
-      selectedAgent,
+      selectedAgent: effectiveSelectedAgent,
       activeAgentSkillsText,
       latestUserContent,
       reviewEnabled: !!request.output_reviewer_id,
       editPrompt,
       assistantStateText,
       assistantLane,
+      nluFrame,
     });
 
     systemMessages.push({
@@ -1016,6 +1381,11 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       }
     }
 
+    // Apply budgeting before either direct actions or agent calls so persisted
+    // metadata describes the same prompt context the model would receive.
+    allMessages = this.budgetContext(allMessages);
+    contextBudget = this.estimateContextChars(allMessages, composedPrompt.prompt, toolsSchema);
+
     if (await this.handleDirectActionIfApplicable(request, res, latestUserContent, {
       assistantLane,
       promptPackId: composedPrompt.provenance.promptPackId,
@@ -1024,13 +1394,18 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       workflowPromptIds: composedPrompt.provenance.workflowPromptIds,
       memoryEvents: preTurnSignals.memoryEvents,
       advisoryEvents: preTurnSignals.advisoryEvents,
-    })) {
-      await this.gatewayRoutingService.markRunFinished(resolvedBinding.binding.id, gatewayRunId, 'completed');
-      return;
-    }
-
-    // 3. Apply budgeting heuristic for the PROMPT only
-    allMessages = this.budgetContext(allMessages);
+      nluFrame,
+      contextBudget,
+      })) {
+        await this.gatewayControlPlane.markRunTerminal(
+          gatewayRunId,
+          'completed',
+          'Foreground chat completed via direct action.',
+          null,
+        );
+        await this.gatewayRoutingService.markRunFinished(resolvedBinding.binding.id, gatewayRunId, 'completed');
+        return;
+      }
 
     // Finalize attachments for the prompt (inline them)
     request.messages = allMessages.map(m => {
@@ -1076,7 +1451,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       tools: toolsSchema,
       promptTemplates: composedPrompt.templates,
       promptProvenance: composedPrompt.provenance,
-      gateway_context: this.buildGatewayContextPayload(request, selectedAgent, toolsSchema, resolvedBinding.routing),
+      gateway_context: this.buildGatewayContextPayload(request, effectiveSelectedAgent, toolsSchema, resolvedBinding.routing),
     };
     
     this.logger.log(`[AGENT_REQ] Forwarding prompt to agent at ${agentUrl}/execute (${allMessages.length} msgs, session=${request.session_id})`);
@@ -1116,13 +1491,19 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       
       const isConnectionError = err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT' || err.status >= 500;
       const errorType = isConnectionError ? 'agent_unavailable' : 'agent_error';
-      await this.gatewayRoutingService.markRunFinished(
-        resolvedBinding.binding.id,
-        gatewayRunId,
-        'failed',
-        err?.message || 'Agent unavailable',
-      );
-      if (isConnectionError) {
+        await this.gatewayRoutingService.markRunFinished(
+          resolvedBinding.binding.id,
+          gatewayRunId,
+          'failed',
+          err?.message || 'Agent unavailable',
+        );
+        await this.gatewayControlPlane.markRunTerminal(
+          gatewayRunId,
+          'failed',
+          'Foreground chat failed before agent stream was established.',
+          err?.message || 'Agent unavailable',
+        );
+        if (isConnectionError) {
         await this.gatewayRoutingService.emitHealthDegraded('Agent connection failed during chat orchestration', {
           code: err.code || null,
           message: err.message || String(err),
@@ -1161,6 +1542,9 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
+    if (nluFrame && !res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ type: 'metadata', metadata: { nlu: nluFrame } })}\n\n`);
+    }
 
     return new Promise<void>((resolve) => {
       // Stream inactivity timeout: if the agent goes silent for this long,
@@ -1217,12 +1601,22 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           }
 
           // Finalize provenance if we have it
-          if (provenanceTrace && !processedProvenance) {
-            processedProvenance = ProvenanceSanitizer.processTrace(provenanceTrace);
-          }
-          const confidenceState = this.deriveAssistantConfidenceState(
-            persistContent,
-            payload?.type === 'error' ? String(payload?.error || 'error') : null,
+            if (provenanceTrace && !processedProvenance) {
+              processedProvenance = ProvenanceSanitizer.processTrace(provenanceTrace);
+            }
+            if (provenanceTrace) {
+              await this.gatewayControlPlane.captureRoleTraceFromProvenance({
+                sessionId: request.session_id,
+                runId: gatewayRunId,
+                provenanceTrace,
+                bindingId: resolvedBinding.binding.id,
+                agentId: request.agent_id || selectedAgent?.id || null,
+                source: 'foreground',
+              });
+            }
+            const confidenceState = this.deriveAssistantConfidenceState(
+              persistContent,
+              payload?.type === 'error' ? String(payload?.error || 'error') : null,
             reviewEvents,
           );
           const derivedAdvisories = await this.assistantService.buildTurnAdvisories(
@@ -1272,6 +1666,8 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
                 runIds: processedProvenance?.runIds || undefined,
                 assistantLane,
                 confidenceState,
+                nlu: nluFrame || undefined,
+                contextBudget,
               },
               ...(payload?.type === 'error' ? { error: { type: payload.error as string, message: payload.message as string } } : {})
             }
@@ -1296,15 +1692,21 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
               expectedImprovement: 'Improve grounded output quality without mutating active production prompts.',
             });
           }
-          await this.gatewayRoutingService.markRunFinished(
-            resolvedBinding.binding.id,
-            gatewayRunId,
-            payload?.type === 'error' ? 'failed' : 'completed',
-            payload?.type === 'error' ? String(payload?.message || payload?.error || 'Unknown agent error') : null,
-          );
-        } catch (dbErr) {
-          this.logger.error('Failed to persist assistant response:', dbErr);
-        }
+            await this.gatewayRoutingService.markRunFinished(
+              resolvedBinding.binding.id,
+              gatewayRunId,
+              payload?.type === 'error' ? 'failed' : 'completed',
+              payload?.type === 'error' ? String(payload?.message || payload?.error || 'Unknown agent error') : null,
+            );
+            await this.gatewayControlPlane.markRunTerminal(
+              gatewayRunId,
+              payload?.type === 'error' ? 'failed' : 'completed',
+              persistContent.slice(0, 240) || null,
+              payload?.type === 'error' ? String(payload?.message || payload?.error || 'Unknown agent error') : null,
+            );
+          } catch (dbErr) {
+            this.logger.error('Failed to persist assistant response:', dbErr);
+          }
 
         if (payload && !res.writableEnded) {
           res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -1319,12 +1721,13 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
         if (streamClosed || res.writableEnded) {
           return;
         }
-        try {
-          res.write(`data: ${JSON.stringify({ type: 'heartbeat', ts: Date.now() })}\n\n`);
-          void this.gatewayRoutingService.heartbeat(resolvedBinding.binding.id, gatewayRunId);
-        } catch (e) {
-          this.logger.warn(`Failed to write heartbeat: ${e instanceof Error ? e.message : String(e)}`);
-        }
+          try {
+            res.write(`data: ${JSON.stringify({ type: 'heartbeat', ts: Date.now() })}\n\n`);
+            void this.gatewayRoutingService.heartbeat(resolvedBinding.binding.id, gatewayRunId);
+            void this.gatewayControlPlane.markRunHeartbeat(gatewayRunId);
+          } catch (e) {
+            this.logger.warn(`Failed to write heartbeat: ${e instanceof Error ? e.message : String(e)}`);
+          }
       }, STREAM_HEARTBEAT_MS);
 
       const processLine = async (line: string) => {
@@ -1370,12 +1773,38 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
             // Process once and store
             provenanceTrace = rawTrace;
             processedProvenance = ProvenanceSanitizer.processTrace(rawTrace);
+            await this.gatewayControlPlane.captureRoleTraceFromProvenance({
+              sessionId: request.session_id,
+              runId: gatewayRunId,
+              provenanceTrace: rawTrace,
+              bindingId: resolvedBinding.binding.id,
+              agentId: request.agent_id || selectedAgent?.id || null,
+              source: 'foreground',
+            });
+            await this.gatewayControlPlane.updateRun(gatewayRunId, {
+              metadata: {
+                provenanceCapturedAt: new Date().toISOString(),
+                latestRunIds: processedProvenance?.runIds || [],
+              },
+            });
             // Replace with sanitized version for client
             data.provenanceTrace = processedProvenance;
             delete (data as any).provenance_trace;
             delete (data as any).provenance;
           } else if (data.type === 'metadata') {
+            if (nluFrame || contextBudget) {
+              data.metadata = {
+                ...(data.metadata || {}),
+                ...(nluFrame ? { nlu: nluFrame } : {}),
+                contextBudget,
+              };
+            }
             lastMetadata = data.metadata;
+            await this.gatewayControlPlane.updateRun(gatewayRunId, {
+              metadata: {
+                latestAgentMetadata: data.metadata || null,
+              },
+            });
           } else if (data.type === 'sources') {
             if (Array.isArray(data.sources)) {
               sources.push(...data.sources);
@@ -1514,7 +1943,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     sessionId: string, 
     messageId: string, 
     res: Response,
-    options: { model?: string; complexity?: string; agentId?: string; temperature?: number; top_p?: number } = {}
+    options: { model?: string; complexity?: string; agentId?: string; temperature?: number; top_p?: number; nluOverride?: ChatRequest['nluOverride'] } = {}
   ): Promise<void> {
     // 1. Truncate history starting from this assistant message (include target)
     await this.chatService.deleteMessagesAfter(sessionId, messageId, true);
@@ -1537,10 +1966,27 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       complexity: options.complexity as any,
       agent_id: options.agentId,
       temperature: options.temperature,
-      top_p: options.top_p
+      top_p: options.top_p,
+      nluOverride: options.nluOverride || null,
     };
 
     return this.processAndStreamChat(request, res, { skipPromptPersistence: true });
+  }
+
+  private estimateContextChars(messages: ChatMessage[], composedSystemPrompt: string, toolsSchema?: any[], otherChars = 0): ChatContextBudget {
+    const systemPromptChars = composedSystemPrompt.length;
+    const messageHistoryChars = (messages || [])
+      .filter((message) => message.role !== 'system')
+      .reduce((total, message) => total + (message.content?.length || 0), 0);
+    const toolDefinitionChars = (toolsSchema || []).reduce((total, tool) => total + JSON.stringify(tool).length, 0);
+    const totalEstimatedChars = systemPromptChars + messageHistoryChars + toolDefinitionChars + otherChars;
+    return {
+      systemPromptChars,
+      messageHistoryChars,
+      toolDefinitionChars,
+      otherChars,
+      totalEstimatedChars,
+    };
   }
 
   private budgetContext(messages: ChatMessage[]): ChatMessage[] {
@@ -1733,7 +2179,7 @@ When you need a tool, output ONLY a tool call like:
 
   private buildGatewayContextPayload(
     request: ChatRequest,
-    selectedAgent: { id: string; name?: string | null; modelId?: string | null; skills?: string[] } | null,
+    selectedAgent: { id?: string; name?: string | null; modelId?: string | null; skills?: string[] } | null,
     toolsSchema?: any[],
     routingBinding?: GatewayRoutingContext,
   ): ChatRequest['gateway_context'] {

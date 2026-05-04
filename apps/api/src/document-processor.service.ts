@@ -30,6 +30,8 @@ export class DocumentProcessorService {
     text: string;
     method: string;
     error?: string;
+    warnings?: string[];
+    status?: string;
   }> {
     try {
       if (mimeType === 'application/pdf') {
@@ -48,6 +50,10 @@ export class DocumentProcessorService {
           method: 'extraction_failed',
           error: 'Scanned PDF detected. This document appears to be an image saved as a PDF. Local OCR for scanned PDFs is not yet enabled — please provide a text-based PDF or an image (JPG/PNG).',
         };
+      }
+
+      if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        return await this.extractFromDocx(buffer);
       }
 
       // Image types only from here
@@ -106,6 +112,37 @@ export class DocumentProcessorService {
       return found ? found.id : null;
     } catch (e) {
       return null;
+    }
+  }
+
+  private async extractFromDocx(buffer: Buffer): Promise<{ text: string; method: string; error?: string; warnings?: string[]; status?: string }> {
+    if (buffer.byteLength > 10 * 1024 * 1024) {
+      return { text: '', method: 'local_docx_text', status: 'too_large', error: 'DOCX file exceeds the v1 extraction size limit.' };
+    }
+    try {
+      const mammoth = await import('mammoth');
+      const result = await mammoth.extractRawText({ buffer });
+      const warnings = (result.messages || []).map((message: any) => String(message.message || message)).filter(Boolean);
+      const text = (result.value || '').trim();
+      if (!text) {
+        return {
+          text: '',
+          method: 'local_docx_text',
+          status: warnings.length ? 'partial_extraction' : 'blocked_corrupt_file',
+          error: warnings[0] || 'DOCX did not contain extractable text.',
+          warnings,
+        };
+      }
+      return { text, method: 'local_docx_text', status: warnings.length ? 'partial_extraction' : 'ready', warnings };
+    } catch (error: any) {
+      const message = String(error?.message || error || '');
+      const locked = /password|encrypted|protected/i.test(message);
+      return {
+        text: '',
+        method: 'local_docx_text',
+        status: locked ? 'blocked_needs_unlocked_file' : 'blocked_corrupt_file',
+        error: locked ? 'DOCX appears to be password-protected. Upload an unlocked file.' : message || 'DOCX extraction failed.',
+      };
     }
   }
 

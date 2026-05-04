@@ -16,6 +16,7 @@ interface Props {
   temperature: number;
   top_p: number;
   onParamsChange: (temperature: number, top_p: number) => void;
+  variant?: 'default' | 'app-builder';
 }
 
 export default function ModelSelector({ 
@@ -23,7 +24,8 @@ export default function ModelSelector({
   onModelChange,
   temperature,
   top_p,
-  onParamsChange
+  onParamsChange,
+  variant = 'default',
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -112,8 +114,14 @@ export default function ModelSelector({
     return { title: selectedModel.split('/').pop() || selectedModel, subtitle: 'selected model' };
   }, [sections, selectedModel]);
 
+  const isAppBuilder = variant === 'app-builder';
+
   return (
-    <div ref={containerRef} style={{ position: 'relative', minWidth: '220px' }}>
+    <div
+      ref={containerRef}
+      className={isAppBuilder ? 'app-builder-model-selector' : undefined}
+      style={{ position: 'relative', minWidth: '220px' }}
+    >
       <button
         onClick={toggleOpen}
         style={{
@@ -122,14 +130,15 @@ export default function ModelSelector({
           justifyContent: 'space-between',
           alignItems: 'center',
           gap: '0.8rem',
-          padding: '0.65rem 0.9rem',
-          borderRadius: '12px',
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid var(--border-glass)',
+          padding: isAppBuilder ? '0.55rem 0.85rem' : '0.65rem 0.9rem',
+          borderRadius: isAppBuilder ? '8px' : '12px',
+          background: isAppBuilder ? 'var(--bg-surface)' : 'rgba(255,255,255,0.05)',
+          border: `1px solid ${isAppBuilder ? 'var(--border)' : 'var(--border-glass)'}`,
           color: 'var(--text-primary)',
           cursor: 'pointer',
           textAlign: 'left',
           transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: isAppBuilder ? '0 1px 2px rgba(0,0,0,0.04)' : undefined,
         }}
         className="model-selector-trigger"
       >
@@ -160,11 +169,13 @@ export default function ModelSelector({
             top: 'calc(100% + 0.5rem)',
             right: 0,
             width: '320px',
-            background: 'rgba(12, 12, 20, 0.95)',
-            backdropFilter: 'blur(16px)',
-            borderRadius: '16px',
-            border: '1px solid var(--border-glass)',
-            boxShadow: '0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)',
+            background: isAppBuilder ? 'var(--bg-surface)' : 'rgba(12, 12, 20, 0.95)',
+            backdropFilter: isAppBuilder ? 'none' : 'blur(16px)',
+            borderRadius: isAppBuilder ? '12px' : '16px',
+            border: `1px solid ${isAppBuilder ? 'var(--border)' : 'var(--border-glass)'}`,
+            boxShadow: isAppBuilder
+              ? '0 12px 24px rgba(17, 24, 39, 0.12), 0 4px 8px rgba(17, 24, 39, 0.06)'
+              : '0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)',
             zIndex: 100,
             transformOrigin: 'top right',
             animation: 'selectorFadeIn 0.2s ease-out',
@@ -173,7 +184,7 @@ export default function ModelSelector({
           <div style={{ maxHeight: '440px', overflowY: 'auto' }} className="custom-scrollbar">
             {sections.map((section, sectionIndex) => (
               <div key={section.label} style={{ 
-                borderBottom: sectionIndex < sections.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                borderBottom: sectionIndex < sections.length - 1 ? `1px solid ${isAppBuilder ? 'var(--border)' : 'rgba(255,255,255,0.05)'}` : 'none',
                 paddingBottom: '0.5rem',
                 paddingTop: '0.5rem'
               }}>
@@ -216,14 +227,14 @@ export default function ModelSelector({
                             gap: '0.75rem',
                             padding: '0.7rem 1rem',
                             border: 'none',
-                            background: isActive ? 'rgba(0, 240, 255, 0.08)' : 'transparent',
-                            color: isActive ? 'var(--neon-cyan)' : 'var(--text-primary)',
+                            background: isActive ? (isAppBuilder ? 'var(--accent-light)' : 'rgba(0, 240, 255, 0.08)') : 'transparent',
+                            color: isActive ? (isAppBuilder ? 'var(--accent-primary)' : 'var(--neon-cyan)') : 'var(--text-primary)',
                             textAlign: 'left',
                             cursor: 'pointer',
                             transition: 'all 0.15s ease',
                           }}
                           onMouseEnter={(e) => {
-                            if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                            if (!isActive) e.currentTarget.style.background = isAppBuilder ? 'var(--bg-elevated)' : 'rgba(255,255,255,0.04)';
                           }}
                           onMouseLeave={(e) => {
                             if (!isActive) e.currentTarget.style.background = 'transparent';
@@ -232,12 +243,14 @@ export default function ModelSelector({
                           <div style={{ 
                             width: '32px', 
                             height: '32px', 
-                            borderRadius: '8px', 
+                            borderRadius: '8px',
                             display: 'grid', 
                             placeItems: 'center',
-                            background: isActive ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255,255,255,0.05)',
+                            background: isActive
+                              ? (isAppBuilder ? 'var(--accent-light)' : 'rgba(0, 240, 255, 0.15)')
+                              : (isAppBuilder ? 'var(--bg-elevated)' : 'rgba(255,255,255,0.05)'),
                             fontSize: '1rem',
-                            color: isActive ? 'var(--neon-cyan)' : 'inherit'
+                            color: isActive ? (isAppBuilder ? 'var(--accent-primary)' : 'var(--neon-cyan)') : 'inherit',
                           }}>
                             {isOllama ? <FiHome size={16} /> : isAnthropic ? <FiGlobe size={16} /> : <FiCpu size={16} />}
                           </div>
@@ -245,11 +258,11 @@ export default function ModelSelector({
                             <div style={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {item.title}
                             </div>
-                            <div style={{ fontSize: '0.65rem', color: isActive ? 'var(--neon-cyan)' : 'var(--text-muted)', textTransform: 'capitalize', opacity: 0.8 }}>
+                            <div style={{ fontSize: '0.65rem', color: isActive ? (isAppBuilder ? 'var(--accent-primary)' : 'var(--neon-cyan)') : 'var(--text-muted)', textTransform: 'capitalize', opacity: 0.8 }}>
                               {item.subtitle}
                             </div>
                           </div>
-                          {isActive && <div style={{ color: 'var(--neon-cyan)', display: 'flex', alignItems: 'center' }}><FiCheck size={16} /></div>}
+                          {isActive && <div style={{ color: isAppBuilder ? 'var(--accent-primary)' : 'var(--neon-cyan)', display: 'flex', alignItems: 'center' }}><FiCheck size={16} /></div>}
                         </button>
                       );
                     })}

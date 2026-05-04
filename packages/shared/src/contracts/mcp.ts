@@ -7,13 +7,18 @@ export interface MCPServerTool {
   input_schema?: Record<string, unknown>;
 }
 
+export interface MCPEnvPresence {
+  name: string;
+  isSet: boolean;
+}
+
 export interface MCPServerRecord {
   id: string;
   name: string;
   type: MCPTransportType;
   command: string;
   args: string[];
-  env: Record<string, string>;
+  env: MCPEnvPresence[];
   status: MCPServerRuntimeStatus;
   lastError?: string | null;
   tools: MCPServerTool[];

@@ -1,0 +1,22 @@
+# A Clean Web Calculator Tasks
+
+- [x] Review and approve the planner output
+  - Planner output approved and handed off to the builder lane.
+- [x] Scaffold project docs and workspace metadata
+  - Create the docs folder, brief, plan, task list, and memory shell.
+- [>] Implement addition
+  - Generated from planner feature list for A Clean Web Calculator.
+- [ ] Implement subtraction
+  - Generated from planner feature list for A Clean Web Calculator.
+- [ ] Implement multiplication
+  - Generated from planner feature list for A Clean Web Calculator.
+- [ ] Implement division
+  - Generated from planner feature list for A Clean Web Calculator.
+- [ ] Implement decimals
+  - Generated from planner feature list for A Clean Web Calculator.
+- [ ] Implement percent
+  - Generated from planner feature list for A Clean Web Calculator.
+- [ ] Run validation and heal failing files
+  - Typecheck, build, and recover from failed generated files.
+- [ ] Start preview, deploy, and register control surfaces
+  - Launch preview, check health, then register the app in RawClaw.

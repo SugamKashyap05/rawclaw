@@ -84,7 +84,7 @@ export class MCPService {
         type: this.dockerMcpTransport,
         command: this.dockerMcpCommand || 'Docker MCP not configured',
         args: this.dockerMcpArgs,
-        env: this.dockerMcpEnv,
+        env: this.toEnvPresence(this.dockerMcpEnv),
         status: server.connected ? 'running' : 'stopped',
         lastError: null,
         tools: this.normalizeTools(server.tools ?? []),
@@ -101,7 +101,7 @@ export class MCPService {
         type: config.type as MCPServerRecord['type'],
         command: config.command,
         args: this.parseArgs(config.args),
-        env: this.parseEnv(config.env),
+        env: this.parseEnvPresence(config.env),
         status: live?.connected ? 'running' : (config.status as MCPServerRecord['status']),
         lastError: config.lastError,
         tools: this.normalizeTools(live?.tools ?? []),
@@ -128,7 +128,7 @@ export class MCPService {
       type: created.type as MCPServerRecord['type'],
       command: created.command,
       args: this.parseArgs(created.args),
-      env: this.parseEnv(created.env),
+      env: this.parseEnvPresence(created.env),
       status: created.status as MCPServerRecord['status'],
       lastError: created.lastError,
       tools: [],
@@ -366,6 +366,16 @@ export class MCPService {
     } catch {
       return {};
     }
+  }
+
+  private parseEnvPresence(raw: string | null) {
+    return this.toEnvPresence(this.parseEnv(raw));
+  }
+
+  private toEnvPresence(env: Record<string, string>) {
+    return Object.keys(env || {})
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ name, isSet: Boolean(env[name]) }));
   }
 
   private normalizeTools(tools: Array<Record<string, unknown>>): MCPServerTool[] {

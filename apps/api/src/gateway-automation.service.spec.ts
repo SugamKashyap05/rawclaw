@@ -4,6 +4,7 @@ describe('GatewayAutomationService', () => {
   let prisma: any;
   let routingService: any;
   let gatewayEvents: any;
+  let controlPlane: any;
   let gatewayExecutionService: any;
   let agentsService: any;
   let chatService: any;
@@ -40,6 +41,19 @@ describe('GatewayAutomationService', () => {
       publish: jest.fn().mockResolvedValue(undefined),
     };
 
+    controlPlane = {
+      ensureQueueGroups: jest.fn().mockResolvedValue(undefined),
+      markRunQueued: jest.fn().mockResolvedValue(undefined),
+      enqueueAutomationJob: jest.fn().mockResolvedValue(undefined),
+      appendShortTermMemory: jest.fn().mockResolvedValue(undefined),
+      markRunStarted: jest.fn().mockResolvedValue(undefined),
+      markRunHeartbeat: jest.fn().mockResolvedValue(undefined),
+      markRunTerminal: jest.fn().mockResolvedValue(undefined),
+      captureRoleTraceFromProvenance: jest.fn().mockResolvedValue(undefined),
+      claimAutomationJobs: jest.fn().mockResolvedValue([]),
+      acknowledgeAutomationJob: jest.fn().mockResolvedValue(undefined),
+    };
+
     gatewayExecutionService = {
       fetchToolSchemas: jest.fn().mockResolvedValue([]),
       executeChatRun: jest.fn(),
@@ -63,6 +77,7 @@ describe('GatewayAutomationService', () => {
       prisma,
       routingService,
       gatewayEvents,
+      controlPlane,
       gatewayExecutionService,
       agentsService,
       chatService,

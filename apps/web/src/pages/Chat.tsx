@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AdvisoryEvent, AgentProfile, ChatControlState, ChatStreamChunk, MemoryEvent, PermissionMode, PreferredWebMode, ReviewEvent, SettingsPayload, ToolInfo, ToolResult, ToolUseMode, WorkflowState, SystemStatusSnapshot } from '@rawclaw/shared';
+import { AdvisoryEvent, AgentProfile, ChatControlState, ChatNluIntent, ChatStreamChunk, MemoryEvent, PermissionMode, PreferredWebMode, ReviewEvent, SettingsPayload, ToolInfo, ToolResult, ToolUseMode, WorkflowState, SystemStatusSnapshot } from '@rawclaw/shared';
 import { api } from '../lib/api';
 import { AUTH_TOKEN_KEY } from '../lib/auth';
 import { ChatSidebar } from '../components/ChatSidebar';
@@ -27,17 +27,9 @@ import { FileBrowserPanel } from '../components/chat/FileBrowserPanel';
 import { ChatAttachment, DocumentSelection, DocumentEditRequest, DocumentEditAction } from '@rawclaw/shared';
 import { DocumentCanvas } from '../components/chat/DocumentCanvas';
 import { ErrorCard } from '../components/chat/ErrorCard';
+import { processFileForAttachment } from '../lib/chat-attachments';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
-/** Max file content size to inline into prompt (2MB). Larger files are stored but truncated in prompt. */
-const MAX_ATTACHMENT_PROMPT_CHARS = 2 * 1024 * 1024;
-
-/** Max raw file size allowed for upload to platform (20MB) */
-const MAX_RAW_FILE_BYTES = 20 * 1024 * 1024;
-
-/** Number of bytes to sniff for binary detection */
-const BIN_SNIFF_LIMIT = 2048;
 
 class ChatErrorBoundary extends React.Component<
   { children: React.ReactNode; onReset?: () => void },
@@ -149,6 +141,16 @@ const DEFAULT_CHAT_CONTROLS: ChatControlState = {
   selectedPlugins: [],
   selectedTools: [],
 };
+
+const NLU_CORRECTION_OPTIONS: Array<{ label: string; intent: ChatNluIntent }> = [
+  { label: 'Chat', intent: 'conversation' },
+  { label: 'Research', intent: 'research' },
+  { label: 'Memory', intent: 'memory_query' },
+  { label: 'Task', intent: 'task_create' },
+  { label: 'Advisory', intent: 'advisory' },
+  { label: 'Code/Troubleshoot', intent: 'troubleshooting' },
+  { label: 'Edit', intent: 'edit_request' },
+];
 
 function normalizeAssistantDisplayText(content?: string): string {
   if (!content) return '';
@@ -305,75 +307,6 @@ function normalizeErrorType(errorCode?: string): NonNullable<SessionMessage['err
   }
 }
 
-/** Safely process a file for attachment. Handles binary detection and size limits. */
-async function processFileForAttachment(file: File): Promise<{ attachment?: ChatAttachment; error?: string }> {
-  // 1. Hard check on raw file size
-  if (file.size > MAX_RAW_FILE_BYTES) {
-    return { error: `"${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max allowed is 20MB.` };
-  }
-
-  const isDoc = file.type === 'application/pdf' || file.type.startsWith('image/');
-  
-  if (isDoc) {
-    // 2. Read binary file as Base64 for ingestion
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const base64 = (e.target?.result as string).split(',')[1];
-        resolve({
-          attachment: {
-            filename: file.name,
-            size: file.size,
-            type: file.type,
-            content: base64, // Sent as b64 to API
-          }
-        });
-      };
-      reader.onerror = () => resolve({ error: `Failed to read "${file.name}"` });
-      reader.readAsDataURL(file);
-    });
-  }
-
-  // 3. Binary detection via null-byte sniffing for text files
-  try {
-    const chunk = file.slice(0, BIN_SNIFF_LIMIT);
-    const buffer = await chunk.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.length; i++) {
-       if (bytes[i] === 0) {
-         return { error: `"${file.name}" appears to be a binary file. RawClaw currently only supports text, PDF, and image attachments.` };
-       }
-    }
-  } catch (e) {
-    return { error: `Could not read "${file.name}" for analysis.` };
-  }
-
-  // 4. Read content as text
-  try {
-    const text = await file.text();
-    let content = text;
-    let isTruncated = false;
-    
-    // We store the full content up to 20MB in the state (sent to API), 
-    // but we mark it if it exceeds the prompt limit for later brain-side budgeting.
-    if (content.length > MAX_ATTACHMENT_PROMPT_CHARS) {
-      isTruncated = true;
-    }
-
-    return {
-      attachment: {
-        filename: file.name,
-        size: file.size,
-        type: file.type,
-        content,
-        isTruncated,
-      }
-    };
-  } catch (e) {
-    return { error: `Failed to read text from "${file.name}". It may be encoded incorrectly.` };
-  }
-}
-
 function normalizeChatControls(controls?: Partial<ChatControlState> | null): ChatControlState {
   return {
     planMode: Boolean(controls?.planMode),
@@ -424,12 +357,14 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [showComposerMenu, setShowComposerMenu] = useState(false);
   const [toolInventory, setToolInventory] = useState<ToolInfo[]>([]);
   const [availablePluginBundles, setAvailablePluginBundles] = useState<string[]>([]);
   const [workspaceDefaults, setWorkspaceDefaults] = useState<ChatControlState>(DEFAULT_CHAT_CONTROLS);
   const [chatControls, setChatControls] = useState<ChatControlState>(DEFAULT_CHAT_CONTROLS);
   const [controlMessage, setControlMessage] = useState<string | null>(null);
+  const [pendingNluOverride, setPendingNluOverride] = useState<{ intent: ChatNluIntent } | null>(null);
   const [showWorkspace, setShowWorkspace] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
@@ -761,14 +696,15 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
               const trace = data.provenanceTrace || (data as any).provenance_trace || (data as any).provenance || data;
               patchAssistant({ provenanceTrace: trace });
             } else if (data.type === 'metadata' && data.metadata) {
-              patchAssistant({ 
-                modelId: data.metadata.modelId,
-                isLocal: data.metadata.isLocal,
-                memoryRecall: data.metadata.memoryRecall,
-                durationMs: data.metadata.durationMs,
-                runIds: data.metadata.runIds,
-                isDeepResearch: (data.metadata as any).isDeepResearch,
-              });
+              const metadataPatch: Partial<SessionMessage> = {};
+              if (data.metadata.modelId !== undefined) metadataPatch.modelId = data.metadata.modelId;
+              if (data.metadata.isLocal !== undefined) metadataPatch.isLocal = data.metadata.isLocal;
+              if (data.metadata.memoryRecall !== undefined) metadataPatch.memoryRecall = data.metadata.memoryRecall;
+              if (data.metadata.durationMs !== undefined) metadataPatch.durationMs = data.metadata.durationMs;
+              if (data.metadata.runIds !== undefined) metadataPatch.runIds = data.metadata.runIds;
+              if ((data.metadata as any).isDeepResearch !== undefined) metadataPatch.isDeepResearch = (data.metadata as any).isDeepResearch;
+              if ((data.metadata as any).nlu) metadataPatch.workflowState = { nlu: (data.metadata as any).nlu };
+              patchAssistant(metadataPatch);
             } else if (data.type === 'review_result') {
               setMessages((current) => {
                 const next = [...current];
@@ -854,6 +790,8 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
 
     const currentAttachments = [...attachments];
     if (!explicitEditRequest) setAttachments([]);
+    const nluOverrideForRequest = pendingNluOverride;
+    setPendingNluOverride(null);
 
     setMessages((current) => [
       ...current,
@@ -883,6 +821,7 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
           permissionMode: chatControls.permissionMode,
           selectedPlugins: chatControls.selectedPlugins,
           selectedTools: chatControls.selectedTools,
+          nluOverride: nluOverrideForRequest || undefined,
         };
         
         // Only send complexity when explicitly in complexity mode
@@ -1017,8 +956,15 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
     }
   };
 
-  const handleRegenerate = async (messageId: string) => {
+  const handleRegenerate = async (messageId: string, nluOverride?: { intent: ChatNluIntent }) => {
     if (sending) return;
+    if (nluOverride) {
+      const index = messages.findIndex((m) => m.id === messageId);
+      const messagesAfter = index >= 0 ? messages.slice(index + 1).filter((m) => m.role === 'user' || m.role === 'assistant').length : 0;
+      if (messagesAfter > 0 && !window.confirm(`Retrying will remove ${messagesAfter} messages after this point. Continue?`)) {
+        return;
+      }
+    }
     setSending(true);
 
     const abortController = new AbortController();
@@ -1043,6 +989,7 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
         temperature,
         top_p,
         agentId: selectedAgentId || undefined,
+        nluOverride,
       };
       
       // Only send complexity when explicitly in complexity mode
@@ -1350,6 +1297,30 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
                 onEdit={handleEdit}
                 onRegenerate={handleRegenerate}
                 onViewDocument={setActiveDocumentId}
+                onCorrectIntent={(intent, messageId) => {
+                  if (messageId) {
+                    void handleRegenerate(messageId, { intent });
+                    return;
+                  }
+                  setPendingNluOverride({ intent });
+                  setControlMessage(`Next request will use intent:${intent}.`);
+                }}
+                onUseSecondaryIntent={(intent, originalContent) => {
+                  if (input.trim() && !window.confirm('Replace your current draft with the original message?')) {
+                    composerRef.current?.focus();
+                    return;
+                  }
+                  setInput(originalContent || '');
+                  setPendingNluOverride({ intent });
+                  if (activeSelection) setActiveSelection(null);
+                  setControlMessage(`Composer prepared with intent:${intent}.`);
+                  setTimeout(() => composerRef.current?.focus(), 0);
+                }}
+                onTryClarificationAgain={(content) => {
+                  setInput(content || '');
+                  setPendingNluOverride(null);
+                  setActiveSelection(null);
+                }}
                 previousUserQuery={index > 0 && messages[index-1].role === 'user' ? messages[index-1].content : ''}
               />
             ))
@@ -1366,6 +1337,11 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
           {agentsError ? (
             <div style={{ marginBottom: '0.45rem', color: 'var(--error)', fontSize: '0.78rem' }}>
               {agentsError}
+            </div>
+          ) : null}
+          {pendingNluOverride ? (
+            <div style={{ marginBottom: '0.45rem', color: 'var(--neon-cyan)', fontSize: '0.78rem' }}>
+              Next turn intent override: <strong>{pendingNluOverride.intent}</strong>
             </div>
           ) : null}
           
@@ -1659,6 +1635,7 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
             ) : null}
             <div style={{ flex: 1, position: 'relative' }}>
               <textarea
+                ref={composerRef}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 rows={1}
@@ -1879,12 +1856,18 @@ function MessageCard({
   onEdit, 
   onRegenerate,
   onViewDocument,
+  onCorrectIntent,
+  onUseSecondaryIntent,
+  onTryClarificationAgain,
   previousUserQuery
 }: { 
   message: SessionMessage; 
   onEdit: (id: string, content: string) => void;
   onRegenerate: (id: string) => void;
   onViewDocument: (id: string) => void;
+  onCorrectIntent: (intent: ChatNluIntent, messageId?: string) => void;
+  onUseSecondaryIntent: (intent: ChatNluIntent, originalContent: string) => void;
+  onTryClarificationAgain: (content: string) => void;
   previousUserQuery?: string;
 }) {
   const isUser = message.role === 'user';
@@ -1894,6 +1877,9 @@ function MessageCard({
   const [editContent, setEditContent] = useState(message.content);
   const [expanded, setExpanded] = useState(false);
   const isLongResponse = !isUser && ((message.content?.length || 0) > 1400 || (message.content?.split('\n').length || 0) > 18);
+  const secondaryIntents = [...(message.workflowState?.nlu?.secondaryIntents || [])]
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 3);
 
   const handleCopy = async () => {
     try {
@@ -1927,7 +1913,7 @@ function MessageCard({
             <span style={{ opacity: 0.5, fontWeight: 400 }}>{formatTime(message.createdAt)}</span>
           </div>
           
-          {!isUser && (message.modelId || message.memoryRecall || message.workflowState?.assistantLane || message.workflowState?.confidenceState) && (
+          {!isUser && (message.modelId || message.memoryRecall || message.workflowState?.assistantLane || message.workflowState?.confidenceState || message.workflowState?.nlu) && (
             <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', flexWrap: 'wrap' }}>
               {message.memoryRecall && (
                 <span style={{ 
@@ -1946,6 +1932,47 @@ function MessageCard({
                   <FiDatabase size={10} />
                   RECALLED
                 </span>
+              )}
+              {message.workflowState?.nlu && (
+                <span className="mono" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  fontSize: '0.65rem',
+                  color: message.workflowState.nlu.clarificationFailed ? '#fca5a5' : 'var(--neon-cyan)',
+                  background: message.workflowState.nlu.clarificationFailed ? 'rgba(248,113,113,0.08)' : 'rgba(0,240,255,0.08)',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  border: message.workflowState.nlu.clarificationFailed ? '1px solid rgba(248,113,113,0.25)' : '1px solid rgba(0,240,255,0.2)',
+                }}>
+                  intent:{message.workflowState.nlu.intent === 'code_help' ? 'code' : message.workflowState.nlu.intent}
+                </span>
+              )}
+              {message.workflowState?.nlu && (
+                <select
+                  aria-label="Correct intent"
+                  value=""
+                  onChange={(event) => {
+                  const value = event.target.value as ChatNluIntent;
+                  if (value) {
+                      onCorrectIntent(value, message.id);
+                      event.currentTarget.value = '';
+                    }
+                  }}
+                  style={{
+                    fontSize: '0.65rem',
+                    color: 'var(--text-secondary)',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: 10,
+                    padding: '2px 6px',
+                  }}
+                >
+                  <option value="">Correct</option>
+                  {NLU_CORRECTION_OPTIONS.map((option) => (
+                    <option key={option.intent} value={option.intent}>{option.label}</option>
+                  ))}
+                </select>
               )}
               {message.workflowState?.assistantLane && (
                 <span className="mono" style={{
@@ -1977,6 +2004,46 @@ function MessageCard({
                   confidence:{message.workflowState.confidenceState}
                 </span>
               )}
+              {message.workflowState?.nlu ? (
+                <span className="mono" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  fontSize: '0.65rem',
+                  color: 'var(--text-secondary)',
+                  background: 'rgba(255,255,255,0.05)',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-glass)',
+                }}>
+                  nlu:{message.workflowState.nlu.confidenceState}/{message.workflowState.nlu.confidence.toFixed(2)}
+                </span>
+              ) : null}
+              {message.workflowState?.nlu?.entities?.length ? (
+                <span className="mono" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.3rem',
+                  fontSize: '0.65rem',
+                  color: 'var(--text-secondary)',
+                  background: 'rgba(255,255,255,0.05)',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-glass)',
+                }}>
+                  entities:{message.workflowState.nlu.entities.length}
+                </span>
+              ) : null}
+              {message.workflowState?.nlu?.clarificationFailed ? (
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => onTryClarificationAgain(previousUserQuery || '')}
+                  style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: 10 }}
+                >
+                  Try again
+                </button>
+              ) : null}
               {message.modelId && (
                 <span className="mono" style={{ 
                   display: 'flex',
@@ -2001,6 +2068,23 @@ function MessageCard({
             </div>
           )}
         </div>
+
+        {!isUser && secondaryIntents.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', marginBottom: '0.65rem' }}>
+            {secondaryIntents.map((item) => (
+              <button
+                key={`${item.intent}-${item.confidence}`}
+                type="button"
+                className="btn-ghost"
+                onClick={() => onUseSecondaryIntent(item.intent, previousUserQuery || '')}
+                style={{ fontSize: '0.68rem', padding: '0.28rem 0.55rem', borderRadius: 10 }}
+                title="Prepare the original message with this intent"
+              >
+                Try as {item.intent === 'code_help' ? 'code' : item.intent} ({item.confidence.toFixed(2)})
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {editing ? (
           <div style={{ display: 'grid', gap: '0.5rem' }}>

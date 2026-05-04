@@ -1,10 +1,11 @@
-import { AgentExecutionStatus, AgentProfile } from './agent';
+import { AgentExecutionStatus } from './agent';
+import { AppBuilderRunStatus } from './app-builder';
 import { MemoryEvent, WorkflowState } from './chat';
-import { AutomationKind, AutomationRunStatus, ChildRunStatus, GatewayEventType, SessionBinding, SessionBindingStatus } from './gateway';
+import { AutomationRunStatus, ChildRunStatus, GatewayEventType, GatewayExecutionMode, GatewayGuardianOutcome, GatewayQueueMetadata, SessionBinding, SessionBindingStatus, WorkerQueueType } from './gateway';
 
-export type OperatorRunKind = 'route' | 'child' | 'automation' | 'task';
+export type OperatorRunKind = 'route' | 'child' | 'automation' | 'task' | 'app_builder';
 export type OperatorTimelineKind = 'gateway_event' | 'tool_activity' | 'memory_event' | 'provenance' | 'review' | 'subagent';
-export type OperatorRunStatus = SessionBindingStatus | ChildRunStatus | AutomationRunStatus | 'queued' | 'done' | 'cancelled';
+export type OperatorRunStatus = SessionBindingStatus | ChildRunStatus | AutomationRunStatus | AppBuilderRunStatus | 'queued' | 'done' | 'cancelled';
 
 export interface OperatorSnapshotSummary {
   activeAgents: number;
@@ -79,11 +80,14 @@ export interface OperatorRunSummary {
   id: string;
   kind: OperatorRunKind;
   status: OperatorRunStatus;
+  executionMode?: GatewayExecutionMode | null;
   title: string;
   summary?: string | null;
   sessionId?: string | null;
   bindingId?: string | null;
   agentId?: string | null;
+  workerId?: string | null;
+  queueType?: WorkerQueueType | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   heartbeatAt?: string | null;
@@ -91,6 +95,8 @@ export interface OperatorRunSummary {
   parentSessionId?: string | null;
   routeId?: string | null;
   latestError?: string | null;
+  guardianOutcome?: GatewayGuardianOutcome | null;
+  queueMetadata?: GatewayQueueMetadata | null;
   provenance?: OperatorProvenanceSummary | null;
 }
 

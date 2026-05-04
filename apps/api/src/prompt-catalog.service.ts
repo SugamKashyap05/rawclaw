@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, resolve } from 'path';
-import { AssistantLane } from '@rawclaw/shared';
+import { AssistantLane, ChatNluFrame } from '@rawclaw/shared';
 
 type PromptBlockScope = 'core' | 'workflow' | 'review' | 'repair';
 
@@ -35,6 +35,25 @@ export interface PromptProvenance {
   assistantLane?: AssistantLane;
 }
 
+export const PromptSectionId = {
+  SYSTEM_BASE: 'SYSTEM_BASE',
+  ACTIVE_LANE: 'ACTIVE_LANE',
+  NLU_ROUTING_CONTEXT: 'NLU_ROUTING_CONTEXT',
+  TOOL_GUIDANCE: 'TOOL_GUIDANCE',
+  WEB_RESEARCH_WORKFLOW: 'WEB_RESEARCH_WORKFLOW',
+  MEMORY_CONTEXT: 'MEMORY_CONTEXT',
+  AGENT_IDENTITY: 'AGENT_IDENTITY',
+  SELECTED_TEXT_CONTEXT: 'SELECTED_TEXT_CONTEXT',
+} as const;
+
+export type PromptSectionId = (typeof PromptSectionId)[keyof typeof PromptSectionId];
+
+export interface PromptSection {
+  sectionId: PromptSectionId;
+  label: string;
+  content: string;
+}
+
 interface ComposePromptOptions {
   systemContext: string;
   workspaceFiles: { soul?: string; user?: string; memory?: string; tools?: string };
@@ -53,6 +72,7 @@ interface ComposePromptOptions {
   editPrompt?: string | null;
   assistantStateText?: string | null;
   assistantLane?: AssistantLane | null;
+  nluFrame?: ChatNluFrame | null;
 }
 
 @Injectable()
@@ -144,7 +164,11 @@ export class PromptCatalogService {
     return this.getBlock(id).body;
   }
 
-  private shouldAttachWebWorkflow(text: string): boolean {
+  private shouldAttachWebWorkflow(text: string, nluFrame?: ChatNluFrame | null): boolean {
+    if (nluFrame && nluFrame.confidence >= 0.55) {
+      return nluFrame.intent === 'research' || nluFrame.routingFallbackReason === 'research_followup';
+    }
+
     const lower = (text || '').toLowerCase();
     return [
       'search the web',
@@ -189,9 +213,15 @@ export class PromptCatalogService {
     return 'conversation';
   }
 
-  resolveWorkflowIds(latestUserContent: string, reviewEnabled: boolean, promptPackId?: string | null, assistantLane?: AssistantLane | null): string[] {
+  resolveWorkflowIds(
+    latestUserContent: string,
+    reviewEnabled: boolean,
+    promptPackId?: string | null,
+    assistantLane?: AssistantLane | null,
+    nluFrame?: ChatNluFrame | null,
+  ): string[] {
     const workflowIds: string[] = [];
-    if (this.shouldAttachWebWorkflow(latestUserContent)) {
+    if (this.shouldAttachWebWorkflow(latestUserContent, nluFrame)) {
       workflowIds.push('web-research-grounded');
     }
     const isJarvisPack = (promptPackId || '').toLowerCase().includes('jarvis');
@@ -213,22 +243,93 @@ export class PromptCatalogService {
     return Array.from(new Set(workflowIds));
   }
 
-  private buildWorkspaceSection(workspaceFiles: ComposePromptOptions['workspaceFiles']): string[] {
-    const sections: string[] = [];
+  private sanitizeNluValue(value: string): string {
+    return String(value || '')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 100);
+  }
+
+  private buildNluRoutingContext(nluFrame?: ChatNluFrame | null): string | null {
+    if (!nluFrame) {
+      return null;
+    }
+
+    const cleanConversation =
+      nluFrame.intent === 'conversation' &&
+      nluFrame.confidence >= 0.75 &&
+      !nluFrame.secondaryIntents?.length &&
+      !nluFrame.entities?.length &&
+      !nluFrame.routingFallbackReason &&
+      !nluFrame.clarificationFailed &&
+      !nluFrame.clarificationQuestion;
+    if (cleanConversation) {
+      return null;
+    }
+
+    const lines = [
+      `Intent: ${nluFrame.intent}`,
+      `Lane: ${nluFrame.recommendedLane}`,
+      `Confidence: ${nluFrame.confidenceState} (${nluFrame.confidence.toFixed(2)})`,
+      `Source: ${nluFrame.source}`,
+    ];
+    if (nluFrame.routingFallbackReason) {
+      lines.push(`Fallback reason: ${nluFrame.routingFallbackReason}`);
+    }
+    if (nluFrame.clarificationFailed) {
+      lines.push('Clarification: failed; continue conversationally and let the user try again.');
+    } else if (nluFrame.clarificationQuestion) {
+      lines.push(`Clarification question: ${this.sanitizeNluValue(nluFrame.clarificationQuestion)}`);
+    }
+    if (nluFrame.secondaryIntents?.length) {
+      lines.push(`Secondary intents: ${nluFrame.secondaryIntents.map((item) => `${item.intent} (${item.confidence.toFixed(2)})`).join(', ')}`);
+    }
+    const entities = (nluFrame.entities || [])
+      .slice(0, 5)
+      .map((entity) => `${entity.type}=${this.sanitizeNluValue(entity.value)}`)
+      .filter(Boolean);
+    if (entities.length) {
+      lines.push(`Important entities: ${entities.join('; ')}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  private buildWorkspaceSection(workspaceFiles: ComposePromptOptions['workspaceFiles']): PromptSection[] {
+    const sections: PromptSection[] = [];
     if (workspaceFiles.user || workspaceFiles.soul) {
-      sections.push(
-        '## Identity',
+      sections.push(this.makeSection(
+        PromptSectionId.AGENT_IDENTITY,
+        'Identity',
         workspaceFiles.user ? `User Context:\n${workspaceFiles.user}` : '',
         workspaceFiles.soul ? `Soul / Guidelines:\n${workspaceFiles.soul}` : '',
-      );
+      ));
     }
     if (workspaceFiles.memory) {
-      sections.push('## Persistent Memory', workspaceFiles.memory);
+      sections.push(this.makeSection(PromptSectionId.MEMORY_CONTEXT, 'Persistent Memory', workspaceFiles.memory));
     }
     if (workspaceFiles.tools) {
-      sections.push('## Tool Guidelines', workspaceFiles.tools);
+      sections.push(this.makeSection(PromptSectionId.TOOL_GUIDANCE, 'Tool Guidelines', workspaceFiles.tools));
     }
-    return sections.filter(Boolean);
+    return sections.filter((section) => section.content.length > 0);
+  }
+
+  private makeSection(sectionId: PromptSectionId, label: string, ...parts: Array<string | null | undefined>): PromptSection {
+    return {
+      sectionId,
+      label,
+      content: parts.map((part) => part?.trim()).filter(Boolean).join('\n\n'),
+    };
+  }
+
+  private renderPromptSections(sections: PromptSection[]): string {
+    return sections
+      .filter((section) => section.content.trim())
+      .map((section) => `## ${section.label}\n${section.content.trim()}`)
+      .join('\n\n')
+      .trim();
   }
 
   buildEffectiveAgentPrompt(agent: { promptPackId?: string | null; promptOverlay?: string | null; systemPrompt?: string | null; name?: string }): { effectiveSystemPrompt: string; promptPackId: string | null } {
@@ -249,49 +350,53 @@ export class PromptCatalogService {
     };
   }
 
-  composeChatPrompt(options: ComposePromptOptions): { prompt: string; templates: { reviewer?: string; repair?: string }; provenance: PromptProvenance } {
+  composeChatPrompt(options: ComposePromptOptions): { prompt: string; sections: PromptSection[]; templates: { reviewer?: string; repair?: string }; provenance: PromptProvenance } {
     const pack = this.getPack(options.selectedAgent?.promptPackId || 'rawclaw-default');
     const assistantLane = options.assistantLane || this.resolveAssistantLane(options.latestUserContent || '');
-    const workflowIds = this.resolveWorkflowIds(options.latestUserContent || '', !!options.reviewEnabled, pack.id, assistantLane);
+    const workflowIds = this.resolveWorkflowIds(options.latestUserContent || '', !!options.reviewEnabled, pack.id, assistantLane, options.nluFrame);
     const coreBlocks = pack.coreBlockIds.map((id) => this.getBlock(id));
     const workflowBlocks = workflowIds
       .filter((id) => ['output-reviewer', 'repair-rewriter'].includes(id) === false)
       .map((id) => this.getBlock(id));
 
-    const sections: string[] = [];
-    sections.push('## RawClaw System Context', options.systemContext.trim());
+    const sections: PromptSection[] = [];
+    sections.push(this.makeSection(PromptSectionId.SYSTEM_BASE, 'RawClaw System Context', options.systemContext));
     sections.push(...this.buildWorkspaceSection(options.workspaceFiles));
     if (options.assistantStateText?.trim()) {
-      sections.push('## Assistant State', options.assistantStateText.trim());
+      sections.push(this.makeSection(PromptSectionId.MEMORY_CONTEXT, 'Assistant State', options.assistantStateText));
     }
-    sections.push('## Prompt Pack', ...coreBlocks.map((block) => block.body.trim()));
+    sections.push(this.makeSection(PromptSectionId.SYSTEM_BASE, 'Prompt Pack', ...coreBlocks.map((block) => block.body)));
     if (workflowBlocks.length) {
-      sections.push('## Active Workflow Guidance', ...workflowBlocks.map((block) => block.body.trim()));
+      sections.push(this.makeSection(PromptSectionId.WEB_RESEARCH_WORKFLOW, 'Active Workflow Guidance', ...workflowBlocks.map((block) => block.body)));
     }
-    sections.push(`## Active Assistant Lane\nYou are currently operating in the '${assistantLane}' lane.`);
+    sections.push(this.makeSection(PromptSectionId.ACTIVE_LANE, 'Active Assistant Lane', `You are currently operating in the '${assistantLane}' lane.`));
+    const nluRoutingContext = this.buildNluRoutingContext(options.nluFrame);
+    if (nluRoutingContext) {
+      sections.push(this.makeSection(PromptSectionId.NLU_ROUTING_CONTEXT, 'NLU Routing Context', nluRoutingContext));
+    }
     if (options.selectedAgent?.name) {
-      sections.push(`## Active Agent\nYou are now operating as the ${options.selectedAgent.name} agent.`);
+      sections.push(this.makeSection(PromptSectionId.AGENT_IDENTITY, 'Active Agent', `You are now operating as the ${options.selectedAgent.name} agent.`));
     }
     if (options.selectedAgent?.promptOverlay?.trim()) {
-      sections.push('## Agent Overlay', options.selectedAgent.promptOverlay.trim());
+      sections.push(this.makeSection(PromptSectionId.AGENT_IDENTITY, 'Agent Overlay', options.selectedAgent.promptOverlay));
     }
     if (options.selectedAgent?.systemPrompt?.trim()) {
-      sections.push('## Legacy Agent Prompt', options.selectedAgent.systemPrompt.trim());
+      sections.push(this.makeSection(PromptSectionId.AGENT_IDENTITY, 'Legacy Agent Prompt', options.selectedAgent.systemPrompt));
     }
     if (options.activeAgentSkillsText?.trim()) {
-      sections.push('## Active Agent Skills', options.activeAgentSkillsText.trim());
+      sections.push(this.makeSection(PromptSectionId.TOOL_GUIDANCE, 'Active Agent Skills', options.activeAgentSkillsText));
     }
     if (options.toolGuidance?.trim()) {
-      sections.push('## Tool Guidance', options.toolGuidance.trim());
+      sections.push(this.makeSection(PromptSectionId.TOOL_GUIDANCE, 'Tool Guidance', options.toolGuidance));
     }
     if (options.skillGuidance?.trim()) {
-      sections.push('## Skill Guidance', options.skillGuidance.trim());
+      sections.push(this.makeSection(PromptSectionId.TOOL_GUIDANCE, 'Skill Guidance', options.skillGuidance));
     }
     if (options.editPrompt?.trim()) {
-      sections.push('## Edit Request', options.editPrompt.trim());
+      sections.push(this.makeSection(PromptSectionId.SELECTED_TEXT_CONTEXT, 'Edit Request', options.editPrompt));
     }
 
-    const prompt = sections.filter(Boolean).join('\n\n').trim();
+    const prompt = this.renderPromptSections(sections);
     const reviewBlockId = pack.reviewBlockId || 'output-reviewer';
     const repairBlockId = pack.repairBlockId || 'repair-rewriter';
     const reviewerTemplate = this.getReviewTemplate(reviewBlockId);
@@ -306,10 +411,12 @@ export class PromptCatalogService {
       skillGuidance: options.skillGuidance || '',
       activeAgentSkillsText: options.activeAgentSkillsText || '',
       editPrompt: options.editPrompt || '',
+      nlu: nluRoutingContext || '',
     });
 
     return {
       prompt,
+      sections,
       templates: {
         reviewer: reviewerTemplate,
         repair: repairTemplate,

@@ -12,6 +12,31 @@ RawClaw is being rebuilt as a secure, local-first AI agent platform with:
 - memory and RAG
 - sandboxed execution
 
+## Runtime overview
+
+The current stack now runs with a Phase 3 control-plane-backed runtime:
+
+- `apps/api` owns durable runs, queue state, worker state, graph lineage, and reflection proposals
+- `apps/agent` remains the foreground truth engine for grounded chat, fetch, extract, and loyalty-checked answers
+- `apps/swarm-worker` executes queued scout, analyst, automation, and sandbox work
+- Redis is the live runtime backbone
+- Chroma remains the semantic memory layer
+- the desktop and web surfaces expose Gateway, Operator, Tasks, and Learning views over the same runtime
+
+## Startup defaults
+
+Local development now assumes these runtime defaults:
+
+- `RAWCLAW_PHASE3_ENABLED=true`
+- `SANDBOX_WORKER_POOL_ENABLED=true`
+- `RAWCLAW_API_URL=http://localhost:3000`
+- `RAWCLAW_AGENT_URL=http://localhost:8001`
+- `RAWCLAW_REDIS_URL=redis://localhost:6379`
+- `RAWCLAW_CHROMA_URL=http://localhost:8010`
+- `RAWCLAW_ALLOW_DEGRADED_STARTUP=false`
+
+`scripts/dev-start.mjs` now preflights Redis and Chroma before starting Turbo. If either dependency is unavailable and degraded startup is disabled, dev boot fails fast with a clear dependency message instead of starting a half-alive stack.
+
 ## Current state
 
 The original codebase was lost, so this repository is now the rebuild starting point. The first priority is to restore structure, safety, and documentation before implementation begins again.

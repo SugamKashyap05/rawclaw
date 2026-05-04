@@ -15,8 +15,10 @@ import httpx
 from charset_normalizer import from_bytes
 
 from src.contracts.tool import ToolResult
+from src.research.adaptive_store import AdaptiveResearchStore
 from src.tools.base_tool import BaseTool
 from src.tools.registry import TOOL_REGISTRY
+from src.tools.builtin.browser_capability import check_browser_page_read_capability
 
 logger = logging.getLogger("rawclaw.tools.web_fetch")
 
@@ -466,6 +468,7 @@ class WebFetchTool(BaseTool):
         self._inflight: Dict[str, asyncio.Future[ToolResult]] = {}
         self._robots_cache: Dict[str, Tuple[float, str]] = {}
         self._cache_lock = asyncio.Lock()
+        self._adaptive_store = AdaptiveResearchStore()
 
     def _cache_key(self, url: str, max_bytes: int, allow_browser_fallback: bool) -> str:
         raw = f"{url}|{max_bytes}|{int(bool(allow_browser_fallback))}"
@@ -589,6 +592,9 @@ class WebFetchTool(BaseTool):
             diagnosis["playwright"] = {"ok": False, "error": str(exc), "errorType": type(exc).__name__}
 
         return diagnosis
+
+    def adaptive_diagnostics(self, url: str) -> Dict[str, Any]:
+        return self._adaptive_store.diagnostics(url)
 
     def _clone_result_with_cache(self, result: ToolResult, *, cache_hit: bool, cache_age_ms: Optional[int]) -> ToolResult:
         clone = result.model_copy(deep=True)
@@ -981,6 +987,7 @@ class WebFetchTool(BaseTool):
                     js_fallback_detected=bool(outcome.get("jsFallbackDetected")),
                     js_fallback_reason=outcome.get("jsFallbackReason"),
                 )
+                self._adaptive_store.record_fetch_success(outcome["url"], attempt["name"])
                 return ToolResult(
                     tool_name=self.name,
                     input=input,
@@ -1005,7 +1012,29 @@ class WebFetchTool(BaseTool):
                     }
                 )
 
+        mcp_browser_page_read_available = False
         if allow_browser_fallback and resolved.is_public:
+            try:
+                mcp_browser_page_read_available = await check_browser_page_read_capability()
+            except Exception as exc:
+                logger.warning("Browser page-read capability check failed before local fallback: %s", exc)
+
+        if allow_browser_fallback and resolved.is_public and mcp_browser_page_read_available:
+            attempts.append(
+                {
+                    "attempt": "browser_public_fallback",
+                    "strategy": "browser_public_fallback",
+                    "status": "skipped",
+                    "elapsed_ms": 0,
+                    "transportStrategy": "browser_public_fallback",
+                    "fetchFailureKind": "mcp_browser_page_read_available",
+                    "networkError": "Skipped local Playwright fallback because MCP browser page-read is available",
+                }
+            )
+
+        # Local Chromium is a transport-failure fallback only. Rendered page-read
+        # recovery for weak extraction evidence is handled by BrowserPageReadAdapter.
+        if allow_browser_fallback and resolved.is_public and not mcp_browser_page_read_available:
             attempt_start = time.monotonic()
             try:
                 outcome = await self._browser_public_fallback(url=url, max_bytes=max_bytes)
@@ -1041,6 +1070,7 @@ class WebFetchTool(BaseTool):
                     js_fallback_detected=bool(outcome.get("jsFallbackDetected")),
                     js_fallback_reason=outcome.get("jsFallbackReason"),
                 )
+                self._adaptive_store.record_fetch_success(outcome["url"], "browser_public_fallback")
                 return ToolResult(
                     tool_name=self.name,
                     input=input,
@@ -1087,6 +1117,17 @@ class WebFetchTool(BaseTool):
                 )
             else:
                 diagnostics = _transport_diagnostics(last_error)
+            self._adaptive_store.record_failure(
+                url=url,
+                stage="fetch",
+                failure_kind=str(diagnostics.get("fetchFailureKind") or "execution_failure"),
+                transport_strategy=str(
+                    "browser_public_fallback"
+                    if browser_failed and not isinstance(last_error, BrowserFallbackUnavailableError)
+                    else attempts[-1].get("transportStrategy", "none") if attempts else "none"
+                ),
+                details=str(diagnostics.get("networkError") or ""),
+            )
             return _error_result(
                 tool_name=self.name,
                 input=input,

@@ -14,6 +14,11 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "types": ["vitest/globals", "@testing-library/jest-dom"],
+    "baseUrl": ".",
+    "paths": {
+      "@rawclaw/shared": ["../../packages/shared/src/index.ts"],
+      "@rawclaw/shared/*": ["../../packages/shared/src/*"]
+    },
 
     /* Linting */
     "strict": true,

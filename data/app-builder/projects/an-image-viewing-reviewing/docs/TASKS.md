@@ -1,0 +1,22 @@
+# An Image Viewing Reviewing Tasks
+
+- [x] Review and approve the planner output
+  - Planner output approved and handed off to the builder lane.
+- [x] Scaffold project docs and workspace metadata
+  - Create the docs folder, brief, plan, task list, and memory shell.
+- [>] Implement history
+  - Generated from planner feature list for An Image Viewing Reviewing.
+- [ ] Implement image gallery
+  - Generated from planner feature list for An Image Viewing Reviewing.
+- [ ] Implement single image viewer
+  - Generated from planner feature list for An Image Viewing Reviewing.
+- [ ] Implement metadata details panel
+  - Generated from planner feature list for An Image Viewing Reviewing.
+- [ ] Implement review history panel
+  - Generated from planner feature list for An Image Viewing Reviewing.
+- [ ] Implement zoom and fit controls
+  - Generated from planner feature list for An Image Viewing Reviewing.
+- [ ] Run validation and heal failing files
+  - Typecheck, build, and recover from failed generated files.
+- [ ] Start preview, deploy, and register control surfaces
+  - Launch preview, check health, then register the app in RawClaw.

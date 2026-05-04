@@ -16,6 +16,7 @@ import Sandbox from './pages/Sandbox';
 import Settings from './pages/Settings';
 import Tools from './pages/Tools';
 import Learning from './pages/Learning';
+import AppBuilder from './pages/AppBuilder';
 import ModelSelector from './components/ModelSelector';
 import { Sidebar } from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
@@ -62,6 +63,7 @@ function App() {
     if (location.pathname.startsWith('/memory')) return 'Memory';
     if (location.pathname.startsWith('/models')) return 'Models';
     if (location.pathname.startsWith('/learning')) return 'Learning';
+    if (location.pathname.startsWith('/app-builder')) return 'App Builder';
     if (location.pathname.startsWith('/integrations')) return 'Integrations';
     if (location.pathname.startsWith('/sandbox')) return 'Sandbox';
     if (location.pathname.startsWith('/settings')) return 'Settings';
@@ -70,6 +72,13 @@ function App() {
     if (location.pathname.startsWith('/operator')) return 'Unified Operator Surface';
     if (location.pathname.startsWith('/provenance')) return 'Operator Control Room';
     return 'Command Center';
+  }, [location.pathname]);
+
+  const pageSubtitle = useMemo(() => {
+    if (location.pathname.startsWith('/app-builder')) {
+      return 'Describe the app, refine the workspace, and control the runtime from one builder surface.';
+    }
+    return 'Use RawClaw as a calm command console for memory, research, tasks, tools, and guided execution.';
   }, [location.pathname]);
 
   if (authLoading) {
@@ -161,12 +170,23 @@ function App() {
   }
 
   const isChatPage = location.pathname.startsWith('/chat');
+  const isAppBuilderPage = location.pathname.startsWith('/app-builder');
+  const isFixedViewportPage = isChatPage || isAppBuilderPage;
 
   return (
-    <div className={isChatPage ? 'chat-page-shell' : ''} style={{ display: 'flex', minHeight: '100vh' }}>
+    <div
+      className={isChatPage ? 'chat-page-shell' : ''}
+      style={{
+        display: 'flex',
+        minHeight: '100vh',
+        height: isFixedViewportPage ? '100vh' : undefined,
+        maxHeight: isFixedViewportPage ? '100vh' : undefined,
+        overflow: isFixedViewportPage ? 'hidden' : undefined,
+      }}
+    >
       <Sidebar counts={systemStatus.counts} />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: isChatPage ? 'hidden' : 'auto' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, overflow: isFixedViewportPage ? 'hidden' : 'auto' }}>
         <header
           style={{
             display: 'flex',
@@ -174,7 +194,7 @@ function App() {
             alignItems: 'center',
             gap: '1rem',
             padding: '0.55rem 1rem',
-            borderBottom: '1px solid var(--border-glass)',
+            borderBottom: '1px solid var(--border)',
             background: 'rgba(8, 8, 14, 0.88)',
             backdropFilter: 'blur(14px)',
             position: 'relative',
@@ -184,9 +204,11 @@ function App() {
           }}
         >
           <div>
-            <div style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '0.05rem' }}>{pageTitle}</div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 500, marginBottom: '0.05rem' }}>
+              {pageTitle}
+            </div>
             <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem', lineHeight: 1.25 }}>
-              Use RawClaw as a calm command console for memory, research, tasks, tools, and guided execution.
+              {pageSubtitle}
             </div>
           </div>
 
@@ -201,13 +223,20 @@ function App() {
                 setTopP(p);
               }}
             />
-            <NavLink to="/chat" className="btn-primary" style={{ textDecoration: 'none', padding: '0.55rem 0.9rem' }}>
+            <NavLink
+              to="/chat"
+              className="btn-primary"
+              style={{
+                textDecoration: 'none',
+                padding: '0.55rem 0.9rem',
+              }}
+            >
               New Chat
             </NavLink>
           </div>
         </header>
 
-        <main style={{ flex: 1, overflow: isChatPage ? 'hidden' : 'auto', padding: '0.9rem', display: 'flex', flexDirection: 'column' }}>
+        <main style={{ flex: 1, minHeight: 0, overflow: isFixedViewportPage ? 'hidden' : 'auto', padding: '0.9rem', display: 'flex', flexDirection: 'column' }}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route
@@ -221,6 +250,7 @@ function App() {
             <Route path="/memory" element={<Memory />} />
             <Route path="/models" element={<Models />} />
             <Route path="/learning" element={<Learning />} />
+            <Route path="/app-builder/*" element={<AppBuilder />} />
             <Route path="/integrations" element={<Integrations />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/gateway" element={<Gateway />} />

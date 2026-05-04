@@ -80,11 +80,13 @@ describe('OperatorService', () => {
   let agentsService: any;
   let chatService: any;
   let gatewayRoutingService: any;
+  let gatewayControlPlaneService: any;
   let gatewayEventsService: any;
   let gatewayAutomationService: any;
   let gatewaySubagentService: any;
   let tasksService: any;
   let prisma: any;
+  let appBuilderService: any;
   let service: OperatorService;
 
   beforeEach(() => {
@@ -170,6 +172,30 @@ describe('OperatorService', () => {
       }),
     };
 
+    gatewayControlPlaneService = {
+      listRecentRuns: jest.fn().mockResolvedValue([
+        {
+          id: 'route-run-1',
+          kind: 'foreground_chat',
+          status: 'running',
+          executionMode: 'foreground',
+          workerId: 'worker-main',
+          queueType: null,
+          guardianOutcome: {
+            status: 'approved',
+            reviewer: 'guardian',
+            reason: 'grounded answer',
+          },
+          queueMetadata: {
+            executionMode: 'foreground',
+            queuedRoles: [],
+            workerAssignments: ['worker-main'],
+            queueFallbackUsed: false,
+          },
+        },
+      ]),
+    };
+
     gatewayEventsService = {
       listRecent: jest.fn().mockResolvedValue([
         {
@@ -238,6 +264,10 @@ describe('OperatorService', () => {
       resumeRun: jest.fn(),
     };
 
+    appBuilderService = {
+      queueProjectPhase: jest.fn(),
+    };
+
     prisma = {
       childRun: {
         findMany: jest.fn().mockResolvedValue([
@@ -291,17 +321,45 @@ describe('OperatorService', () => {
         ]),
         findUnique: jest.fn().mockResolvedValue(null),
       },
+      appBuilderRun: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'builder-run-1',
+            projectId: 'project-1',
+            phase: 'generate',
+            status: 'deployment_ready',
+            title: 'Generate Support Dashboard',
+            summary: 'Builder run generated managed files.',
+            errorMessage: null,
+            gatewayRunId: 'gateway-builder-run-1',
+            workerId: 'builder-worker-1',
+            createdAt: new Date('2026-04-27T09:02:45.000Z'),
+            startedAt: new Date('2026-04-27T09:02:50.000Z'),
+            finishedAt: new Date('2026-04-27T09:03:10.000Z'),
+            updatedAt: new Date('2026-04-27T09:03:10.000Z'),
+            project: {
+              id: 'project-1',
+              name: 'Support Dashboard',
+              slug: 'support-dashboard',
+            },
+          },
+        ]),
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue(undefined),
+      },
     };
 
     service = new OperatorService(
       agentsService,
       chatService,
       gatewayRoutingService,
+      gatewayControlPlaneService,
       gatewayEventsService,
       gatewayAutomationService,
       gatewaySubagentService,
       tasksService,
       prisma,
+      appBuilderService,
     );
   });
 

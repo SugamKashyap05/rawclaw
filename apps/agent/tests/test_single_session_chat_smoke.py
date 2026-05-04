@@ -188,10 +188,12 @@ async def test_single_session_chat_smoke_covers_gateway_research_and_standings_a
             event.get("type") == "content" and "How can I help you today?" in event.get("content", "")
             for event in greeting_events
         ),
-        "research_tools_called": tool_call_names == ["web_search", "web_extract"],
+        "research_tools_called": tool_call_names == ["web_extract"],
         "planner_and_router_metadata_present": {
             "research-planner",
             "extract-router",
+            "multi-attempt-extract",
+            "confidence-risk-model",
         }.issubset(stage_metadata.keys()),
         "task_context_marked_factual_extract": (final_provenance.get("metadata") or {}).get("webTaskContext", {}).get("taskType") == "factual_extract",
         "task_classification_alias_present": (final_provenance.get("metadata") or {}).get("taskClassification", {}).get("taskType") == "factual_extract",
@@ -283,9 +285,10 @@ async def test_single_session_chat_uses_planner_target_url_when_search_provider_
     ]
 
     feature_status = {
-        "search_then_extract_happened": tool_call_names == ["web_search", "web_extract"],
+        "direct_extract_happened": tool_call_names == ["web_extract"],
         "extract_router_kept_target_url": "https://www.iplt20.com/matches/points-table"
         in (stage_metadata.get("extract-router", {}) or {}).get("candidate_urls", []),
+        "confidence_risk_stage_present": "confidence-risk-model" in stage_metadata,
         "task_context_marked_factual_extract": (final_provenance.get("metadata") or {}).get("webTaskContext", {}).get("taskType") == "factual_extract",
         "evidence_gate_stayed_live": (final_provenance.get("metadata") or {}).get("evidenceGate", {}).get("mode") in {"PROCEED_FULL", "PROCEED_CAUTIOUS"},
         "final_answer_mentions_csk_standing": "chennai super kings" in final_content.lower()
@@ -297,7 +300,7 @@ async def test_single_session_chat_uses_planner_target_url_when_search_provider_
 
 
 @pytest.mark.asyncio
-async def test_single_session_chat_typo_standings_query_escalates_to_search_then_extract():
+async def test_single_session_chat_typo_standings_query_escalates_to_direct_official_extract():
     service, _store, session_manager = _gateway_service()
     executor = Executor()
     executor.model_router.normalize_model_id = AsyncMock(return_value="ollama/qwen2.5:1.5b")
@@ -365,9 +368,79 @@ async def test_single_session_chat_typo_standings_query_escalates_to_search_then
         if event.get("type") == "tool_call"
     ]
 
-    assert tool_call_names == ["web_search", "web_extract"]
+    assert tool_call_names == ["web_extract"]
     assert "chennai super kings" in final_content.lower()
     assert any(token in final_content.lower() for token in ["6 points", "-0.121", "position 6", "6th"])
+    assert canonical_session is not None and canonical_session.run_status == "idle"
+
+
+@pytest.mark.asyncio
+async def test_single_session_chat_live_sports_query_direct_routes_to_official_extract():
+    service, _store, session_manager = _gateway_service()
+    executor = Executor()
+    executor.model_router.normalize_model_id = AsyncMock(return_value="ollama/qwen2.5:1.5b")
+    executor.model_router.has_native_thinking = MagicMock(return_value=False)
+
+    async def mock_tool_execution(session_id, tool_call, trace, knowledge_brain=None):
+        if tool_call.tool_name == "web_extract":
+            return _tool_result(
+                "web_extract",
+                output={
+                    "url": "https://www.iplt20.com/matches/points-table",
+                    "title": "IPL 2026 Points Table | Team Standings and Rankings | IPLT20",
+                    "content": "Chennai Super Kings are 6th in the IPL 2026 points table with 6 points and NRR -0.121. Recent form: W W L W L.",
+                    "structuredData": {
+                        "team": "Chennai Super Kings",
+                        "position": "6",
+                        "points": "6",
+                        "nrr": "-0.121",
+                        "ranking_movement": ["W", "W", "L", "W", "L"],
+                    },
+                    "backendUsed": "iplt20_official_feed",
+                    "taskType": "factual_extract",
+                    "sourceMode": "system_chosen",
+                    "pageType": "data_table",
+                    "quality": "extract_clean",
+                    "tier": "clean",
+                    "confidence": 1.0,
+                    "missingFields": [],
+                    "interactionRequired": False,
+                    "pageKind": "standings/table",
+                },
+                source_url="https://www.iplt20.com/matches/points-table",
+            )
+        return _tool_result(tool_call.tool_name, output={"status": "ok"})
+
+    executor._execute_tool_with_confirmation = mock_tool_execution
+
+    request = ChatRequest(
+        session_id="client-session-direct-route",
+        agent_id="researcher",
+        messages=[
+            ChatMessage(
+                role="user",
+                content="do a web search to find out about ipl 2026 csk match points with how many wins and losses",
+            )
+        ],
+        gateway_context=_routing_context(),
+    )
+    events = await _collect_events(service, executor, request)
+
+    canonical_session = session_manager.get_optional("canonical-chat-session")
+    final_content = "\n".join(event.get("content", "") for event in events if event.get("type") == "content")
+    provenance_events = [event for event in events if event.get("type") == "provenance"]
+    final_provenance = provenance_events[-1]["provenance_trace"] if provenance_events else {}
+    tool_call_names = [
+        event.get("tool_call", {}).get("name")
+        for event in events
+        if event.get("type") == "tool_call"
+    ]
+    direct_route_metadata = (final_provenance.get("metadata") or {}).get("directRoute") or {}
+
+    assert tool_call_names == ["web_extract"]
+    assert direct_route_metadata.get("url") == "https://www.iplt20.com/matches/points-table"
+    assert "chennai super kings" in final_content.lower()
+    assert "6 points" in final_content.lower()
     assert canonical_session is not None and canonical_session.run_status == "idle"
 
 

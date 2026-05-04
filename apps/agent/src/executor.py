@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import time
+import copy
 from datetime import datetime
 import re
 from urllib.parse import urlparse, unquote
@@ -23,14 +24,32 @@ from src.contracts.task import TaskExecutionRequest, TaskResult as TaskExecution
 from src.models.router import ModelRouter
 from src.tools.registry import TOOL_REGISTRY, ToolNotFoundError
 from src.tools.confirmation_gate import ConfirmationGate
+from src.tools.builtin.page_read_orchestrator import PageReadOrchestrator, classify_page_kind
+from src.tools.builtin.page_read_types import PageReadContext, summarize_failure_chain
 from src.provenance.trace import ProvenanceTrace
 from src.research import (
+    AdaptiveFetchLayer,
+    AdaptiveResearchStore,
+    AnalystResult,
+    AnswerabilityDecision,
     AnswerabilityGateStage,
+    ConfidenceRiskModelStage,
+    EvidenceAssessment,
     EvidenceJudgeStage,
     ExtractRouterStage,
     FinalWriterStage,
+    GuardianVerdict,
+    InProcessSwarmCoordinator,
     InternalResearchCoordinator,
+    MultiAttemptExtractCoordinator,
+    ParallelExecutor,
+    PreEvidenceFilterStage,
     ResearchPlannerStage,
+    ResearchContext,
+    RoleTrace,
+    ScoutResult,
+    SelfLearningLoop,
+    StrategistDecision,
 )
 from src.config import settings
 from src.gateway.types import GatewayRequestContext
@@ -39,6 +58,13 @@ logger = logging.getLogger("rawclaw.executor")
 MAX_AGENT_TURNS = 10 # Hard limit on tool-calling turns
 MAX_SEQUENTIAL_THINKING_TURNS = 3
 MAX_TOOLS_PER_REQUEST = 16
+MAX_MODEL_PAYLOAD_CHARS = 180_000
+MAX_MODEL_MESSAGE_CHARS = 90_000
+MAX_TOOL_SCHEMA_CHARS = 55_000
+MAX_SINGLE_TOOL_SCHEMA_CHARS = 14_000
+MAX_TOOL_PROMPT_DESCRIPTION_CHARS = 240
+MAX_SCHEMA_STRING_CHARS = 800
+MAX_SCHEMA_DESCRIPTION_CHARS = 320
 REVIEW_TIMEOUT_SECONDS = 20
 REVISION_TIMEOUT_SECONDS = 20
 ENTITY_ALIASES = {
@@ -51,6 +77,41 @@ ENTITY_ALIASES = {
     "openai": ["openai"],
     "api": ["api"],
 }
+LIVE_DATA_KEYWORDS = [
+    "points", "standings", "table", "score", "result",
+    "match", "win", "wins", "loss", "losses", "rank", "position", "nrr",
+    "ipl", "cricket", "football", "nba", "premier league",
+]
+AUTHORITATIVE_DOMAINS = {
+    "iplt20.com": 1.0,
+    "bcci.tv": 1.0,
+    "espncricinfo.com": 0.95,
+    "cricbuzz.com": 0.95,
+    "reuters.com": 0.9,
+    "apnews.com": 0.9,
+    "bbc.com": 0.85,
+    "bbc.co.uk": 0.85,
+}
+LOW_QUALITY_DOMAINS = {
+    "wikipedia.org": 0.2,
+    "en.m.wikipedia.org": 0.2,
+    "duckduckgo.com": 0.1,
+}
+DIRECT_ROUTES = [
+    {
+        "patterns": [
+            r"\bipl\b.*\bpoints?\b",
+            r"\bipl\b.*\bstandings?\b",
+            r"\bipl\b.*\btable\b",
+            r"\bcsk\b.*\bpoints?\b",
+            r"\biplt20\b.*\bpoints?\b",
+        ],
+        "url": "https://www.iplt20.com/matches/points-table",
+        "taskType": "factual_extract",
+        "pageKind": "standings/table",
+        "expectedFields": ["team", "position", "points", "nrr", "ranking_movement"],
+    },
+]
 
 
 class Executor:
@@ -61,15 +122,26 @@ class Executor:
     def __init__(self) -> None:
         self.model_router = ModelRouter()
         self.confirmation_gate = ConfirmationGate()
+        self._adaptive_store = AdaptiveResearchStore()
+        self._adaptive_fetch_layer = AdaptiveFetchLayer(self._adaptive_store)
+        self._parallel_executor = ParallelExecutor()
+        self._self_learning_loop = SelfLearningLoop(self._adaptive_store, self._parallel_executor)
+        self._swarm = InProcessSwarmCoordinator()
         self.research = InternalResearchCoordinator(
             planner=ResearchPlannerStage(
                 build_research_plan=self._build_research_plan,
                 build_search_query=self._build_search_query,
                 query_allows_interactive_extraction=self._query_allows_interactive_extraction,
             ),
+            pre_evidence_filter=PreEvidenceFilterStage(
+                rank_search_results=self._rank_search_results,
+            ),
             router=ExtractRouterStage(
                 rank_search_results=self._rank_search_results,
                 search_result_has_viable_results=self._search_result_has_viable_results,
+            ),
+            multi_attempt_extract=MultiAttemptExtractCoordinator(
+                adaptive_fetch_layer=self._adaptive_fetch_layer,
             ),
             judge=EvidenceJudgeStage(
                 extract_search_evidence=self._extract_search_evidence,
@@ -80,6 +152,7 @@ class Executor:
                 cluster_summary_clause=self._cluster_summary_clause,
             ),
             answerability_gate=AnswerabilityGateStage(),
+            confidence_risk_model=ConfidenceRiskModelStage(),
             final_writer=FinalWriterStage(
                 render_grounded_web_answer=self._render_grounded_web_answer,
                 build_source_lines=self._build_source_lines,
@@ -113,6 +186,148 @@ class Executor:
             "role": "system",
             "content": f"Internal research stages selected these decisions: {compact}",
         }
+
+    def get_role_trace(self, session_id: str) -> Optional[Dict[str, Any]]:
+        return self._swarm.get_trace(session_id)
+
+    def _sync_role_trace_metadata(self, trace: ProvenanceTrace, session_id: str) -> None:
+        role_trace = self.get_role_trace(session_id)
+        if role_trace:
+            trace.metadata["roleTrace"] = role_trace
+
+    def _record_strategist(
+        self,
+        session_id: str,
+        trace: ProvenanceTrace,
+        *,
+        lane: str,
+        intent: str,
+        risk_level: str,
+        freshness_matters: bool,
+        direct_route: Optional[Dict[str, Any]] = None,
+        expected_evidence_type: str = "none",
+        allowed_tool_scope: Optional[List[str]] = None,
+        search_queries: Optional[List[str]] = None,
+        reason: str = "",
+    ) -> StrategistDecision:
+        decision = self._swarm.update_strategist(
+            session_id,
+            lane=lane,
+            intent=intent,
+            riskLevel=risk_level,
+            freshnessMatters=freshness_matters,
+            directRouteMatched=bool(direct_route),
+            directRoute=dict(direct_route or {}),
+            expectedEvidenceType=expected_evidence_type,
+            allowedToolScope=list(allowed_tool_scope or []),
+            searchQueries=list(search_queries or []),
+            reason=reason,
+        )
+        self._sync_role_trace_metadata(trace, session_id)
+        return decision
+
+    def _record_scout(
+        self,
+        session_id: str,
+        trace: ProvenanceTrace,
+        *,
+        lane: str,
+        status: str,
+        direct_route_used: bool = False,
+        tool_calls: Optional[List[str]] = None,
+        search_queries: Optional[List[str]] = None,
+        selected_urls: Optional[List[str]] = None,
+        warnings: Optional[List[str]] = None,
+        evidence_summary: Optional[Dict[str, Any]] = None,
+    ) -> ScoutResult:
+        result = self._swarm.update_scout(
+            session_id,
+            lane=lane,
+            status=status,
+            directRouteUsed=direct_route_used,
+            toolCalls=list(tool_calls or []),
+            searchQueries=list(search_queries or []),
+            selectedUrls=list(selected_urls or []),
+            warnings=list(warnings or []),
+            evidenceAcquisitionSummary=dict(evidence_summary or {}),
+        )
+        self._sync_role_trace_metadata(trace, session_id)
+        return result
+
+    def _record_analyst(
+        self,
+        session_id: str,
+        trace: ProvenanceTrace,
+        *,
+        mode: str,
+        failure_state: str = "",
+        evidence_verdict: Optional[Dict[str, Any]] = None,
+        synthesis: Optional[Dict[str, Any]] = None,
+        loyalty: Optional[Dict[str, Any]] = None,
+        answer_preview: str = "",
+        summary: str = "",
+    ) -> AnalystResult:
+        result = self._swarm.update_analyst(
+            session_id,
+            mode=mode,
+            failureState=failure_state,
+            evidenceVerdict=dict(evidence_verdict or {}),
+            synthesis=dict(synthesis or {}),
+            loyalty=dict(loyalty or {}),
+            answerPreview=answer_preview[:240],
+            summary=summary,
+        )
+        self._sync_role_trace_metadata(trace, session_id)
+        return result
+
+    def _record_guardian(
+        self,
+        session_id: str,
+        trace: ProvenanceTrace,
+        *,
+        approved: bool,
+        final_mode: str,
+        reason: str,
+        feedback: str = "",
+        fail_closed: bool = False,
+        reviewer: str = "local_guardian",
+        answer_preview: str = "",
+    ) -> GuardianVerdict:
+        verdict = self._swarm.update_guardian(
+            session_id,
+            approved=approved,
+            finalMode=final_mode,
+            reason=reason,
+            feedback=feedback,
+            failClosed=fail_closed,
+            reviewer=reviewer,
+            answerPreview=answer_preview[:240],
+        )
+        self._swarm.set_final_outcome(
+            session_id,
+            approved=approved,
+            finalMode=final_mode,
+            reason=reason,
+            failClosed=fail_closed,
+        )
+        self._sync_role_trace_metadata(trace, session_id)
+        return verdict
+
+    def _default_analyst_mode_for_answer(self, answer: str) -> str:
+        lowered = (answer or "").lower()
+        if any(
+            marker in lowered
+            for marker in [
+                "could not verify",
+                "could not be fetched or extracted",
+                "requires javascript rendering",
+                "i couldn't safely finalize",
+            ]
+        ):
+            return "refused_answer"
+        if any(marker in lowered for marker in ["may be incomplete", "partial", "fallback summary", "treat this as a fallback"]):
+            return "limited_answer"
+        return "exact_answer"
 
     def _extract_quality_summary(self, fetch_result: Optional[ToolResult]) -> Dict[str, Any]:
         if not fetch_result:
@@ -620,10 +835,17 @@ class Executor:
             return "; ".join(parts)
 
         if isinstance(output, dict):
+            if output.get("isFallback"):
+                chain = [str(item) for item in (output.get("failureChain") or []) if str(item)]
+                parts.append(summarize_failure_chain(chain))
             if "title" in output and output.get("title"):
                 parts.append(f"title={str(output.get('title'))[:160]}")
             if output.get("backendUsed"):
                 parts.append(f"backend={str(output.get('backendUsed'))[:80]}")
+            if output.get("backendResult"):
+                parts.append(f"backendResult={str(output.get('backendResult'))[:40]}")
+            if output.get("evidenceStatus"):
+                parts.append(f"evidence={str(output.get('evidenceStatus'))[:40]}")
             if output.get("quality"):
                 parts.append(f"quality={str(output.get('quality'))[:80]}")
             if output.get("tier"):
@@ -665,10 +887,9 @@ class Executor:
             parts.append(f"source={tool_result.source_url[:200]}")
         return "; ".join(parts)
 
-    def _compact_messages_for_context(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _compact_messages_for_context(self, messages: List[Dict[str, Any]], max_total_chars: int = MAX_MODEL_MESSAGE_CHARS) -> List[Dict[str, Any]]:
         compacted: List[Dict[str, Any]] = []
         total_chars = 0
-        max_total_chars = 90000
 
         for idx, message in enumerate(reversed(messages)):
             if not isinstance(message, dict):
@@ -741,6 +962,108 @@ class Executor:
 
         compacted.reverse()
         return compacted
+
+    def _truncate_prompt_text(self, value: str, limit: int) -> str:
+        if len(value) <= limit:
+            return value
+        return value[:limit].rstrip() + " [...truncated for context budget]"
+
+    def _compact_schema_for_model(self, value: Any, key: str = "") -> Any:
+        if isinstance(value, dict):
+            return {k: self._compact_schema_for_model(v, k) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._compact_schema_for_model(item, key) for item in value]
+        if isinstance(value, str):
+            lowered_key = key.lower()
+            if lowered_key in {"description", "title", "summary"}:
+                return self._truncate_prompt_text(value, MAX_SCHEMA_DESCRIPTION_CHARS)
+            if len(value) > MAX_SCHEMA_STRING_CHARS:
+                return self._truncate_prompt_text(value, MAX_SCHEMA_STRING_CHARS)
+        return value
+
+    def _fit_tool_schemas_to_context(self, tools_schema: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        if not tools_schema:
+            return []
+
+        fitted: List[Dict[str, Any]] = []
+        total_chars = 0
+        for tool in tools_schema[:MAX_TOOLS_PER_REQUEST]:
+            compacted = self._compact_schema_for_model(copy.deepcopy(tool))
+            tool_chars = len(json.dumps(compacted, ensure_ascii=False))
+            if tool_chars > MAX_SINGLE_TOOL_SCHEMA_CHARS:
+                name = str((compacted.get("function", {}) if isinstance(compacted, dict) else {}).get("name") or "unknown")
+                logger.warning(
+                    "[CONTEXT_BUDGET] Dropping oversized tool schema %s (%s chars > %s).",
+                    name,
+                    tool_chars,
+                    MAX_SINGLE_TOOL_SCHEMA_CHARS,
+                )
+                continue
+            if total_chars + tool_chars > MAX_TOOL_SCHEMA_CHARS:
+                name = str((compacted.get("function", {}) if isinstance(compacted, dict) else {}).get("name") or "unknown")
+                logger.warning(
+                    "[CONTEXT_BUDGET] Dropping tool schema %s to keep tool payload under %s chars.",
+                    name,
+                    MAX_TOOL_SCHEMA_CHARS,
+                )
+                continue
+            fitted.append(compacted)
+            total_chars += tool_chars
+
+        return fitted
+
+    def _estimate_model_payload_chars(self, messages: List[Dict[str, Any]], tools_schema: Optional[List[Dict[str, Any]]] = None) -> int:
+        message_chars = sum(len(str(message.get("content") or "")) for message in messages if isinstance(message, dict))
+        tool_chars = len(json.dumps(tools_schema or [], ensure_ascii=False)) if tools_schema else 0
+        return message_chars + tool_chars
+
+    def _prepare_model_inputs(
+        self,
+        messages: List[Dict[str, Any]],
+        tools_schema: Optional[List[Dict[str, Any]]] = None,
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        fitted_tools = self._fit_tool_schemas_to_context(tools_schema)
+        tool_chars = len(json.dumps(fitted_tools, ensure_ascii=False)) if fitted_tools else 0
+        message_budget = max(20_000, min(MAX_MODEL_MESSAGE_CHARS, MAX_MODEL_PAYLOAD_CHARS - tool_chars))
+        compacted_messages = self._compact_messages_for_context(messages, max_total_chars=message_budget)
+
+        total_chars = self._estimate_model_payload_chars(compacted_messages, fitted_tools)
+        if total_chars > MAX_MODEL_PAYLOAD_CHARS:
+            overflow = total_chars - MAX_MODEL_PAYLOAD_CHARS
+            tighter_budget = max(12_000, message_budget - overflow - 4_000)
+            logger.warning(
+                "[CONTEXT_BUDGET] Model payload estimate %s chars exceeds %s; tightening message budget to %s.",
+                total_chars,
+                MAX_MODEL_PAYLOAD_CHARS,
+                tighter_budget,
+            )
+            compacted_messages = self._compact_messages_for_context(messages, max_total_chars=tighter_budget)
+            total_chars = self._estimate_model_payload_chars(compacted_messages, fitted_tools)
+
+        if total_chars > MAX_MODEL_PAYLOAD_CHARS and fitted_tools:
+            logger.warning(
+                "[CONTEXT_BUDGET] Model payload still %s chars; dropping tools for this turn to avoid provider context failure.",
+                total_chars,
+            )
+            fitted_tools = []
+            compacted_messages = self._compact_messages_for_context(messages, max_total_chars=MAX_MODEL_MESSAGE_CHARS)
+
+        return compacted_messages, fitted_tools
+
+    def _format_tool_list_for_prompt(self, tools_schema: Optional[List[Dict[str, Any]]]) -> str:
+        if not tools_schema:
+            return ""
+
+        lines: List[str] = []
+        for tool in tools_schema[:MAX_TOOLS_PER_REQUEST]:
+            func = tool.get("function", {}) if isinstance(tool, dict) else {}
+            name = str(func.get("name") or "").strip()
+            if not name:
+                continue
+            description = re.sub(r"\s+", " ", str(func.get("description") or "")).strip()
+            description = self._truncate_prompt_text(description, MAX_TOOL_PROMPT_DESCRIPTION_CHARS)
+            lines.append(f"- {name}: {description}")
+        return "\n".join(lines)
 
     def _select_relevant_tools_for_request(self, query: str, tools_schema: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not tools_schema:
@@ -850,12 +1173,24 @@ class Executor:
             trace.metadata["runStatus"] = gateway_context.session_record.run_status
             trace.metadata["routingBinding"] = gateway_context.routing_binding
 
-        messages = self._compact_messages_for_context([m.model_dump() for m in request.messages])
-        tools_schema = TOOL_REGISTRY.get_schemas()
-        
+        raw_request_messages = [m.model_dump() for m in request.messages]
+        messages = self._compact_messages_for_context(raw_request_messages)
+        latest_user_query = next(
+            (message.content for message in reversed(request.messages) if getattr(message, "role", "") == "user" and getattr(message, "content", "").strip()),
+            "",
+        )
+
+        requested_tools_schema = request.tools if request.tools else TOOL_REGISTRY.get_schemas()
+        tools_schema = self._select_relevant_tools_for_request(latest_user_query, requested_tools_schema)
+
         # Determine provider and thinking support early for tool filtering
         normalized_model = await self.model_router.normalize_model_id(request.model)
         has_native_thinking = self.model_router.has_native_thinking(normalized_model)
+        if has_native_thinking:
+            original_count = len(tools_schema)
+            tools_schema = [t for t in tools_schema if t.get("function", {}).get("name") != "sequential_thinking"]
+            if len(tools_schema) < original_count:
+                logger.info(f"[THINKING_FILTER] Removed sequential_thinking tool because model {normalized_model} has native thinking.")
 
         # User Request: Even if model has native thinking, allow sequential_thinking for 'big tasks'
         # So we no longer filter it out here.
@@ -890,10 +1225,7 @@ class Executor:
                 else:
                     yield g
 
-            latest_user_query = next(
-                (message.content for message in reversed(request.messages) if getattr(message, "role", "") == "user" and getattr(message, "content", "").strip()),
-                "",
-            )
+            self._swarm.start_trace(session_id, latest_user_query)
 
             # 1.1 Intent Discovery & Decision Level
             greeting_patterns = ["hello", "hi", "hey", "howdy", "greetings", "good morning", "good evening", "good afternoon", "sup", "yo", "what's up", "how are you", "can you hear me", "are you there", "thanks", "thank you", "bye", "goodbye"]
@@ -917,9 +1249,49 @@ class Executor:
             if is_greeting and len(latest_user_query.split()) <= 2:
                 logger.info(f"[ORCHESTRATOR] Simple greeting detected: '{query_lower}' - skipping heavy context building.")
                 trace.add_plan_step("Decision Level: Skipping heavy retrieval for simple greeting.")
+                self._record_strategist(
+                    session_id,
+                    trace,
+                    lane="direct",
+                    intent="greeting",
+                    risk_level="low",
+                    freshness_matters=False,
+                    expected_evidence_type="local_reasoning",
+                    allowed_tool_scope=[],
+                    reason="Simple greeting detected; no external evidence needed.",
+                )
+                self._record_scout(
+                    session_id,
+                    trace,
+                    lane="direct",
+                    status="skipped_local_context",
+                    evidence_summary={"reason": "greeting_short_circuit"},
+                )
+                greeting_answer = "Hello! I'm RawClaw, your advanced AI agent for coding and research. How can I help you today?"
+                self._record_analyst(
+                    session_id,
+                    trace,
+                    mode="exact_answer",
+                    failure_state="exact_answer",
+                    synthesis={"answer": greeting_answer, "answerSource": "local_context"},
+                    answer_preview=greeting_answer,
+                    summary="Direct local greeting response.",
+                )
+                final_answer, review_events, _guardian = await self._guardian_gate_answer(
+                    initial_answer=greeting_answer,
+                    request=request,
+                    trace=trace,
+                    messages=self._compact_messages_for_context([m.model_dump() for m in request.messages]),
+                    latest_user_query=latest_user_query,
+                    session_id=session_id,
+                    analyst_mode="exact_answer",
+                    analyst_reason="direct greeting response",
+                )
+                for review_event in review_events:
+                    yield json.dumps(review_event) + "\n"
                 yield json.dumps({
                     "type": "content",
-                    "content": "Hello! I'm RawClaw, your advanced AI agent for coding and research. How can I help you today?"
+                    "content": final_answer
                 }) + "\n"
                 yield json.dumps({
                     "type": "done",
@@ -929,6 +1301,24 @@ class Executor:
 
             if request.editRequest:
                 trace.add_plan_step("Direct document-edit fallback selected for deterministic edit suggestion.")
+                self._record_strategist(
+                    session_id,
+                    trace,
+                    lane="direct",
+                    intent="document_edit",
+                    risk_level="low",
+                    freshness_matters=False,
+                    expected_evidence_type="local_reasoning",
+                    allowed_tool_scope=[],
+                    reason="Edit request handled by deterministic local fallback.",
+                )
+                self._record_scout(
+                    session_id,
+                    trace,
+                    lane="direct",
+                    status="skipped_local_context",
+                    evidence_summary={"reason": "deterministic_edit_fallback"},
+                )
                 suggestion = self._fallback_edit_suggestion(
                     action=getattr(request.editRequest, "action", ""),
                     selected_text=getattr(request.editRequest, "selectedText", ""),
@@ -936,11 +1326,32 @@ class Executor:
                 )
                 if suggestion:
                     wrapped = f"<<edit_suggestion>{suggestion}</edit_suggestion>"
+                    self._record_analyst(
+                        session_id,
+                        trace,
+                        mode="exact_answer",
+                        failure_state="exact_answer",
+                        synthesis={"answer": wrapped, "answerSource": "local_context"},
+                        answer_preview=wrapped,
+                        summary="Deterministic document edit suggestion.",
+                    )
+                    final_answer, review_events, _guardian = await self._guardian_gate_answer(
+                        initial_answer=wrapped,
+                        request=request,
+                        trace=trace,
+                        messages=self._compact_messages_for_context([m.model_dump() for m in request.messages]),
+                        latest_user_query=latest_user_query,
+                        session_id=session_id,
+                        analyst_mode="exact_answer",
+                        analyst_reason="document edit suggestion",
+                    )
+                    for review_event in review_events:
+                        yield json.dumps(review_event) + "\n"
                     yield json.dumps({
                         "type": "content",
-                        "content": wrapped,
+                        "content": final_answer,
                     }) + "\n"
-                    trace.add_synthesis_step(wrapped[:200] + "...", int((time.time() - start_time) * 1000))
+                    trace.add_synthesis_step(final_answer[:200] + "...", int((time.time() - start_time) * 1000))
                     yield json.dumps({
                         "type": "provenance",
                         "provenance_trace": trace.to_dict(),
@@ -1014,12 +1425,9 @@ class Executor:
 
                 if has_task_kw:
                     # DYNAMIC TOOL DISCOVERY
-                    tool_list_str = ""
-                    for tool in tools_schema:
-                        func = tool.get("function", {})
-                        t_name = func.get("name")
-                        t_desc = func.get("description")
-                        tool_list_str += f"- {t_name}: {t_desc}\n"
+                    # Use the same capped request tools that will be sent to the model;
+                    # never rebuild this list from the full registry or prompt size can explode.
+                    tool_list_str = self._format_tool_list_for_prompt(tools_schema)
 
                     system_prompts.append(
                         "You must use tools for real-time information or specialized tasks. "
@@ -1089,11 +1497,50 @@ class Executor:
                         )
                         if direct_memory_answer:
                             trace.add_plan_step("Answered directly from trusted memory recall.")
+                            self._record_strategist(
+                                session_id,
+                                trace,
+                                lane="direct",
+                                intent="memory_lookup",
+                                risk_level="low",
+                                freshness_matters=False,
+                                expected_evidence_type="memory_context",
+                                allowed_tool_scope=[],
+                                reason="Trusted direct memory matched the request with high confidence.",
+                            )
+                            self._record_scout(
+                                session_id,
+                                trace,
+                                lane="direct",
+                                status="local_memory_context",
+                                evidence_summary={"literalMemoryHits": len(literal_hits)},
+                            )
+                            self._record_analyst(
+                                session_id,
+                                trace,
+                                mode="exact_answer",
+                                failure_state="exact_answer",
+                                synthesis={"answer": direct_memory_answer, "answerSource": "memory_context"},
+                                answer_preview=direct_memory_answer,
+                                summary="Direct memory answer from trusted local recall.",
+                            )
+                            final_answer, review_events, _guardian = await self._guardian_gate_answer(
+                                initial_answer=direct_memory_answer,
+                                request=request,
+                                trace=trace,
+                                messages=messages,
+                                latest_user_query=latest_user_query,
+                                session_id=session_id,
+                                analyst_mode="exact_answer",
+                                analyst_reason="trusted memory recall",
+                            )
+                            for review_event in review_events:
+                                yield json.dumps(review_event) + "\n"
                             yield json.dumps({
                                 "type": "content",
-                                "content": direct_memory_answer,
+                                "content": final_answer,
                             }) + "\n"
-                            trace.add_synthesis_step(direct_memory_answer[:200] + "...", int((time.time() - start_time) * 1000))
+                            trace.add_synthesis_step(final_answer[:200] + "...", int((time.time() - start_time) * 1000))
                             yield json.dumps({
                                 "type": "provenance",
                                 "provenance_trace": trace.to_dict(),
@@ -1146,26 +1593,11 @@ class Executor:
                     "complexity": "high"
                 }) + "\n"
 
-            # Use tools from request if provided, otherwise fall back to registry
-            if request.tools:
-                tools_schema = request.tools
-                tool_names = [t.get('function', {}).get('name', 'unknown') for t in tools_schema]
-                logger.info(f"[TOOL_TRACE] Using {len(tools_schema)} tools from request: {tool_names}")
-            else:
-                tools_schema = TOOL_REGISTRY.get_schemas()
-                logger.info(f"[TOOL_TRACE] Using {len(tools_schema)} tools from registry")
-
-            tools_schema = self._select_relevant_tools_for_request(latest_user_query, tools_schema)
-            logger.info(f"[TOOL_TRACE] Filtered tools for request down to {len(tools_schema)}")
-
-            # 2.3 THINKING TOOL FILTERING
-            # If the model has native thinking, we filter out 'sequential_thinking' from tools
-            # to prevent the model from getting confused between two different ways of thinking.
-            if has_native_thinking:
-                original_count = len(tools_schema)
-                tools_schema = [t for t in tools_schema if t.get("function", {}).get("name") != "sequential_thinking"]
-                if len(tools_schema) < original_count:
-                    logger.info(f"[THINKING_FILTER] Removed sequential_thinking tool because model {normalized_model} has native thinking.")
+            tool_names = [t.get('function', {}).get('name', 'unknown') for t in tools_schema]
+            logger.info(
+                f"[TOOL_TRACE] Using {len(tools_schema)} capped tools for prompt and model payload "
+                f"(request_tools={len(request.tools) if request.tools else 0}, registry_tools={TOOL_REGISTRY.count}): {tool_names}"
+            )
 
             forced_tool = self._maybe_force_tool_call(latest_user_query)
             forced_reasoning_answer = self._maybe_force_reasoning_answer(latest_user_query)
@@ -1179,11 +1611,51 @@ class Executor:
                     "clarificationQuestion": intent_type == "clarification_needed",
                 }
                 trace.add_plan_step("Forced direct reasoning path selected before tool or web routing.")
+                self._record_strategist(
+                    session_id,
+                    trace,
+                    lane="direct",
+                    intent=intent_type,
+                    risk_level="low",
+                    freshness_matters=False,
+                    expected_evidence_type="local_reasoning",
+                    allowed_tool_scope=[],
+                    reason="Executor selected a deterministic direct reasoning answer before tool routing.",
+                )
+                self._record_scout(
+                    session_id,
+                    trace,
+                    lane="direct",
+                    status="skipped_local_context",
+                    evidence_summary={"reason": "forced_reasoning_answer"},
+                )
+                analyst_mode = "limited_answer" if intent_type == "clarification_needed" else "exact_answer"
+                self._record_analyst(
+                    session_id,
+                    trace,
+                    mode=analyst_mode,
+                    failure_state=analyst_mode,
+                    synthesis={"answer": forced_reasoning_answer, "answerSource": "local_context"},
+                    answer_preview=forced_reasoning_answer,
+                    summary="Direct response without tool use.",
+                )
+                final_answer, review_events, _guardian = await self._guardian_gate_answer(
+                    initial_answer=forced_reasoning_answer,
+                    request=request,
+                    trace=trace,
+                    messages=messages,
+                    latest_user_query=latest_user_query,
+                    session_id=session_id,
+                    analyst_mode=analyst_mode,
+                    analyst_reason="forced direct reasoning path",
+                )
+                for review_event in review_events:
+                    yield json.dumps(review_event) + "\n"
                 yield json.dumps({
                     "type": "content",
-                    "content": forced_reasoning_answer,
+                    "content": final_answer,
                 }) + "\n"
-                trace.add_synthesis_step(forced_reasoning_answer[:200] + "...", int((time.time() - start_time) * 1000))
+                trace.add_synthesis_step(final_answer[:200] + "...", int((time.time() - start_time) * 1000))
                 yield json.dumps({
                     "type": "provenance",
                     "provenance_trace": trace.to_dict(),
@@ -1194,6 +1666,24 @@ class Executor:
                 return
             if forced_tool:
                 trace.add_plan_step(f"Forced direct tool path selected for request: {forced_tool.tool_name}")
+                forced_lane = (
+                    "research"
+                    if forced_tool.tool_name in {"web_search", "web_fetch", "web_extract"}
+                    or self._should_use_guided_web_research(latest_user_query)
+                    else "tool"
+                )
+                self._record_strategist(
+                    session_id,
+                    trace,
+                    lane=forced_lane,
+                    intent=str(runtime_web_context.get("taskType") or "tool_request"),
+                    risk_level="medium" if forced_lane == "research" else "low",
+                    freshness_matters=bool(self._should_use_guided_web_research(latest_user_query)),
+                    direct_route=self._find_direct_route(latest_user_query),
+                    expected_evidence_type="web_grounded_evidence" if forced_lane == "research" else "tool_result",
+                    allowed_tool_scope=[forced_tool.tool_name],
+                    reason=f"Forced tool path selected for {forced_tool.tool_name}.",
+                )
                 if (
                     forced_tool.tool_name == "web_search"
                     and self._should_use_guided_web_research(latest_user_query)
@@ -1229,6 +1719,18 @@ class Executor:
                     return
             if forced_skill_tool:
                 trace.add_plan_step(f"Forced skill path selected for request: {forced_skill_tool.tool_name}")
+                skill_lane = "research" if forced_skill_tool.tool_name == "skill_grounded-web-summary" else "tool"
+                self._record_strategist(
+                    session_id,
+                    trace,
+                    lane=skill_lane,
+                    intent="skill_routed_request",
+                    risk_level="medium" if skill_lane == "research" else "low",
+                    freshness_matters=skill_lane == "research",
+                    expected_evidence_type="web_grounded_evidence" if skill_lane == "research" else "tool_result",
+                    allowed_tool_scope=[forced_skill_tool.tool_name],
+                    reason=f"Skill router selected {forced_skill_tool.tool_name}.",
+                )
                 trace.add_tool_call(forced_skill_tool.tool_name, forced_skill_tool.input)
                 yield json.dumps({
                     "type": "tool_call",
@@ -1330,6 +1832,18 @@ class Executor:
                     return
             elif self._should_force_search_then_fetch(latest_user_query):
                 trace.add_plan_step("Forced search→fetch path selected for official-page request.")
+                self._record_strategist(
+                    session_id,
+                    trace,
+                    lane="research",
+                    intent=str(runtime_web_context.get("taskType") or "research"),
+                    risk_level="medium",
+                    freshness_matters=True,
+                    direct_route=self._find_direct_route(latest_user_query),
+                    expected_evidence_type="web_grounded_evidence",
+                    allowed_tool_scope=["web_search", "web_extract"],
+                    reason="Official-page request requires a grounded search and extract path.",
+                )
                 official_fetch_result = await self._execute_search_then_fetch_path(
                     request=request,
                     session_id=session_id,
@@ -1343,6 +1857,24 @@ class Executor:
                     async for chunk in official_fetch_result:
                         yield chunk
                     return
+
+            existing_role_trace = self.get_role_trace(session_id) or {}
+            if not existing_role_trace.get("strategist"):
+                default_lane = "research" if self._should_use_guided_web_research(latest_user_query) else "direct"
+                self._record_strategist(
+                    session_id,
+                    trace,
+                    lane=default_lane,
+                    intent=self._classify_pre_web_intent(latest_user_query),
+                    risk_level="medium" if default_lane == "research" else "low",
+                    freshness_matters=default_lane == "research",
+                    expected_evidence_type="web_grounded_evidence" if default_lane == "research" else "local_reasoning",
+                    allowed_tool_scope=[
+                        str((tool.get("function", {}) if isinstance(tool, dict) else {}).get("name") or "")
+                        for tool in tools_schema[:8]
+                    ],
+                    reason="Default strategist decision before model completion.",
+                )
 
             # 3. STREAM FROM MODEL
             logger.info(f"Starting model completion for {request.model}...")
@@ -1361,7 +1893,7 @@ class Executor:
             turn_count = 0
             sequential_thinking_turns = 0
             continue_reasoning = True
-            defer_content_until_review = bool(request.output_reviewer_id)
+            defer_content_until_review = True
             MAX_EXECUTION_SECONDS = 120  # Hard deadline for the entire execution loop
             execution_deadline = time.time() + MAX_EXECUTION_SECONDS
             while continue_reasoning:
@@ -1388,11 +1920,19 @@ class Executor:
                 turn_had_tool_call = False
                 turn_content = ""
 
+                model_messages, model_tools = self._prepare_model_inputs(messages, tools_schema if tools_schema else None)
+                logger.info(
+                    "[CONTEXT_BUDGET] Sending model payload estimate=%s chars (messages=%s, tools=%s).",
+                    self._estimate_model_payload_chars(model_messages, model_tools),
+                    len(model_messages),
+                    len(model_tools),
+                )
+
                 async_it = self.model_router.complete(
-                    messages,
+                    model_messages,
                     model=request.model,
                     complexity=request.complexity,
-                    tools=tools_schema if tools_schema else None,
+                    tools=model_tools if model_tools else None,
                     temperature=request.temperature,
                     top_p=request.top_p
                 )
@@ -1762,18 +2302,47 @@ class Executor:
                 elif turn_had_tool_call:
                     continue_reasoning = True
 
-            # 4. REVIEW TURN
-            if request.output_reviewer_id and accumulated_content:
-                yield json.dumps({
-                    "type": "status",
-                    "status": f"Reviewing output (using {request.output_reviewer_id})...",
-                }) + "\n"
-                accumulated_content, review_events = await self._review_and_revise_answer(
+            # 4. ANALYST + GUARDIAN TURN
+            if accumulated_content:
+                scout_lane = "tool" if tool_calls_made else "direct"
+                if self._should_use_guided_web_research(latest_user_query):
+                    scout_lane = "research"
+                self._record_scout(
+                    session_id,
+                    trace,
+                    lane=scout_lane,
+                    status="completed",
+                    tool_calls=[call.tool_name for call in tool_calls_made],
+                    selected_urls=list(dict.fromkeys([source for source in sources if source])),
+                    evidence_summary={
+                        "toolCallCount": len(tool_calls_made),
+                        "sourceCount": len(list(dict.fromkeys([source for source in sources if source]))),
+                    },
+                )
+                analyst_mode = self._default_analyst_mode_for_answer(accumulated_content)
+                self._record_analyst(
+                    session_id,
+                    trace,
+                    mode=analyst_mode,
+                    failure_state=analyst_mode,
+                    synthesis={"answer": accumulated_content, "answerSource": "assistant_draft"},
+                    answer_preview=accumulated_content,
+                    summary="General assistant draft synthesized after model/tool loop.",
+                )
+                if request.output_reviewer_id:
+                    yield json.dumps({
+                        "type": "status",
+                        "status": f"Reviewing output (using {request.output_reviewer_id})...",
+                    }) + "\n"
+                accumulated_content, review_events, _guardian = await self._guardian_gate_answer(
                     initial_answer=accumulated_content,
                     request=request,
                     trace=trace,
                     messages=messages,
                     latest_user_query=latest_user_query,
+                    session_id=session_id,
+                    analyst_mode=analyst_mode,
+                    analyst_reason="general assistant completion",
                 )
                 for event in review_events:
                     yield json.dumps(event) + "\n"
@@ -2056,6 +2625,7 @@ class Executor:
             "url": normalized_url,
             "taskType": runtime_context["taskType"],
             "sourceMode": runtime_context["sourceMode"],
+            "pageKind": classify_page_kind(normalized_url),
         }
 
         if any(token in lowered for token in ["standings", "points table", "points-table", "ranking", "leaderboard"]):
@@ -2079,6 +2649,28 @@ class Executor:
             tool_input["pageKind"] = "general" if parsed.path in {"", "/"} else "news/article"
 
         return tool_input
+
+    def _should_use_page_read_orchestrator(self, tool_call: ToolCall) -> bool:
+        if tool_call.tool_name != "web_extract" or not isinstance(tool_call.input, dict):
+            return False
+        return (
+            str(tool_call.input.get("sourceMode") or "").strip() == "user_named"
+            and str(tool_call.input.get("taskType") or "").strip() == "page_read"
+            and bool(tool_call.input.get("url"))
+        )
+
+    def _page_read_context_from_tool_call(self, tool_call: ToolCall, user_query: str) -> PageReadContext:
+        tool_input = tool_call.input if isinstance(tool_call.input, dict) else {}
+        url = str(tool_input.get("url") or "").strip()
+        if not url:
+            raise ValueError("Direct page-read URL cannot be empty")
+        return PageReadContext(
+            url=url,
+            user_query=user_query,
+            task_type=str(tool_input.get("taskType") or "page_read"),
+            source_mode=str(tool_input.get("sourceMode") or "user_named"),
+            page_kind=str(tool_input.get("pageKind") or classify_page_kind(url) or "unknown"),
+        )
 
     def _build_search_query_from_failed_url_extract(self, url: str, query: str) -> str:
         parsed = urlparse(url)
@@ -2198,7 +2790,11 @@ class Executor:
         ]
         has_sports_signal = any(term in lowered for term in sports_terms)
         has_standings_signal = any(re.search(pattern, lowered) for pattern in standings_patterns)
-        return has_sports_signal and has_standings_signal and "http" not in lowered
+        has_live_metric_signal = any(
+            token in lowered
+            for token in ["points", "wins", "losses", "loss", "position", "nrr", "net run rate"]
+        )
+        return has_sports_signal and (has_standings_signal or has_live_metric_signal) and "http" not in lowered
 
     def _should_use_guided_web_research(self, query: str) -> bool:
         if self._classify_pre_web_intent(query) in {"self_capability", "clarification_needed"}:
@@ -2260,7 +2856,7 @@ class Executor:
 
     def _classify_research_task(self, query: str) -> Dict[str, Any]:
         lowered = (query or "").lower()
-        standings_terms = ["standings", "points table", "rankings", "nrr", "top four", "table"]
+        standings_terms = ["standings", "points table", "points", "rankings", "nrr", "top four", "table", "wins", "losses", "position"]
         sports_terms = ["ipl", "cricket", "match", "team", "playoffs", "season", "csk", "chennai super kings"]
         breaking_terms = ["breaking", "latest", "news", "today", "current", "recent"]
         update_terms = ["update", "updates", "changelog", "release", "announcement", "launch", "rollout", "debut"]
@@ -2425,6 +3021,117 @@ class Executor:
         if any(marker in lowered for marker in garbage_markers) or lowered.count("|") >= 6:
             return "relevant_but_unusable_fetch"
         return "fetch_extract_clean"
+
+    def _current_reference_year(self, query: str) -> int:
+        explicit_years = re.findall(r"\b(20\d{2})\b", query or "")
+        if explicit_years:
+            try:
+                return int(explicit_years[0])
+            except ValueError:
+                pass
+        return datetime.now().year
+
+    def _extract_meaningful_terms(self, text: str) -> List[str]:
+        terms = re.findall(r"\b[A-Z]{2,}\b|\b[a-zA-Z0-9]{4,}\b", text or "")
+        seen = set()
+        ordered: List[str] = []
+        for term in terms:
+            normalized = term.lower()
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            ordered.append(term)
+        return ordered
+
+    def _enhance_search_query(
+        self,
+        raw_query: str,
+        user_message: str,
+        current_year: int,
+        plan: Dict[str, Any],
+    ) -> str:
+        text = re.sub(r"\s+", " ", str(raw_query or "").strip())
+        if not text:
+            return text
+
+        user_lower = (user_message or "").lower()
+        text_lower = text.lower()
+        meaningful_tokens = [
+            token for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9.+-]*", text)
+            if not token.lower().startswith("site:")
+        ]
+        if len(meaningful_tokens) < 3:
+            key_terms = self._extract_meaningful_terms(user_message)
+            if key_terms:
+                text = " ".join(key_terms[:5])
+                text_lower = text.lower()
+
+        is_live_query = any(keyword in user_lower for keyword in LIVE_DATA_KEYWORDS) or bool(plan.get("recency_matters"))
+        year_present = bool(re.search(r"\b20\d{2}\b", text))
+
+        if plan.get("category") == "sports_standings":
+            if any(token in user_lower for token in ["csk", "chennai super kings"]) and "chennai super kings" not in text_lower:
+                text = f"Chennai Super Kings {text}".strip()
+                text_lower = text.lower()
+            if "ipl" in user_lower and "ipl" not in text_lower:
+                text = f"IPL {text}".strip()
+                text_lower = text.lower()
+            if not any(token in text_lower for token in ["points table", "standings", "table", "rank", "position", "nrr"]):
+                text = f"{text} points table standings".strip()
+                text_lower = text.lower()
+            if any(token in user_lower for token in ["win", "wins", "loss", "losses"]) and not any(
+                token in text_lower for token in ["win", "wins", "loss", "losses"]
+            ):
+                text = f"{text} wins losses".strip()
+                text_lower = text.lower()
+
+        if is_live_query and not year_present:
+            text = f"{text} {current_year}".strip()
+            text_lower = text.lower()
+
+        return re.sub(r"\s+", " ", text).strip()
+
+    def _source_quality_score(self, url: str, query: str) -> float:
+        parsed = urlparse(url)
+        domain = (parsed.netloc or "").replace("www.", "").lower()
+        path = (parsed.path or "").lower()
+        query_lower = (query or "").lower()
+
+        if domain in LOW_QUALITY_DOMAINS:
+            return LOW_QUALITY_DOMAINS[domain]
+        if domain in AUTHORITATIVE_DOMAINS:
+            base = AUTHORITATIVE_DOMAINS[domain]
+        else:
+            base = 0.5
+
+        if any(token in query_lower for token in ["ipl", "csk", "chennai super kings", "points table", "standings", "nrr"]):
+            if domain == "iplt20.com":
+                base += 0.15
+            elif domain in {"espncricinfo.com", "cricbuzz.com", "bcci.tv"}:
+                base += 0.1
+            if any(token in path for token in ["points-table", "points", "standings", "table"]):
+                base += 0.1
+
+        if any(token in path for token in ["wikipedia", "wiki"]) and "wikipedia.org" not in domain:
+            base -= 0.1
+
+        return max(0.0, min(base, 1.2))
+
+    def _find_direct_route(self, user_message: str) -> Optional[Dict[str, Any]]:
+        lowered = (user_message or "").lower()
+        for route in DIRECT_ROUTES:
+            patterns = route.get("patterns") or []
+            if any(re.search(pattern, lowered) for pattern in patterns):
+                matched = dict(route)
+                current_year = self._current_reference_year(user_message)
+                matched["searchQuery"] = self._enhance_search_query(
+                    "IPL Chennai Super Kings points table",
+                    user_message,
+                    current_year,
+                    {"category": "sports_standings", "recency_matters": True},
+                )
+                return matched
+        return None
 
     def _build_search_query(self, query: str, apply_domain_bias: bool = True) -> str:
         raw = (query or "").strip()
@@ -2605,6 +3312,14 @@ class Executor:
             text = f"{text} latest news".strip()
             lowered_compact = text.lower()
 
+        text = self._enhance_search_query(
+            text or raw,
+            raw,
+            self._current_reference_year(raw),
+            plan,
+        )
+        lowered_compact = text.lower()
+
         if apply_domain_bias:
             domain_bias = plan.get("domain_bias") or []
             if domain_bias:
@@ -2674,6 +3389,7 @@ class Executor:
                 candidate,
             ]).lower()
             score = self._content_relevance_score(haystack, keywords)
+            score += self._source_quality_score(candidate, query) * 20
             if plan["recency_matters"] and any(marker in haystack for marker in ["2026", "latest", "updated", "current", "today", "april"]):
                 score += 3
             if plan["comparison_needed"] and any(marker in haystack for marker in ["compare", "comparison", "versus", "pricing", "difference"]):
@@ -2686,6 +3402,10 @@ class Executor:
                 score += 8
             if any(token in query.lower() for token in ["ipl", "standings", "points table", "cricket", "csk", "chennai super kings"]) and any(domain in candidate.lower() for domain in ["iplt20.com", "espncricinfo.com", "cricbuzz.com", "sportstar.thehindu.com"]):
                 score += 6
+            if is_points_table_query and "iplt20.com" in candidate.lower():
+                score += 10
+            if is_points_table_query and any(domain in candidate.lower() for domain in ["wikipedia.org", "duckduckgo.com"]):
+                score -= 12
             if category in {"technical_research", "product_company_updates"} and any(marker in haystack for marker in ["changelog", "release notes", "developer", "docs", "api updates", "announced"]):
                 score += 5
             if category == "breaking_news" and any(marker in haystack for marker in ["breaking", "live", "latest", "reported", "announced"]):
@@ -3987,6 +4707,7 @@ class Executor:
             if plan["category"] == "sports_standings":
                 abstain_bullets.append("- I could not verify the exact current standings race picture because the retrieved evidence did not expose a clean table with team positions, points, or NRR values.")
                 abstain_bullets.append("- The strongest evidence only confirms that the table is live and changes as results come in, not the exact current ordering.")
+                abstain_bullets.append("- For the current official table, check https://www.iplt20.com/matches/points-table or https://www.cricbuzz.com/cricket-series/points-table directly.")
             elif plan["task_type"] == "comparison_memo":
                 abstain_bullets.append("- I could not verify two distinct current updates strongly enough to support a clean comparison memo.")
                 abstain_bullets.append("- The retrieved sources point to an active changelog, but the evidence was not sufficient to separate concrete update A from update B with confidence.")
@@ -4651,12 +5372,16 @@ class Executor:
                 },
             }) + "\n"
 
-            tool_result = await self._execute_tool_with_confirmation(
-                session_id,
-                tool_call,
-                trace,
-                knowledge_brain=knowledge_brain,
-            )
+            if self._should_use_page_read_orchestrator(tool_call):
+                context = self._page_read_context_from_tool_call(tool_call, latest_user_query)
+                tool_result = await PageReadOrchestrator().read(context, tool_call.input if isinstance(tool_call.input, dict) else {})
+            else:
+                tool_result = await self._execute_tool_with_confirmation(
+                    session_id,
+                    tool_call,
+                    trace,
+                    knowledge_brain=knowledge_brain,
+                )
             trace.add_tool_call(tool_call.tool_name, tool_call.input)
             trace.add_tool_result(tool_result, int(tool_result.duration_ms))
 
@@ -4669,7 +5394,8 @@ class Executor:
                 "tool_result": tool_result.model_dump(),
             }) + "\n"
 
-            if tool_call.tool_name == "web_extract" and tool_result.error:
+            orchestrated_output = tool_result.output if isinstance(tool_result.output, dict) else {}
+            if tool_call.tool_name == "web_extract" and tool_result.error and not orchestrated_output.get("pageReadOrchestrated"):
                 requested_url = str(tool_call.input.get("url") or "").strip()
                 fallback_query = self._build_search_query_from_failed_url_extract(requested_url, latest_user_query)
                 fallback_tool_call = ToolCall(tool_name="web_search", input={"query": fallback_query})
@@ -4728,7 +5454,29 @@ class Executor:
                                 fallback_answer,
                             ]
                         )
-                        final_answer, review_events = await self._review_and_revise_answer(
+                        self._record_scout(
+                            session_id,
+                            trace,
+                            lane="tool" if tool_call.tool_name not in {"web_search", "web_extract", "web_fetch"} else "research",
+                            status="fallback_search_summary",
+                            tool_calls=[tool_call.tool_name, fallback_tool_call.tool_name],
+                            search_queries=[str(fallback_tool_call.input.get("query") or "")],
+                            selected_urls=[str(tool_result.source_url or ""), str(fallback_result.source_url or "")],
+                            evidence_summary={
+                                "directToolError": str(tool_result.error or ""),
+                                "fallbackSearchStatus": self._search_result_status(fallback_result),
+                            },
+                        )
+                        self._record_analyst(
+                            session_id,
+                            trace,
+                            mode="limited_answer",
+                            failure_state="limited_answer",
+                            synthesis={"answer": answer, "answerSource": "fallback_refused"},
+                            answer_preview=answer,
+                            summary="Analyst downgraded direct URL read into a search-backed fallback summary.",
+                        )
+                        final_answer, review_events, _guardian = await self._guardian_gate_answer(
                             initial_answer=answer,
                             request=request,
                             trace=trace,
@@ -4745,6 +5493,9 @@ class Executor:
                                 },
                             ],
                             latest_user_query=latest_user_query,
+                            session_id=session_id,
+                            analyst_mode="limited_answer",
+                            analyst_reason="direct extract failed; fallback search summary used",
                         )
                         for review_event in review_events:
                             yield json.dumps(review_event) + "\n"
@@ -4780,7 +5531,32 @@ class Executor:
                 yield json.dumps({"type": "done"}) + "\n"
                 return
 
-            final_answer, review_events = await self._review_and_revise_answer(
+            analyst_mode = self._default_analyst_mode_for_answer(answer)
+            scout_lane = "research" if tool_call.tool_name in {"web_search", "web_fetch", "web_extract"} else "tool"
+            selected_urls = []
+            if isinstance(tool_result.output, dict):
+                possible_url = str(tool_result.output.get("url") or tool_result.source_url or tool_call.input.get("url") or "").strip()
+                if possible_url:
+                    selected_urls.append(possible_url)
+            self._record_scout(
+                session_id,
+                trace,
+                lane=scout_lane,
+                status="tool_executed",
+                tool_calls=[tool_call.tool_name],
+                selected_urls=selected_urls,
+                evidence_summary={"toolName": tool_call.tool_name, "toolError": str(tool_result.error or "")},
+            )
+            self._record_analyst(
+                session_id,
+                trace,
+                mode=analyst_mode,
+                failure_state=analyst_mode,
+                synthesis={"answer": answer, "answerSource": "tool_result"},
+                answer_preview=answer,
+                summary=f"Analyst synthesized answer from {tool_call.tool_name}.",
+            )
+            final_answer, review_events, _guardian = await self._guardian_gate_answer(
                 initial_answer=answer,
                 request=request,
                 trace=trace,
@@ -4790,6 +5566,9 @@ class Executor:
                     "name": tool_call.tool_name,
                 }],
                 latest_user_query=latest_user_query,
+                session_id=session_id,
+                analyst_mode=analyst_mode,
+                analyst_reason=f"tool-backed answer from {tool_call.tool_name}",
             )
             for review_event in review_events:
                 yield json.dumps(review_event) + "\n"
@@ -4912,7 +5691,25 @@ class Executor:
                 apps_listing=apps_listing,
                 readme_result=readme_result,
             )
-            final_answer, review_events = await self._review_and_revise_answer(
+            self._record_scout(
+                session_id,
+                trace,
+                lane="tool",
+                status="workspace_inspection_complete",
+                tool_calls=[call.tool_name for call, _ in tool_calls],
+                selected_urls=[],
+                evidence_summary={"inspectedPaths": [call.input.get("path") for call, _ in tool_calls]},
+            )
+            self._record_analyst(
+                session_id,
+                trace,
+                mode="exact_answer",
+                failure_state="exact_answer",
+                synthesis={"answer": answer, "answerSource": "tool_result"},
+                answer_preview=answer,
+                summary="Analyst synthesized repository walkthrough from workspace inspection tools.",
+            )
+            final_answer, review_events, _guardian = await self._guardian_gate_answer(
                 initial_answer=answer,
                 request=request,
                 trace=trace,
@@ -4925,6 +5722,9 @@ class Executor:
                     for call, result in tool_calls
                 ],
                 latest_user_query=latest_user_query,
+                session_id=session_id,
+                analyst_mode="exact_answer",
+                analyst_reason="workspace inspection walkthrough",
             )
             for review_event in review_events:
                 yield json.dumps(review_event) + "\n"
@@ -4960,6 +5760,12 @@ class Executor:
             )
             self._stamp_web_trace_metadata(trace, runtime_web_context=runtime_web_context)
             research_plan = self.research.planner.run(latest_user_query)
+            research_context = ResearchContext(
+                query=latest_user_query,
+                task_type=research_plan.task_type,
+                category=research_plan.category,
+                query_classification=research_plan.model_dump(),
+            )
             self._set_internal_research_stage_metadata(trace, "research-planner", research_plan)
             trace.add_plan_step(
                 f"Internal research planner classified task={research_plan.task_type} "
@@ -4971,6 +5777,50 @@ class Executor:
             search_status = "missing"
             fetch_status = "not_attempted"
             selected_search_query = research_plan.queries[0] if research_plan.queries else self._build_search_query(latest_user_query)
+            direct_route = self._find_direct_route(latest_user_query)
+            direct_route_page_kind = ""
+            if direct_route:
+                direct_route_page_kind = str(direct_route.get("pageKind") or "").strip()
+                direct_task_type = str(direct_route.get("taskType") or "").strip()
+                if direct_task_type:
+                    runtime_web_context["taskType"] = direct_task_type
+                direct_expected_fields = [
+                    str(item) for item in (direct_route.get("expectedFields") or []) if str(item)
+                ]
+                if direct_expected_fields:
+                    merged_expected_fields = list(dict.fromkeys(direct_expected_fields + research_plan.expected_fields))
+                    research_plan.expected_fields = merged_expected_fields
+                direct_url = str(direct_route.get("url") or "").strip()
+                if direct_url:
+                    research_plan.target_urls = [direct_url] + [
+                        existing for existing in research_plan.target_urls if existing != direct_url
+                    ]
+                direct_search_query = str(direct_route.get("searchQuery") or "").strip()
+                if direct_search_query:
+                    selected_search_query = direct_search_query
+                trace.metadata["directRoute"] = {
+                    "url": direct_url,
+                    "pageKind": direct_route_page_kind,
+                    "taskType": direct_task_type,
+                    "expectedFields": direct_expected_fields,
+                    "searchQuery": selected_search_query,
+                }
+                trace.add_plan_step(
+                    f"Direct route matched authoritative source {direct_url or 'unknown'}; extraction will be tried before web search."
+                )
+            self._record_strategist(
+                session_id,
+                trace,
+                lane="research",
+                intent=research_plan.task_type or runtime_web_context["taskType"],
+                risk_level="medium" if research_plan.needs_freshness or research_plan.fetch_required else "low",
+                freshness_matters=bool(research_plan.needs_freshness or research_plan.recency_matters),
+                direct_route=direct_route,
+                expected_evidence_type="web_grounded_evidence",
+                allowed_tool_scope=["web_search", "web_extract"],
+                search_queries=list(research_plan.queries or ([selected_search_query] if selected_search_query else [])),
+                reason="Lead Strategist selected the grounded research lane.",
+            )
 
             async def execute_search_attempt(query_text: str) -> Tuple[List[str], ToolResult]:
                 search_tool = ToolCall(tool_name=search_tool_name, input={"query": query_text, "fetch_top": 0})
@@ -4994,26 +5844,168 @@ class Executor:
                 }) + "\n")
                 return events, tool_result
 
+            async def execute_extraction_phase(
+                phase_search_result: ToolResult,
+                phase_query: str,
+                phase_search_status: str,
+                phase_label: str,
+            ) -> Tuple[Any, Optional[ToolResult], str, Dict[str, Any], Dict[str, Any], List[str]]:
+                nonlocal fetch_status
+                phase_events: List[str] = []
+                extraction_decision = self.research.router.run(phase_query, research_plan, phase_search_result)
+                research_context.search_query = phase_query
+                research_context.search_status = phase_search_status
+                research_context.selected_urls = list(extraction_decision.candidate_urls)
+                research_context.extraction_decision = extraction_decision.model_dump()
+                self._set_internal_research_stage_metadata(trace, "extract-router", extraction_decision)
+                trace.add_plan_step(
+                    f"{phase_label} extract router chose page_kind={extraction_decision.page_kind} "
+                    f"and {len(extraction_decision.candidate_urls)} candidate URL(s); backend_order={','.join(extraction_decision.backend_order)}."
+                )
+
+                fetch_result_phase: Optional[ToolResult] = None
+                fallback_fetch_result: Optional[ToolResult] = None
+                fallback_fetch_status = ""
+                fetch_status_phase = "not_attempted"
+                attempt_plans = self.research.multi_attempt_extract.run(research_plan, extraction_decision)
+                self._set_internal_research_stage_metadata(
+                    trace,
+                    "multi-attempt-extract",
+                    {
+                        "attempts": [
+                            {
+                                "url": plan_item.url,
+                                "backend_order": plan_item.backend_order,
+                                "reason": plan_item.reason,
+                                "domain_profile": plan_item.domain_profile.model_dump(),
+                            }
+                            for plan_item in attempt_plans
+                        ]
+                    },
+                )
+                if extraction_decision.should_attempt_extract:
+                    for attempt_plan in attempt_plans:
+                        candidate_url = attempt_plan.url
+                        if not candidate_url:
+                            continue
+                        fetch_tool = ToolCall(
+                            tool_name="web_extract",
+                            input={
+                                "url": candidate_url,
+                                "taskType": runtime_web_context["taskType"],
+                                "sourceMode": runtime_web_context["sourceMode"],
+                                "expectedFields": research_plan.expected_fields,
+                                "allowInteraction": extraction_decision.allow_interaction,
+                                "pageKind": direct_route_page_kind or extraction_decision.page_kind,
+                                "backendOrder": attempt_plan.backend_order,
+                            },
+                        )
+                        fetch_status_phase = "attempted"
+                        phase_events.append(json.dumps({
+                            "type": "tool_call",
+                            "tool_call": {"name": fetch_tool.tool_name, "arguments": fetch_tool.input},
+                        }) + "\n")
+                        trace.add_tool_call(fetch_tool.tool_name, fetch_tool.input)
+                        attempted_fetch = await self._execute_tool_with_confirmation(
+                            session_id,
+                            fetch_tool,
+                            trace,
+                            knowledge_brain=knowledge_brain,
+                        )
+                        trace.add_tool_result(attempted_fetch, int(attempted_fetch.duration_ms))
+                        phase_events.append(json.dumps({
+                            "type": "tool_result",
+                            "tool_call": {"name": fetch_tool.tool_name, "arguments": fetch_tool.input},
+                            "tool_result": attempted_fetch.model_dump(),
+                        }) + "\n")
+
+                        fetch_quality = self._classify_fetch_quality(latest_user_query, attempted_fetch)
+                        attempted_output = attempted_fetch.output if isinstance(attempted_fetch.output, dict) else {}
+                        if attempted_fetch.error:
+                            self._adaptive_fetch_layer.record_extract_failure(
+                                url=candidate_url,
+                                failure_kind=str(attempted_output.get("fetchFailureKind") or "extract_failure"),
+                                details=str(attempted_fetch.error or ""),
+                            )
+                        elif attempted_output:
+                            self._adaptive_fetch_layer.record_extract_result(
+                                url=str(attempted_output.get("url") or candidate_url),
+                                page_kind=direct_route_page_kind or extraction_decision.page_kind,
+                                backend_order=attempt_plan.backend_order,
+                                successful_backend=str(attempted_output.get("backendUsed") or attempted_output.get("extractionMethod") or "web_extract"),
+                            )
+
+                        if fetch_quality == "fetch_extract_clean":
+                            fetch_result_phase = attempted_fetch
+                            fetch_status_phase = str(((attempted_fetch.output or {}) if isinstance(attempted_fetch.output, dict) else {}).get("quality") or "ok")
+                            break
+                        if not attempted_fetch.error and fetch_quality not in {"fetch_irrelevant", "fetch_failed"}:
+                            fallback_fetch_result = attempted_fetch
+                            fallback_fetch_status = str(
+                                ((attempted_fetch.output or {}) if isinstance(attempted_fetch.output, dict) else {}).get("quality")
+                                or fetch_quality
+                                or "attempted"
+                            )
+
+                        if attempted_fetch.error:
+                            fetch_status_phase = "fetch_failed"
+                        elif fetch_quality == "relevant_but_unusable_fetch":
+                            if attempted_output.get("interactionRequired"):
+                                fetch_status_phase = "interaction_required"
+                            else:
+                                fetch_status_phase = "relevant_but_unusable_fetch"
+                        else:
+                            fetch_status_phase = "fetch_irrelevant"
+
+                        trace.add_plan_step(f"Fetched page looked weak or irrelevant for {candidate_url}; trying next ranked result.")
+                    if fetch_result_phase is None and fallback_fetch_result is not None:
+                        fetch_result_phase = fallback_fetch_result
+                        fetch_status_phase = fallback_fetch_status or fetch_status_phase or "attempted"
+                        trace.add_plan_step("No fully clean extract was found, so the best partial extract was preserved for evidence judging.")
+                else:
+                    trace.add_plan_step("Extract router skipped page extraction because search evidence was too weak or no target URL was available.")
+
+                extraction_summary_phase = self._extract_quality_summary(fetch_result_phase)
+                evidence_gate_phase = self._extract_evidence_gate(latest_user_query, fetch_result_phase)
+                research_context.fetch_status = fetch_status_phase
+                if fetch_result_phase and isinstance(fetch_result_phase.output, dict):
+                    research_context.fetch_failure_state = str(fetch_result_phase.output.get("fetchFailureKind") or "")
+                fetch_status = fetch_status_phase
+                return extraction_decision, fetch_result_phase, fetch_status_phase, extraction_summary_phase, evidence_gate_phase, phase_events
+
             search_result: Optional[ToolResult] = None
-            for idx, search_query in enumerate(research_plan.queries or [selected_search_query]):
-                search_events, candidate_search_result = await execute_search_attempt(search_query)
-                for event in search_events:
-                    yield event
-                if candidate_search_result is None:
-                    continue
-                search_result = candidate_search_result
-                selected_search_query = search_query
-                search_status = self._search_result_status(search_result)
-                candidate_results = (search_result.output or {}).get("results", []) if isinstance(search_result.output, dict) else []
-                if candidate_results and not search_result.error:
-                    break
-                if research_plan.target_urls and self._is_provider_outage_status(search_status):
-                    trace.add_plan_step(
-                        "Search provider looked unavailable, so the planner proceeded directly to the official target URL fallback."
-                    )
-                    break
-                if idx < len(research_plan.queries or []) - 1:
-                    trace.add_plan_step("Search evidence was weak, so the planner advanced to the next query variant.")
+            used_direct_route_only = False
+            if direct_route and research_plan.target_urls:
+                search_result = ToolResult(
+                    tool_name=search_tool_name,
+                    input={"query": selected_search_query},
+                    output={"status": "direct_route_only", "results": []},
+                    error=None,
+                    duration_ms=0,
+                    sandboxed=False,
+                )
+                search_status = "direct_route_only"
+                used_direct_route_only = True
+            else:
+                for idx, search_query in enumerate(research_plan.queries or [selected_search_query]):
+                    search_events, candidate_search_result = await execute_search_attempt(search_query)
+                    for event in search_events:
+                        yield event
+                    if candidate_search_result is None:
+                        continue
+                    search_result = candidate_search_result
+                    selected_search_query = search_query
+                    search_status = self._search_result_status(search_result)
+                    candidate_results = (search_result.output or {}).get("results", []) if isinstance(search_result.output, dict) else []
+                    if candidate_results and not search_result.error:
+                        break
+                    if research_plan.target_urls and self._is_provider_outage_status(search_status):
+                        trace.add_plan_step(
+                            "Search provider looked unavailable, so the planner proceeded directly to the official target URL fallback."
+                        )
+                        break
+                    if idx < len(research_plan.queries or []) - 1:
+                        trace.add_plan_step("Search evidence was weak, so the planner advanced to the next query variant.")
 
             if search_result is None:
                 if not research_plan.target_urls:
@@ -5030,86 +6022,79 @@ class Executor:
                 trace.add_plan_step(
                     "No usable search response was available, but the planner had direct target URLs so extraction continued."
                 )
+            elif not used_direct_route_only:
+                search_result, pre_evidence_decision = self.research.pre_evidence_filter.run(
+                    selected_search_query,
+                    research_plan,
+                    search_result,
+                )
+                research_context.pre_evidence = pre_evidence_decision.model_dump()
+                self._set_internal_research_stage_metadata(trace, "pre-evidence-filter", pre_evidence_decision)
+                trace.add_plan_step(
+                    f"Pre-evidence filter kept {pre_evidence_decision.filtered_result_count}/{pre_evidence_decision.original_result_count} "
+                    f"search result(s); warnings={','.join(pre_evidence_decision.warning_flags) or 'none'}."
+                )
 
-            extraction_decision = self.research.router.run(selected_search_query, research_plan, search_result)
-            self._set_internal_research_stage_metadata(trace, "extract-router", extraction_decision)
-            trace.add_plan_step(
-                f"Internal extract router chose page_kind={extraction_decision.page_kind} "
-                f"and {len(extraction_decision.candidate_urls)} candidate URL(s); backend_order={','.join(extraction_decision.backend_order)}."
+            extraction_decision, fetch_result, fetch_status, extraction_summary, evidence_gate, extraction_events = await execute_extraction_phase(
+                search_result,
+                selected_search_query,
+                search_status,
+                "Initial",
             )
+            for event in extraction_events:
+                yield event
 
-            fetch_result: Optional[ToolResult] = None
-            fallback_fetch_result: Optional[ToolResult] = None
-            fallback_fetch_status = ""
-            if extraction_decision.should_attempt_extract:
-                for candidate_url in extraction_decision.candidate_urls[:3]:
-                    if not candidate_url:
+            if used_direct_route_only and (fetch_result is None or evidence_gate["mode"] == "ABSTAIN"):
+                trace.add_plan_step(
+                    "Direct-route extraction did not yield usable evidence, so the agent fell back to web search for corroborating sources."
+                )
+                fallback_search_result: Optional[ToolResult] = None
+                fallback_query = str((direct_route or {}).get("searchQuery") or selected_search_query or latest_user_query).strip()
+                fallback_queries = [fallback_query] + [
+                    query_variant
+                    for query_variant in (research_plan.queries or [])
+                    if str(query_variant).strip() and str(query_variant).strip() != fallback_query
+                ]
+                for idx, search_query in enumerate(fallback_queries):
+                    search_events, candidate_search_result = await execute_search_attempt(search_query)
+                    for event in search_events:
+                        yield event
+                    if candidate_search_result is None:
                         continue
-                    fetch_tool = ToolCall(
-                        tool_name="web_extract",
-                        input={
-                            "url": candidate_url,
-                            "taskType": runtime_web_context["taskType"],
-                            "sourceMode": runtime_web_context["sourceMode"],
-                            "expectedFields": research_plan.expected_fields,
-                            "allowInteraction": extraction_decision.allow_interaction,
-                            "pageKind": extraction_decision.page_kind,
-                            "backendOrder": extraction_decision.backend_order,
-                        },
-                    )
-                    fetch_status = "attempted"
-                    yield json.dumps({
-                        "type": "tool_call",
-                        "tool_call": {"name": fetch_tool.tool_name, "arguments": fetch_tool.input},
-                    }) + "\n"
-                    trace.add_tool_call(fetch_tool.tool_name, fetch_tool.input)
-                    attempted_fetch = await self._execute_tool_with_confirmation(
-                        session_id,
-                        fetch_tool,
-                        trace,
-                        knowledge_brain=knowledge_brain,
-                    )
-                    trace.add_tool_result(attempted_fetch, int(attempted_fetch.duration_ms))
-                    yield json.dumps({
-                        "type": "tool_result",
-                        "tool_call": {"name": fetch_tool.tool_name, "arguments": fetch_tool.input},
-                        "tool_result": attempted_fetch.model_dump(),
-                    }) + "\n"
-
-                    fetch_quality = self._classify_fetch_quality(latest_user_query, attempted_fetch)
-                    if fetch_quality == "fetch_extract_clean":
-                        fetch_result = attempted_fetch
-                        fetch_status = str(((attempted_fetch.output or {}) if isinstance(attempted_fetch.output, dict) else {}).get("quality") or "ok")
+                    search_status = self._search_result_status(candidate_search_result)
+                    selected_search_query = search_query
+                    candidate_results = (candidate_search_result.output or {}).get("results", []) if isinstance(candidate_search_result.output, dict) else []
+                    if candidate_results and not candidate_search_result.error:
+                        fallback_search_result = candidate_search_result
                         break
-                    if not attempted_fetch.error and fetch_quality not in {"fetch_irrelevant", "fetch_failed"}:
-                        fallback_fetch_result = attempted_fetch
-                        fallback_fetch_status = str(
-                            ((attempted_fetch.output or {}) if isinstance(attempted_fetch.output, dict) else {}).get("quality")
-                            or fetch_quality
-                            or "attempted"
-                        )
+                    if idx < len(fallback_queries) - 1:
+                        trace.add_plan_step("Search fallback was weak, so the planner advanced to the next fallback query variant.")
+                if fallback_search_result is not None:
+                    search_result = fallback_search_result
+                    search_result, pre_evidence_decision = self.research.pre_evidence_filter.run(
+                        selected_search_query,
+                        research_plan,
+                        search_result,
+                    )
+                    research_context.pre_evidence = pre_evidence_decision.model_dump()
+                    self._set_internal_research_stage_metadata(trace, "pre-evidence-filter", pre_evidence_decision)
+                    trace.add_plan_step(
+                        f"Pre-evidence filter kept {pre_evidence_decision.filtered_result_count}/{pre_evidence_decision.original_result_count} "
+                        f"search result(s); warnings={','.join(pre_evidence_decision.warning_flags) or 'none'}."
+                    )
+                    extraction_decision, fetch_result, fetch_status, extraction_summary, evidence_gate, extraction_events = await execute_extraction_phase(
+                        search_result,
+                        selected_search_query,
+                        search_status,
+                        "Fallback",
+                    )
+                    for event in extraction_events:
+                        yield event
+                else:
+                    trace.add_plan_step(
+                        "Search fallback did not return stronger candidates, so the direct authoritative extract outcome was kept."
+                    )
 
-                    if attempted_fetch.error:
-                        fetch_status = "fetch_failed"
-                    elif fetch_quality == "relevant_but_unusable_fetch":
-                        attempted_output = attempted_fetch.output if isinstance(attempted_fetch.output, dict) else {}
-                        if attempted_output.get("interactionRequired"):
-                            fetch_status = "interaction_required"
-                        else:
-                            fetch_status = "relevant_but_unusable_fetch"
-                    else:
-                        fetch_status = "fetch_irrelevant"
-
-                    trace.add_plan_step(f"Fetched page looked weak or irrelevant for {candidate_url}; trying next ranked result.")
-                if fetch_result is None and fallback_fetch_result is not None:
-                    fetch_result = fallback_fetch_result
-                    fetch_status = fallback_fetch_status or fetch_status or "attempted"
-                    trace.add_plan_step("No fully clean extract was found, so the best partial extract was preserved for evidence judging.")
-            else:
-                trace.add_plan_step("Extract router skipped page extraction because search evidence was too weak or no target URL was available.")
-
-            extraction_summary = self._extract_quality_summary(fetch_result)
-            evidence_gate = self._extract_evidence_gate(latest_user_query, fetch_result)
             self._stamp_web_trace_metadata(
                 trace,
                 extraction_summary=extraction_summary,
@@ -5119,10 +6104,67 @@ class Executor:
                 f"Extraction quality gate selected mode={trace.metadata['evidenceGate']['mode']} "
                 f"with tier={trace.metadata['extractionQualitySummary']['tier']} and confidence={trace.metadata['extractionQualitySummary']['confidence']}."
             )
+            self._record_scout(
+                session_id,
+                trace,
+                lane="research",
+                status=fetch_status or "completed",
+                direct_route_used=used_direct_route_only,
+                tool_calls=[search_tool_name] + (["web_extract"] if fetch_result is not None or fetch_status != "not_attempted" else []),
+                search_queries=list(attempted_queries),
+                selected_urls=list(dict.fromkeys(research_context.selected_urls or extraction_decision.candidate_urls or research_plan.target_urls)),
+                warnings=list((research_context.pre_evidence or {}).get("warning_flags") or []),
+                evidence_summary={
+                    "searchStatus": search_status,
+                    "fetchStatus": fetch_status,
+                    "taskType": runtime_web_context["taskType"],
+                    "pageKind": direct_route_page_kind or extraction_decision.page_kind,
+                    "usedDirectRouteOnly": used_direct_route_only,
+                },
+            )
 
             if runtime_web_context["taskType"] in {"page_read", "factual_extract"} and fetch_result is not None:
-                direct_answer = self._synthesize_tool_answer(latest_user_query, "web_extract", fetch_result)
-                final_answer, review_events = await self._review_and_revise_answer(
+                direct_assessment = EvidenceAssessment(
+                    relevant=bool(fetch_result),
+                    usable=evidence_gate["mode"] != "ABSTAIN",
+                    sufficient=evidence_gate["mode"] == "PROCEED_FULL",
+                    partial=evidence_gate["mode"] == "PROCEED_CAUTIOUS",
+                    abstain=evidence_gate["mode"] == "ABSTAIN",
+                    reasons=[str(evidence_gate.get("reason") or "").strip()] if evidence_gate.get("reason") else [],
+                    missing_fields=[str(item) for item in (evidence_gate.get("missingFields") or []) if str(item)],
+                )
+                direct_answerability = AnswerabilityDecision(
+                    mode="exact" if evidence_gate["mode"] == "PROCEED_FULL" else "partial" if evidence_gate["mode"] == "PROCEED_CAUTIOUS" else "abstain",
+                    limitations=[str(evidence_gate.get("reason") or "").strip()] if evidence_gate.get("reason") else [],
+                    can_answer_exactly=evidence_gate["mode"] == "PROCEED_FULL",
+                    can_answer_partially=evidence_gate["mode"] in {"PROCEED_FULL", "PROCEED_CAUTIOUS"},
+                )
+                confidence_risk = self.research.confidence_risk_model.run(
+                    latest_user_query,
+                    research_plan,
+                    direct_assessment,
+                    direct_answerability,
+                    fetch_result,
+                )
+                research_context.confidence_risk = confidence_risk.model_dump()
+                self._set_internal_research_stage_metadata(trace, "confidence-risk-model", confidence_risk)
+                self._record_analyst(
+                    session_id,
+                    trace,
+                    mode=confidence_risk.mode,
+                    failure_state=confidence_risk.failure_state,
+                    evidence_verdict=confidence_risk.evidence_verdict,
+                    synthesis=confidence_risk.synthesis,
+                    loyalty=confidence_risk.loyalty,
+                    answer_preview=str((confidence_risk.synthesis or {}).get("answer") or ""),
+                    summary="Analyst evaluated direct fetched page evidence.",
+                )
+                direct_answer = (
+                    str(confidence_risk.synthesis.get("answer") or "").strip()
+                    if confidence_risk.synthesis and str(confidence_risk.synthesis.get("answer") or "").strip()
+                    else self._synthesize_tool_answer(latest_user_query, "web_extract", fetch_result)
+                )
+                final_answer, review_events, _guardian = await self._guardian_gate_answer(
                     initial_answer=direct_answer,
                     request=request,
                     trace=trace,
@@ -5139,6 +6181,9 @@ class Executor:
                         },
                     ],
                     latest_user_query=latest_user_query,
+                    session_id=session_id,
+                    analyst_mode=confidence_risk.mode,
+                    analyst_reason=confidence_risk.reason,
                 )
                 for review_event in review_events:
                     yield json.dumps(review_event) + "\n"
@@ -5146,6 +6191,12 @@ class Executor:
                 trace.add_synthesis_step(final_answer[:200] + "...", int((time.time() - start_time) * 1000))
                 yield json.dumps({"type": "provenance", "provenance_trace": trace.to_dict()}) + "\n"
                 yield json.dumps({"type": "done"}) + "\n"
+                await self._self_learning_loop.record_outcome(
+                    context=research_context,
+                    confidence_risk=confidence_risk,
+                    search_result=search_result,
+                    fetch_result=fetch_result,
+                )
                 return
 
             evidence_assessment = self.research.judge.run(
@@ -5154,6 +6205,7 @@ class Executor:
                 search_result,
                 fetch_result,
             )
+            research_context.evidence_assessment = evidence_assessment.model_dump()
             self._set_internal_research_stage_metadata(trace, "evidence-judge", evidence_assessment)
             trace.add_plan_step(
                 f"Evidence judge scored quality={evidence_assessment.quality} "
@@ -5162,8 +6214,46 @@ class Executor:
             )
 
             answerability_decision = self.research.answerability_gate.run(evidence_assessment)
+            confidence_risk = self.research.confidence_risk_model.run(
+                latest_user_query,
+                research_plan,
+                evidence_assessment,
+                answerability_decision,
+                fetch_result,
+            )
+            research_context.answerability = answerability_decision.model_dump()
+            research_context.confidence_risk = confidence_risk.model_dump()
+            if confidence_risk.mode == "refused_answer" and answerability_decision.mode != "abstain":
+                answerability_decision = AnswerabilityDecision(
+                    mode="abstain",
+                    limitations=[confidence_risk.reason] if confidence_risk.reason else answerability_decision.limitations,
+                    can_answer_exactly=False,
+                    can_answer_partially=False,
+                )
+            elif confidence_risk.mode == "limited_answer" and answerability_decision.mode == "exact":
+                answerability_decision = AnswerabilityDecision(
+                    mode="partial",
+                    limitations=answerability_decision.limitations or ([confidence_risk.reason] if confidence_risk.reason else []),
+                    can_answer_exactly=False,
+                    can_answer_partially=True,
+                )
             self._set_internal_research_stage_metadata(trace, "answerability-gate", answerability_decision)
+            self._set_internal_research_stage_metadata(trace, "confidence-risk-model", confidence_risk)
+            self._record_analyst(
+                session_id,
+                trace,
+                mode=confidence_risk.mode,
+                failure_state=confidence_risk.failure_state,
+                evidence_verdict=confidence_risk.evidence_verdict,
+                synthesis=confidence_risk.synthesis,
+                loyalty=confidence_risk.loyalty,
+                answer_preview=str((confidence_risk.synthesis or {}).get("answer") or ""),
+                summary="Analyst completed evidence selection, synthesis, and loyalty checks.",
+            )
             trace.add_plan_step(f"Answerability gate selected mode={answerability_decision.mode}.")
+            trace.add_plan_step(
+                f"Confidence/risk model selected mode={confidence_risk.mode} with failure_state={confidence_risk.failure_state or 'none'}."
+            )
 
             draft = self.research.final_writer.run(
                 latest_user_query,
@@ -5178,7 +6268,7 @@ class Executor:
             self._set_internal_research_stage_metadata(trace, "final-writer", draft)
             trace.add_plan_step(f"Final writer produced a {draft.confidence} draft with {len(draft.citations_or_sources)} source line(s).")
 
-            final_answer, review_events = await self._review_and_revise_answer(
+            final_answer, review_events, _guardian = await self._guardian_gate_answer(
                 initial_answer=draft.markdown,
                 request=request,
                 trace=trace,
@@ -5198,6 +6288,9 @@ class Executor:
                     self._internal_research_stage_message(trace),
                 ],
                 latest_user_query=latest_user_query,
+                session_id=session_id,
+                analyst_mode=confidence_risk.mode,
+                analyst_reason=confidence_risk.reason,
             )
             for review_event in review_events:
                 yield json.dumps(review_event) + "\n"
@@ -5205,6 +6298,12 @@ class Executor:
             trace.add_synthesis_step(final_answer[:200] + "...", int((time.time() - start_time) * 1000))
             yield json.dumps({"type": "provenance", "provenance_trace": trace.to_dict()}) + "\n"
             yield json.dumps({"type": "done"}) + "\n"
+            await self._self_learning_loop.record_outcome(
+                context=research_context,
+                confidence_risk=confidence_risk,
+                search_result=search_result,
+                fetch_result=fetch_result,
+            )
 
             if chroma_memory and session_id:
                 for msg in request.messages:
@@ -5256,6 +6355,126 @@ class Executor:
             "skills": "\n".join(reversed(skill_blocks)),
             "evidence": "\n".join(reversed(evidence_blocks)),
         }
+
+    async def _guardian_gate_answer(
+        self,
+        *,
+        initial_answer: str,
+        request: ChatRequest,
+        trace: ProvenanceTrace,
+        messages: List[Dict[str, Any]],
+        latest_user_query: str,
+        session_id: str,
+        analyst_mode: str,
+        analyst_reason: str = "",
+    ) -> tuple[str, List[Dict[str, Any]], GuardianVerdict]:
+        review_context = self._extract_review_context(messages)
+        reviewer_name = request.output_reviewer_id or "local_guardian"
+
+        try:
+            preserve_plain_question = (
+                self._classify_pre_web_intent(latest_user_query) == "clarification_needed"
+                and "?" in str(initial_answer or "")
+            )
+            candidate = (
+                str(initial_answer or "").strip()
+                if preserve_plain_question
+                else self._normalize_web_answer_for_request(initial_answer, latest_user_query)
+            )
+            local_review = self._local_review_output(
+                candidate,
+                latest_user_query=latest_user_query,
+                review_context=review_context,
+            )
+            if not local_review.get("approved"):
+                revised_seed = self._inject_requested_entities(candidate, latest_user_query)
+                revised = (
+                    revised_seed.strip()
+                    if preserve_plain_question
+                    else self._normalize_web_answer_for_request(revised_seed, latest_user_query)
+                )
+                if revised.strip() != candidate.strip():
+                    candidate = revised
+                    local_review = self._local_review_output(
+                        candidate,
+                        latest_user_query=latest_user_query,
+                        review_context=review_context,
+                    )
+
+            if not local_review.get("approved"):
+                safe_refusal = self._build_rejected_final_answer(
+                    latest_user_query,
+                    review_context,
+                    str(local_review.get("feedback") or "Guardian rejected the draft because it was not grounded enough."),
+                )
+                verdict = self._record_guardian(
+                    session_id,
+                    trace,
+                    approved=False,
+                    final_mode="refused_answer",
+                    reason="guardian_rejected_draft",
+                    feedback=str(local_review.get("feedback") or ""),
+                    fail_closed=True,
+                    reviewer=reviewer_name,
+                    answer_preview=safe_refusal,
+                )
+                return safe_refusal, [], verdict
+
+            review_events: List[Dict[str, Any]] = []
+            final_answer = candidate
+            externally_approved = True
+            external_feedback = ""
+            if request.output_reviewer_id:
+                final_answer, review_events = await self._review_and_revise_answer(
+                    initial_answer=candidate,
+                    request=request,
+                    trace=trace,
+                    messages=messages,
+                    latest_user_query=latest_user_query,
+                )
+                last_review_event = review_events[-1] if review_events else {}
+                if last_review_event:
+                    externally_approved = bool(last_review_event.get("approved", False))
+                    external_feedback = str(last_review_event.get("feedback") or "")
+                if not final_answer.strip():
+                    externally_approved = False
+                    final_answer = self._build_rejected_final_answer(
+                        latest_user_query,
+                        review_context,
+                        external_feedback or "Guardian reviewer returned an empty revision.",
+                    )
+
+            final_mode = analyst_mode if externally_approved else "refused_answer"
+            verdict = self._record_guardian(
+                session_id,
+                trace,
+                approved=externally_approved,
+                final_mode=final_mode,
+                reason=analyst_reason or ("guardian approved answer" if externally_approved else "guardian reviewer rejected answer"),
+                feedback=external_feedback or str(local_review.get("feedback") or ""),
+                fail_closed=False,
+                reviewer=reviewer_name,
+                answer_preview=final_answer,
+            )
+            return final_answer, review_events, verdict
+        except Exception as exc:
+            logger.error(f"Guardian gate failed closed: {exc}", exc_info=True)
+            safe_refusal = (
+                "I couldn't safely finalize that answer because the final verification step failed. "
+                "Please try again or narrow the request."
+            )
+            verdict = self._record_guardian(
+                session_id,
+                trace,
+                approved=False,
+                final_mode="refused_answer",
+                reason=f"guardian_error: {type(exc).__name__}",
+                feedback="Guardian failed closed.",
+                fail_closed=True,
+                reviewer=reviewer_name,
+                answer_preview=safe_refusal,
+            )
+            return safe_refusal, [], verdict
 
     async def _generate_revision_from_feedback(
         self,

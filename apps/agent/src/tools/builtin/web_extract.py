@@ -10,6 +10,7 @@ from src.contracts.tool import ToolResult
 from src.tools.base_tool import BaseTool
 from src.tools.registry import TOOL_REGISTRY
 from src.tools.builtin.web_fetch import WebFetchTool, _detect_js_fallback_reason
+from src.tools.builtin.page_read_types import has_weak_signal
 
 logger = logging.getLogger("rawclaw.tools.web_extract")
 
@@ -90,6 +91,8 @@ JS_NAV_WORDS = {
     "windows", "macos", "linux", "source", "code", "release", "release", "releases", "all",
 }
 
+BROWSER_NAVIGATION_TOOLS = {"browser_navigate", "browser_snapshot"}
+
 
 class WebExtractTool(BaseTool):
     name = "web_extract"
@@ -128,6 +131,15 @@ class WebExtractTool(BaseTool):
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "Optional preferred backend order such as crawl4ai, playwright, opencli, reader, web_fetch.",
+            },
+            "allowInternalBrowserEscalation": {
+                "type": "boolean",
+                "default": True,
+                "description": "Whether web_extract may run its own browser escalation. Orchestrated direct page reads set this false.",
+            },
+            "maxDurationMs": {
+                "type": "integer",
+                "description": "Optional cooperative max duration for extraction before returning weak evidence.",
             },
         },
         "required": ["url"],
@@ -286,6 +298,11 @@ class WebExtractTool(BaseTool):
 
     def _backend_score(self, tool: BaseTool, page_kind: str, allow_interaction: bool, backend_order: Optional[List[str]] = None) -> int:
         name = getattr(tool, "name", "")
+        if self._is_browser_action_tool(tool):
+            return -100
+        if getattr(tool, "capability_tags", None) and "mcp" in (getattr(tool, "capability_tags", []) or []):
+            if getattr(tool, "accepts_url", True) is False:
+                return -100
         if name in {self.name, "web_search", "duckduckgo_search", "smart_search", "sequential_thinking"}:
             return -100
         backend_type = self._backend_type(tool)
@@ -317,6 +334,10 @@ class WebExtractTool(BaseTool):
         if backend_order and backend_type in backend_order:
             score += max(0, 20 - (backend_order.index(backend_type) * 4))
         return score
+
+    def _is_browser_action_tool(self, tool: BaseTool) -> bool:
+        name = str(getattr(tool, "name", "") or "").lower()
+        return name.startswith("browser_")
 
     def _discover_backend_tools(self, page_kind: str, allow_interaction: bool, backend_order: Optional[List[str]] = None) -> List[Tuple[BaseTool, str]]:
         candidates: List[Tuple[BaseTool, str, int]] = []
@@ -1292,6 +1313,11 @@ class WebExtractTool(BaseTool):
         allow_interaction = bool(input.get("allowInteraction", False))
         page_kind_hint = str(input.get("pageKind") or "").strip()
         backend_order = [str(item).strip().lower() for item in (input.get("backendOrder") or []) if str(item).strip()]
+        allow_internal_browser_escalation = bool(input.get("allowInternalBrowserEscalation", True))
+        max_duration_ms = int(input.get("maxDurationMs") or 0)
+
+        def duration_exhausted() -> bool:
+            return bool(max_duration_ms and ((time.monotonic() - start_time) * 1000) >= max_duration_ms)
 
         if not url:
             return ToolResult(
@@ -1329,11 +1355,24 @@ class WebExtractTool(BaseTool):
             raw_source_text="",
         )
 
+        def browser_escalation_suppressed(metadata: Dict[str, Any], quality_value: str) -> bool:
+            if allow_internal_browser_escalation:
+                return False
+            return has_weak_signal({**(metadata or {}), "quality": quality_value})
+
         candidates = self._discover_backend_tools(page_kind, allow_interaction, backend_order=backend_order)
         if not candidates:
             candidates = [(self.fetch_tool, "web_fetch")]
 
         for tool, backend_type in candidates[:5]:
+            if duration_exhausted():
+                backend_attempts.append({
+                    "backend": backend_type,
+                    "tool": tool.name,
+                    "status": "skipped",
+                    "reason": "maxDurationMs exhausted",
+                })
+                break
             tool_input = self._generic_tool_input(tool, url, task_type, expected_fields, allow_interaction)
             if not tool_input:
                 backend_attempts.append({
@@ -1346,6 +1385,8 @@ class WebExtractTool(BaseTool):
 
             attempt_start = time.monotonic()
             try:
+                if backend_used == "none":
+                    backend_used = backend_type
                 result = await tool.execute(tool_input)
             except Exception as exc:
                 backend_attempts.append({
@@ -1733,6 +1774,7 @@ class WebExtractTool(BaseTool):
                         "networkError": None,
                         "redirectedUrl": last_empty_success_context.get("redirectedUrl"),
                         "transportStrategy": last_empty_success_context.get("transportStrategy"),
+                        "browserEscalationSuppressed": browser_escalation_suppressed(empty_metadata, "extract_garbage"),
                         **empty_metadata,
                     },
                     duration_ms=duration_ms,
@@ -1749,6 +1791,7 @@ class WebExtractTool(BaseTool):
                         "networkError": None,
                         "redirectedUrl": last_empty_success_context.get("redirectedUrl"),
                         "transportStrategy": last_empty_success_context.get("transportStrategy"),
+                        "browserEscalationSuppressed": browser_escalation_suppressed(empty_metadata, "extract_garbage"),
                         **empty_metadata,
                     },
                 )
@@ -1797,6 +1840,21 @@ class WebExtractTool(BaseTool):
                     "networkError": network_error,
                     "redirectedUrl": redirected_url,
                     "transportStrategy": transport_strategy,
+                    "browserEscalationSuppressed": browser_escalation_suppressed(
+                        self._extraction_quality_metadata(
+                            url=url,
+                            task_type=task_type,
+                            source_mode=source_mode,
+                            page_kind=page_kind,
+                            content="",
+                            structured_data={},
+                            expected_fields=expected_fields,
+                            quality="extract_garbage",
+                            extraction_method=backend_used or "none",
+                            raw_source_text="",
+                        ),
+                        "extract_garbage",
+                    ),
                     **self._extraction_quality_metadata(
                         url=url,
                         task_type=task_type,
@@ -1823,6 +1881,21 @@ class WebExtractTool(BaseTool):
                     "networkError": network_error,
                     "redirectedUrl": redirected_url,
                     "transportStrategy": transport_strategy,
+                    "browserEscalationSuppressed": browser_escalation_suppressed(
+                        self._extraction_quality_metadata(
+                            url=url,
+                            task_type=task_type,
+                            source_mode=source_mode,
+                            page_kind=page_kind,
+                            content="",
+                            structured_data={},
+                            expected_fields=expected_fields,
+                            quality="extract_garbage",
+                            extraction_method=backend_used or "none",
+                            raw_source_text="",
+                        ),
+                        "extract_garbage",
+                    ),
                     **self._extraction_quality_metadata(
                         url=url,
                         task_type=task_type,
@@ -1871,6 +1944,7 @@ class WebExtractTool(BaseTool):
                 "missingFields": missing_fields,
                 "interactionRequired": interaction_required,
                 "pageKind": page_kind,
+                "browserEscalationSuppressed": browser_escalation_suppressed(extraction_metadata, quality),
                 **extraction_metadata,
             },
             duration_ms=duration_ms,
@@ -1883,6 +1957,7 @@ class WebExtractTool(BaseTool):
                 "pageKind": page_kind,
                 "quality": quality,
                 "interactionRequired": interaction_required,
+                "browserEscalationSuppressed": browser_escalation_suppressed(extraction_metadata, quality),
                 **extraction_metadata,
             },
         )

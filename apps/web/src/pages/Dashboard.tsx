@@ -131,6 +131,7 @@ export default function Dashboard() {
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', marginTop: '1.25rem' }}>
             <Link to="/chat" className="btn-primary">Talk To RawClaw</Link>
             <Link to="/operator" className="btn-ghost">Open Operator</Link>
+            <Link to="/app-builder" className="btn-ghost">Open App Builder</Link>
             <Link to="/memory" className="btn-ghost">Review Memory</Link>
             <Link to="/provenance" className="btn-ghost">Open Control Room</Link>
             <Link to="/learning" className="btn-ghost">Review Lessons</Link>
@@ -170,6 +171,7 @@ export default function Dashboard() {
         <Panel title="Quick Links">
           <div style={{ display: 'grid', gap: '0.55rem' }}>
             <QuickLink to="/agents" label="Choose assistant pack" />
+            <QuickLink to="/app-builder" label="Build controllable apps" />
             <QuickLink to="/tasks" label="Track commitments" />
             <QuickLink to="/models" label="Tune model routing" />
             <QuickLink to="/settings" label="Edit operator files" />

@@ -218,6 +218,9 @@ model Message {
   promptVersionHash String?
   reviewerPromptVersionHash String?
   workflowPromptIds String? // JSON string array
+  branchId    String?
+  parentMessageId String?
+  branchSequence Int?
 
   createdAt DateTime @default(now())
   
@@ -427,4 +430,126 @@ model Document {
   updatedAt     DateTime @updatedAt
 
   @@map("documents")
+}
+
+model AppBuilderProject {
+  id                        String                  @id @default(cuid())
+  name                      String
+  slug                      String                  @unique
+  description               String?
+  workspaceId               String                  @default("default")
+  appType                   String                  @default("web_app")
+  sourceType                String                  @default("generated")
+  templateId                String?
+  status                    String                  @default("draft")
+  controlMode               String                  @default("observe_only")
+  approvalRequired          Boolean                 @default(true)
+  approvalGranted           Boolean                 @default(false)
+  requestedPermissionsJson  String?
+  requestedCapabilitiesJson String?
+  sourcePath                String?
+  managedPath               String?
+  deployPath                String?
+  exportPath                String?
+  latestManifestId          String?
+  latestRunId               String?
+  metadataJson              String?
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+  manifests                 AppBuilderManifest[]
+  runs                      AppBuilderRun[]
+  registryRecords           AppRegistryRecord[]
+  adapters                  ImportedProjectAdapter[]
+
+  @@index([workspaceId, status])
+  @@map("app_builder_projects")
+}
+
+model AppBuilderManifest {
+  id         String            @id @default(cuid())
+  projectId  String
+  version    String
+  manifestJson String
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  project    AppBuilderProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@map("app_builder_manifests")
+}
+
+model AppBuilderRun {
+  id          String            @id @default(cuid())
+  projectId   String
+  phase       String
+  status      String            @default("queued")
+  title       String
+  summary     String?
+  errorMessage String?
+  gatewayRunId String?
+  queueJobId  String?
+  workerId    String?
+  outputJson  String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  project     AppBuilderProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@index([gatewayRunId])
+  @@map("app_builder_runs")
+}
+
+model AppRegistryRecord {
+  id                String             @id @default(cuid())
+  projectId         String?
+  appId             String
+  version           String
+  sourceType        String
+  status            String             @default("pending")
+  manifestJson      String
+  controlEndpoint   String
+  eventStreamEndpoint String
+  deploymentLocation String?
+  healthStatus      String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  project           AppBuilderProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([appId, status])
+  @@map("app_registry_records")
+}
+
+model ImportedProjectAdapter {
+  id          String            @id @default(cuid())
+  projectId   String
+  adapterType String
+  sourcePath  String
+  outputPath  String?
+  status      String            @default("draft")
+  warningsJson String?
+  metadataJson String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  project     AppBuilderProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@map("imported_project_adapters")
+}
+
+model AppBuilderBlobRef {
+  id          String   @id @default(cuid())
+  workspaceId String
+  blobHash    String
+  snapshotId  String
+  projectId   String
+  filePath    String
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, blobHash, snapshotId, filePath])
+  @@index([workspaceId, blobHash])
+  @@index([snapshotId])
+  @@map("app_builder_blob_refs")
 }

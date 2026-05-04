@@ -17,8 +17,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
-    // Rely exclusively on environment, no hardcoded defaults per Requirement 5
-    const redisUrl = this.configService.getOrThrow<string>('REDIS_URL');
+    const redisUrl = this.configService.getOrThrow<string>('redisUrl');
     this.client = new Redis(redisUrl, this.connectionOptions);
   }
 
@@ -27,12 +26,31 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async ping(): Promise<boolean> {
+    return this.pingClient(this.client);
+  }
+
+  private async pingClient(client: Redis): Promise<boolean> {
     try {
-      const response = await this.client.ping();
+      const response = await client.ping();
       return response === 'PONG';
     } catch {
       return false;
     }
+  }
+
+  async waitUntilReady(timeoutMs = 5000, intervalMs = 250): Promise<boolean> {
+    return this.waitForClientReady(this.client, timeoutMs, intervalMs);
+  }
+
+  private async waitForClientReady(client: Redis, timeoutMs = 5000, intervalMs = 250): Promise<boolean> {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if (await this.pingClient(client)) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    return false;
   }
 
   async saveSessionState(sessionId: string, state: SessionState): Promise<void> {
@@ -70,6 +88,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.del(key);
   }
 
+  async evalScript<T = unknown>(script: string, keys: string[], args: Array<string | number>): Promise<T> {
+    return await this.client.eval(script, keys.length, ...keys, ...args.map((arg) => String(arg))) as T;
+  }
+
   async publish(channel: string, payload: unknown): Promise<void> {
     await this.client.publish(channel, JSON.stringify(payload));
   }
@@ -99,8 +121,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     channel: string,
     onMessage: (payload: string) => void | Promise<void>,
   ): Promise<() => Promise<void>> {
-    const redisUrl = this.configService.getOrThrow<string>('REDIS_URL');
+    const redisUrl = this.configService.getOrThrow<string>('redisUrl');
     const subscriber = new Redis(redisUrl, this.connectionOptions);
+    const ready = await this.waitForClientReady(subscriber, 5000, 250);
+    if (!ready) {
+      subscriber.disconnect();
+      throw new Error(`Redis subscriber for channel '${channel}' is not ready.`);
+    }
     await subscriber.subscribe(channel);
     subscriber.on('message', (_channel, message) => {
       if (_channel === channel) {
@@ -114,5 +141,60 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         subscriber.disconnect();
       }
     };
+  }
+
+  async xGroupCreate(stream: string, group: string, startId = '$'): Promise<void> {
+    try {
+      await this.client.xgroup('CREATE', stream, group, startId, 'MKSTREAM');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('BUSYGROUP')) {
+        throw error;
+      }
+    }
+  }
+
+  async xAdd(stream: string, values: Record<string, string>, maxLength?: number): Promise<string> {
+    const pairs = Object.entries(values).flatMap(([key, value]) => [key, value]);
+    if (maxLength && maxLength > 0) {
+      return await (this.client as any).xadd(stream, 'MAXLEN', '~', String(maxLength), '*', ...pairs) as string;
+    }
+    return await (this.client as any).xadd(stream, '*', ...pairs) as string;
+  }
+
+  async xReadGroup(
+    group: string,
+    consumer: string,
+    stream: string,
+    count = 1,
+    blockMs = 0,
+  ): Promise<Array<{ stream: string; entries: Array<{ id: string; values: Record<string, string> }> }>> {
+    const args: Array<string | number> = ['GROUP', group, consumer, 'COUNT', count];
+    if (blockMs > 0) {
+      args.push('BLOCK', blockMs);
+    }
+    args.push('STREAMS', stream, '>');
+    const response = await (this.client as any).xreadgroup(...args);
+    if (!response) {
+      return [];
+    }
+
+    return (response as Array<[string, Array<[string, string[]]>]>).map(([streamName, entries]) => ({
+      stream: streamName,
+      entries: entries.map(([id, rawValues]) => {
+        const values: Record<string, string> = {};
+        for (let index = 0; index < rawValues.length; index += 2) {
+          values[rawValues[index]] = rawValues[index + 1];
+        }
+        return { id, values };
+      }),
+    }));
+  }
+
+  async xAck(stream: string, group: string, ...ids: string[]): Promise<number> {
+    if (!ids.length) {
+      return 0;
+    }
+    return this.client.xack(stream, group, ...ids);
   }
 }

@@ -1,10 +1,10 @@
 import { Controller, Post, Body, Get, Param, Res, UseGuards } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ChatService, SessionWithMessages } from './chat.service';
-import { ChatControlState, ChatRequest, ModelInfo } from '@rawclaw/shared';
+import { ChatControlState, ChatNluOverride, ChatRequest, ModelInfo } from '@rawclaw/shared';
 import { firstValueFrom } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
-import { Request, Response } from 'express';
+import type { Response } from 'express';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { ChatOrchestratorService } from './chat-orchestrator.service';
 
@@ -81,6 +81,7 @@ export class ChatController {
       agentId?: string;
       temperature?: number;
       top_p?: number;
+      nluOverride?: ChatNluOverride | null;
     },
     @Res() res: Response
   ) {
@@ -88,7 +89,7 @@ export class ChatController {
       body.sessionId, 
       body.messageId, 
       res,
-      { model: body.model, complexity: body.complexity, agentId: body.agentId, temperature: body.temperature, top_p: body.top_p }
+      { model: body.model, complexity: body.complexity, agentId: body.agentId, temperature: body.temperature, top_p: body.top_p, nluOverride: body.nluOverride }
     );
   }
 

@@ -1,0 +1,108 @@
+{
+  "id": "snapshot-011fdfb6-fe82-4fa3-a7df-552d5818cd42",
+  "projectId": "cmonwzgxs000jwks50hpd7kya",
+  "baseSnapshotId": "snapshot-7ece683a-b6cf-4141-9836-31468933eb22",
+  "status": "applied",
+  "validationPassedAt": null,
+  "manifestPath": "E:\\2026 final projects\\rawclaw\\data\\app-builder\\projects\\a-clean-web-calculator-3\\.app-builder\\snapshots\\snapshot-011fdfb6-fe82-4fa3-a7df-552d5818cd42\\manifest.json",
+  "fileHashes": {
+    "docs/AGENT_MEMORY.md": "f4f0d31eb713c46bad746d445a7c3f901768ec01960278c766c571fb9c0daf0a",
+    "docs/DECISIONS.md": "c96fc48d1ca40b75fa9102a8017dea49af0fca854c2ae62ec3fab9e205a65890",
+    "docs/PLAN.md": "d6c6ed84d0616b1b88fd024b8f510ac9ecdeb894848abb98b4bba238d1d3ea3d",
+    "docs/PROJECT_BRIEF.md": "fcf9bafc67299f25df00f554cb26faba29d4402e0c7443efaaeacea6077f992b",
+    "docs/STATUS.md": "d6b38f8e7c3d60b3f8026ec1b9742bea538d4cb2a72b7a3c3f71aa31c219a5c7",
+    "docs/TASKS.md": "aa1eb1c8c2f8baba7e0425cf2c7a04409e044a626a5c90ef9eff5d85e65e61e1",
+    "index.html": "5dd42d402d3435d5d40f6013af20c347b4f40f090ab452ade8de2e5b13635c8e",
+    "package.json": "080193f020855be58aad9e20cee5746758f72a9faa569cc0b5d25233820cbe10",
+    "rawclaw.app.manifest.json": "2660ba4f176305503a74345176f8e4f7de40fa30ca9b8c7eb7096dee5f129eeb",
+    "README.md": "ab43e643c7bb8495407dc492c9931d1e2e2f7bcff72e47c2e05720e7a76166a1",
+    "src/App.test.tsx": "0ae54f1eebf97d8307553c764d1d1fa80d5a0ea8ad371fea8380cf5ac23839f3",
+    "src/App.tsx": "51f2036c9dc7207463869ed72545ee07617b9dbe02962d10c8dcce5ea7e9a9b3",
+    "src/components/Calculator.tsx": "a7992bfe400993d6d3939dbdc1dd99eb377939be894385242d901f292eaa9c92",
+    "src/main.tsx": "240903a71d5933c9b6910e054295ec4551c18803cd024ad6ef6d52134d96202a",
+    "src/rawclaw-contract.test.ts": "86a96073bc0a139348f095df9d5a698b4e4432fd973fdc3b2081d3e0e364bfe5",
+    "src/rawclaw-sdk.ts": "8ebafe28d1723bd48d8a2da5cb4c9c1c648fb869f0dadba45256e970d193aa68",
+    "src/styles.css": "6a67a2a66d5cc17964fe9d1cd058762d35605e61ccb6dd5e0172228f9a2cdf79",
+    "tsconfig.json": "cf007aba8fa663c79d0e474569ddb6f9267261b3e74310692f8010b3a41b82c8",
+    "vite.config.ts": "74cf369bfc627b81e41183200f614448dfc6f98dd3932802002f189171f6a3f5"
+  },
+  "files": {
+    "docs/AGENT_MEMORY.md": {
+      "hash": "f4f0d31eb713c46bad746d445a7c3f901768ec01960278c766c571fb9c0daf0a",
+      "size": 215
+    },
+    "docs/DECISIONS.md": {
+      "hash": "c96fc48d1ca40b75fa9102a8017dea49af0fca854c2ae62ec3fab9e205a65890",
+      "size": 160
+    },
+    "docs/PLAN.md": {
+      "hash": "d6c6ed84d0616b1b88fd024b8f510ac9ecdeb894848abb98b4bba238d1d3ea3d",
+      "size": 361
+    },
+    "docs/PROJECT_BRIEF.md": {
+      "hash": "fcf9bafc67299f25df00f554cb26faba29d4402e0c7443efaaeacea6077f992b",
+      "size": 429
+    },
+    "docs/STATUS.md": {
+      "hash": "d6b38f8e7c3d60b3f8026ec1b9742bea538d4cb2a72b7a3c3f71aa31c219a5c7",
+      "size": 153
+    },
+    "docs/TASKS.md": {
+      "hash": "aa1eb1c8c2f8baba7e0425cf2c7a04409e044a626a5c90ef9eff5d85e65e61e1",
+      "size": 1060
+    },
+    "index.html": {
+      "hash": "5dd42d402d3435d5d40f6013af20c347b4f40f090ab452ade8de2e5b13635c8e",
+      "size": 309
+    },
+    "package.json": {
+      "hash": "080193f020855be58aad9e20cee5746758f72a9faa569cc0b5d25233820cbe10",
+      "size": 613
+    },
+    "rawclaw.app.manifest.json": {
+      "hash": "2660ba4f176305503a74345176f8e4f7de40fa30ca9b8c7eb7096dee5f129eeb",
+      "size": 4067
+    },
+    "README.md": {
+      "hash": "ab43e643c7bb8495407dc492c9931d1e2e2f7bcff72e47c2e05720e7a76166a1",
+      "size": 627
+    },
+    "src/App.test.tsx": {
+      "hash": "0ae54f1eebf97d8307553c764d1d1fa80d5a0ea8ad371fea8380cf5ac23839f3",
+      "size": 773
+    },
+    "src/App.tsx": {
+      "hash": "51f2036c9dc7207463869ed72545ee07617b9dbe02962d10c8dcce5ea7e9a9b3",
+      "size": 429
+    },
+    "src/components/Calculator.tsx": {
+      "hash": "a7992bfe400993d6d3939dbdc1dd99eb377939be894385242d901f292eaa9c92",
+      "size": 4397
+    },
+    "src/main.tsx": {
+      "hash": "240903a71d5933c9b6910e054295ec4551c18803cd024ad6ef6d52134d96202a",
+      "size": 238
+    },
+    "src/rawclaw-contract.test.ts": {
+      "hash": "86a96073bc0a139348f095df9d5a698b4e4432fd973fdc3b2081d3e0e364bfe5",
+      "size": 1297
+    },
+    "src/rawclaw-sdk.ts": {
+      "hash": "8ebafe28d1723bd48d8a2da5cb4c9c1c648fb869f0dadba45256e970d193aa68",
+      "size": 4801
+    },
+    "src/styles.css": {
+      "hash": "6a67a2a66d5cc17964fe9d1cd058762d35605e61ccb6dd5e0172228f9a2cdf79",
+      "size": 4464
+    },
+    "tsconfig.json": {
+      "hash": "cf007aba8fa663c79d0e474569ddb6f9267261b3e74310692f8010b3a41b82c8",
+      "size": 599
+    },
+    "vite.config.ts": {
+      "hash": "74cf369bfc627b81e41183200f614448dfc6f98dd3932802002f189171f6a3f5",
+      "size": 112
+    }
+  },
+  "createdAt": "2026-05-04T06:57:11.131Z"
+}

@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { spawn } from 'child_process';
 import { PrismaService } from './prisma.service';
 import {
   CompleteHarnessProcessRequest,
   CompleteHarnessRunRequest,
+  HarnessRunStatus,
   HarnessProcessRecord,
   HarnessRunRecord,
   StartHarnessProcessRequest,
@@ -171,6 +173,85 @@ export class ProcessControllerService {
       },
     });
     return run ? this.mapRun(run, true) : null;
+  }
+
+  async cancelRun(
+    id: string,
+    input: {
+      status?: Extract<HarnessRunStatus, 'cancelled' | 'superseded' | 'stale'>;
+      summary?: string;
+      metadata?: JsonObject;
+    } = {},
+  ): Promise<HarnessRunRecord | null> {
+    const run = await this.prisma.harnessRun.findUnique({
+      where: { id },
+      include: { processes: true },
+    });
+    if (!run) {
+      return null;
+    }
+    const status = input.status || 'cancelled';
+    const processStatus = status === 'stale' ? 'cancelled' : status;
+    for (const harnessProcess of run.processes || []) {
+      if (harnessProcess.status === 'running' && harnessProcess.pid) {
+        await this.terminateProcessTree(harnessProcess.pid);
+      }
+      if (harnessProcess.status === 'running' || harnessProcess.status === 'queued') {
+        await this.updateProcess(harnessProcess.id, {
+          status: processStatus,
+          summary: {
+            cancelledByHarness: true,
+            reason: input.summary || status,
+          },
+          metadata: input.metadata || {},
+        });
+      }
+    }
+    return this.completeRun(id, {
+      status,
+      summary: {
+        status,
+        reason: input.summary || status,
+      },
+      metadata: input.metadata || {},
+      artifacts: this.parseJson<string[]>(run.artifactPaths, []),
+    });
+  }
+
+  private async terminateProcessTree(pid: number): Promise<void> {
+    try {
+      globalThis.process.kill(pid, 'SIGTERM');
+    } catch {
+      return;
+    }
+    const exited = await this.waitForExit(pid, 5_000);
+    if (exited) return;
+    if (globalThis.process.platform === 'win32') {
+      await new Promise<void>((resolve) => {
+        const child = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true });
+        child.once('exit', () => resolve());
+        child.once('error', () => resolve());
+      });
+      return;
+    }
+    try {
+      globalThis.process.kill(pid, 'SIGKILL');
+    } catch {
+      // Process may have exited after the grace period.
+    }
+  }
+
+  private async waitForExit(pid: number, timeoutMs: number): Promise<boolean> {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      try {
+        globalThis.process.kill(pid, 0);
+      } catch {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return false;
   }
 
   async startProcess(runId: string, input: StartHarnessProcessRequest): Promise<HarnessProcessRecord> {

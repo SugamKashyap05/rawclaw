@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,23 @@ class ResearchPlan(BaseModel):
     exact_structured_data_needed: bool = False
 
 
+class ResearchContext(BaseModel):
+    query: str
+    task_type: str = ""
+    category: str = ""
+    search_query: str = ""
+    selected_urls: List[str] = Field(default_factory=list)
+    query_classification: Dict[str, Any] = Field(default_factory=dict)
+    search_status: str = ""
+    fetch_status: str = ""
+    fetch_failure_state: str = ""
+    pre_evidence: Dict[str, Any] = Field(default_factory=dict)
+    extraction_decision: Dict[str, Any] = Field(default_factory=dict)
+    evidence_assessment: Dict[str, Any] = Field(default_factory=dict)
+    answerability: Dict[str, Any] = Field(default_factory=dict)
+    confidence_risk: Dict[str, Any] = Field(default_factory=dict)
+
+
 class ExtractionDecision(BaseModel):
     page_kind: str
     backend_order: List[str] = Field(default_factory=list)
@@ -30,6 +47,17 @@ class ExtractionDecision(BaseModel):
     should_attempt_extract: bool = False
     has_viable_search_results: bool = False
     ranked_results: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PreEvidenceDecision(BaseModel):
+    original_result_count: int = 0
+    filtered_result_count: int = 0
+    kept_results: List[Dict[str, Any]] = Field(default_factory=list)
+    rejected_results: List[Dict[str, Any]] = Field(default_factory=list)
+    reason: str = ""
+    warning_flags: List[str] = Field(default_factory=list)
+    snippet_only_insufficient: bool = False
+    preferred_domains: List[str] = Field(default_factory=list)
 
 
 class EvidenceAssessment(BaseModel):
@@ -52,6 +80,69 @@ class EvidenceAssessment(BaseModel):
     freshness_summary: str = ""
 
 
+class ConfidenceRiskDecision(BaseModel):
+    mode: Literal["exact_answer", "limited_answer", "refused_answer"]
+    reason: str = ""
+    failure_state: str = ""
+    evidence_verdict: Dict[str, Any] = Field(default_factory=dict)
+    synthesis: Dict[str, Any] = Field(default_factory=dict)
+    loyalty: Dict[str, Any] = Field(default_factory=dict)
+
+
+class StrategistDecision(BaseModel):
+    lane: Literal["direct", "tool", "research"]
+    intent: str = "general"
+    riskLevel: Literal["low", "medium", "high"] = "low"
+    freshnessMatters: bool = False
+    directRouteMatched: bool = False
+    directRoute: Dict[str, Any] = Field(default_factory=dict)
+    expectedEvidenceType: str = "none"
+    allowedToolScope: List[str] = Field(default_factory=list)
+    searchQueries: List[str] = Field(default_factory=list)
+    reason: str = ""
+
+
+class ScoutResult(BaseModel):
+    lane: Literal["direct", "tool", "research"]
+    status: str = "not_started"
+    directRouteUsed: bool = False
+    toolCalls: List[str] = Field(default_factory=list)
+    searchQueries: List[str] = Field(default_factory=list)
+    selectedUrls: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    evidenceAcquisitionSummary: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AnalystResult(BaseModel):
+    mode: Literal["exact_answer", "limited_answer", "refused_answer"]
+    failureState: str = ""
+    evidenceVerdict: Dict[str, Any] = Field(default_factory=dict)
+    synthesis: Dict[str, Any] = Field(default_factory=dict)
+    loyalty: Dict[str, Any] = Field(default_factory=dict)
+    answerPreview: str = ""
+    summary: str = ""
+
+
+class GuardianVerdict(BaseModel):
+    approved: bool
+    finalMode: Literal["exact_answer", "limited_answer", "refused_answer"]
+    reason: str = ""
+    feedback: str = ""
+    failClosed: bool = False
+    reviewer: str = "local_guardian"
+    answerPreview: str = ""
+
+
+class RoleTrace(BaseModel):
+    sessionId: str
+    query: str
+    strategist: Optional[StrategistDecision] = None
+    scout: Optional[ScoutResult] = None
+    analyst: Optional[AnalystResult] = None
+    guardian: Optional[GuardianVerdict] = None
+    finalOutcome: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AnswerabilityDecision(BaseModel):
     mode: Literal["exact", "partial", "abstain"]
     limitations: List[str] = Field(default_factory=list)
@@ -64,3 +155,24 @@ class FinalDraft(BaseModel):
     confidence: str = "limited"
     citations_or_sources: List[str] = Field(default_factory=list)
     limitations: List[str] = Field(default_factory=list)
+
+
+class AdaptiveDomainProfile(BaseModel):
+    domain: str
+    preferred_transport_strategy: Optional[str] = None
+    preferred_extract_backend: Optional[str] = None
+    success_count: int = 0
+    failure_count: int = 0
+    trusted_sources: List[str] = Field(default_factory=list)
+    last_success_at: Optional[str] = None
+    last_failure_at: Optional[str] = None
+
+
+class AdaptiveFailureRecord(BaseModel):
+    domain: str
+    stage: str
+    failure_kind: str
+    url: str = ""
+    transport_strategy: Optional[str] = None
+    details: Optional[str] = None
+    created_at: str

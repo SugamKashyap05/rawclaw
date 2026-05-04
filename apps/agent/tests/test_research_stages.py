@@ -1,13 +1,21 @@
+from pathlib import Path
+from uuid import uuid4
+
 from src.contracts.tool import ToolResult
 from src.executor import Executor
 from src.research import (
+    ConfidenceRiskModelStage,
     AnswerabilityGateStage,
+    AdaptiveFetchLayer,
+    AdaptiveResearchStore,
     EvidenceJudgeStage,
     ExtractRouterStage,
     FinalWriterStage,
+    MultiAttemptExtractCoordinator,
+    PreEvidenceFilterStage,
     ResearchPlannerStage,
 )
-from src.research.types import EvidenceAssessment, ResearchPlan
+from src.research.types import AnswerabilityDecision, EvidenceAssessment, ResearchPlan
 
 
 def _tool_result(output=None, error=None):
@@ -72,6 +80,119 @@ def test_extract_router_chooses_table_backends_for_standings():
     assert decision.backend_order[:3] == ["crawl4ai", "playwright", "opencli"]
     assert decision.candidate_urls[0] == "https://www.iplt20.com/points-table/men"
     assert decision.should_attempt_extract is True
+
+
+def test_pre_evidence_filter_prefers_official_results_for_structured_tasks():
+    filter_stage = PreEvidenceFilterStage(
+        rank_search_results=lambda _query, _results: [
+            {
+                "url": "https://random.example.com/post",
+                "score": 4,
+                "item": {
+                    "title": "Fan blog recap",
+                    "url": "https://random.example.com/post",
+                    "snippet": "CSK remain in the race.",
+                    "quality_tags": ["search_snippet"],
+                },
+            },
+            {
+                "url": "https://www.iplt20.com/matches/points-table",
+                "score": 14,
+                "item": {
+                    "title": "IPL 2026 Points Table",
+                    "url": "https://www.iplt20.com/matches/points-table",
+                    "snippet": "Official points table.",
+                    "quality_tags": ["official_page"],
+                },
+            },
+        ]
+    )
+    plan = ResearchPlan(
+        task_type="standings_brief",
+        category="sports_standings",
+        fetch_required=True,
+        exact_structured_data_needed=True,
+        domain_bias=["iplt20.com"],
+    )
+    search_result = _tool_result(
+        {
+            "results": [
+                {"title": "Fan blog recap", "url": "https://random.example.com/post", "snippet": "CSK remain in the race.", "quality_tags": ["search_snippet"]},
+                {"title": "IPL 2026 Points Table", "url": "https://www.iplt20.com/matches/points-table", "snippet": "Official points table.", "quality_tags": ["official_page"]},
+            ]
+        }
+    )
+
+    filtered_result, decision = filter_stage.run("csk standing in ipl point tabel", plan, search_result)
+
+    assert decision.filtered_result_count == 1
+    assert decision.preferred_domains == ["iplt20.com"]
+    assert filtered_result.output["results"][0]["url"] == "https://www.iplt20.com/matches/points-table"
+
+
+def test_confidence_risk_model_marks_empty_body_as_refused():
+    stage = ConfidenceRiskModelStage()
+    plan = ResearchPlan(task_type="page_read", category="technical_research")
+    assessment = EvidenceAssessment(relevant=True, usable=False, abstain=True)
+    answerability = AnswerabilityDecision(mode="abstain")
+    fetch_result = _tool_result(
+        {
+            "kind": "content",
+            "title": "OpenAI API Changelog",
+            "content": "[Page returned empty body. JavaScript rendering required.]",
+            "wordCount": 0,
+            "tier": "failed",
+            "confidence": 0.05,
+            "jsRenderSuspected": True,
+            "jsFallbackDetected": True,
+            "jsFallbackReason": 'spa_empty_shell: <div id="__next"></div>',
+        }
+    )
+
+    decision = stage.run("openai changelog", plan, assessment, answerability, fetch_result)
+
+    assert decision.mode == "refused_answer"
+    assert decision.failure_state == "empty_body_js_required"
+
+
+def test_multi_attempt_extract_coordinator_uses_domain_preference():
+    db_dir = Path("apps/agent/tests/artifacts/tmp")
+    db_dir.mkdir(parents=True, exist_ok=True)
+    db_path = db_dir / f"adaptive-{uuid4().hex}.db"
+    store = AdaptiveResearchStore(str(db_path))
+    store.record_extract_success(
+        url="https://www.python.org/downloads/release/python-3144/",
+        page_kind="news/article",
+        backend_order=["crawl4ai", "reader", "playwright", "web_fetch"],
+        successful_backend="reader",
+    )
+    layer = AdaptiveFetchLayer(store)
+    coordinator = MultiAttemptExtractCoordinator(layer)
+    plan = ResearchPlan(task_type="news_summary", category="breaking_news", fetch_required=True)
+    decision = ExtractRouterStage(
+        rank_search_results=lambda _query, _results: [],
+        search_result_has_viable_results=lambda _result, _query: True,
+    ).run(
+        "python 3.14.4 release notes",
+        plan,
+        _tool_result(
+            {
+                "results": [
+                    {
+                        "title": "Python 3.14.4",
+                        "url": "https://www.python.org/downloads/release/python-3144/",
+                        "snippet": "Official Python release page.",
+                        "quality_tags": ["official_page"],
+                    }
+                ]
+            }
+        ),
+    )
+
+    attempt_plan = coordinator.run(plan, decision)
+
+    assert attempt_plan
+    assert attempt_plan[0].backend_order[0] == "reader"
 
 
 def test_evidence_judge_marks_official_but_noisy_extract_as_relevant_but_unusable():

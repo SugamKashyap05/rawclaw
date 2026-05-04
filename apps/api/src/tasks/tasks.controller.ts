@@ -14,7 +14,7 @@ import {
   HttpCode,
   UseGuards,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { TasksService } from './tasks.service';
 import { ScheduleService } from './schedule.service';
 import { CreateTaskDto } from './dto/create-task.dto';

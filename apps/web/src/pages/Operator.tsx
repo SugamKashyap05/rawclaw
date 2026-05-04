@@ -126,7 +126,10 @@ export default function Operator() {
     return snapshot.subagentTree.filter(includeNode);
   }, [selectedSessionId, snapshot.subagentTree]);
 
-  const runSupportsRetry = selectedRun?.kind === 'automation' || selectedRun?.kind === 'task';
+  const runSupportsRetry =
+    selectedRun?.kind === 'automation'
+    || selectedRun?.kind === 'task'
+    || selectedRun?.kind === 'app_builder';
   const runSupportsCancel = selectedRun?.status === 'running' || selectedRun?.status === 'queued';
 
   const performAgentAction = async (agent: ActiveAgentRuntimeState, mode: 'pause' | 'resume') => {
@@ -175,6 +178,7 @@ export default function Operator() {
           </div>
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
             <Link to="/gateway" className="btn-ghost" style={{ textDecoration: 'none' }}>Gateway Runtime</Link>
+            <Link to="/app-builder" className="btn-ghost" style={{ textDecoration: 'none' }}>App Builder</Link>
             <Link to="/provenance" className="btn-ghost" style={{ textDecoration: 'none' }}>Provenance</Link>
             <button className="btn-ghost" onClick={() => void loadSnapshot()} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
               <FiRefreshCw /> {loading ? 'Refreshing...' : 'Refresh operator'}
@@ -284,6 +288,14 @@ export default function Operator() {
                     <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '0.3rem' }}>
                       {run.kind} | {run.id}
                     </div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.2rem' }}>
+                      {[
+                        run.executionMode ? `mode ${run.executionMode}` : null,
+                        run.queueType ? `queue ${run.queueType}` : null,
+                        run.workerId ? `worker ${run.workerId}` : null,
+                        run.guardianOutcome ? `guardian ${run.guardianOutcome.status}` : null,
+                      ].filter(Boolean).join(' | ') || 'Foreground route without worker assignment yet.'}
+                    </div>
                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', marginTop: '0.25rem' }}>
                       {run.summary || 'No run summary captured yet.'}
                     </div>
@@ -375,6 +387,24 @@ export default function Operator() {
                     <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                       {selectedRun.summary || 'No run summary captured.'}
                     </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.8rem' }}>
+                      <DetailCluster title="Execution">
+                        <DetailRow label="Mode" value={selectedRun.executionMode || 'foreground'} />
+                        <DetailRow label="Queue" value={selectedRun.queueType || 'none'} />
+                        <DetailRow label="Worker" value={selectedRun.workerId || 'none'} mono />
+                        <DetailRow label="Heartbeat" value={selectedRun.heartbeatAt ? formatTimestamp(selectedRun.heartbeatAt) : 'n/a'} />
+                      </DetailCluster>
+                      <DetailCluster title="Guardian">
+                        <DetailRow label="Outcome" value={selectedRun.guardianOutcome?.status || 'pending'} />
+                        <DetailRow label="Reviewer" value={selectedRun.guardianOutcome?.reviewer || 'n/a'} mono />
+                        <DetailRow label="Reason" value={selectedRun.guardianOutcome?.reason || 'No explicit guardian note captured.'} />
+                      </DetailCluster>
+                      <DetailCluster title="Queue Metadata">
+                        <DetailRow label="Queued Roles" value={selectedRun.queueMetadata?.queuedRoles?.length ? selectedRun.queueMetadata.queuedRoles.join(', ') : 'none'} />
+                        <DetailRow label="Worker Assignments" value={selectedRun.queueMetadata?.workerAssignments?.length ? selectedRun.queueMetadata.workerAssignments.join(', ') : 'none'} mono />
+                        <DetailRow label="Fallback Used" value={selectedRun.queueMetadata?.queueFallbackUsed ? 'yes' : 'no'} />
+                      </DetailCluster>
+                    </div>
                     {selectedRun.provenance ? (
                       <div style={{ borderTop: '1px solid var(--border-glass)', paddingTop: '0.8rem', display: 'grid', gap: '0.25rem' }}>
                         <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>PROVENANCE SUMMARY</div>
@@ -402,6 +432,11 @@ export default function Operator() {
                       {selectedRun.bindingId ? (
                         <Link to={`/gateway?route=${encodeURIComponent(selectedRun.bindingId)}`} className="btn-ghost" style={{ textDecoration: 'none' }}>
                           Reveal Route
+                        </Link>
+                      ) : null}
+                      {selectedRun.kind === 'app_builder' ? (
+                        <Link to="/app-builder" className="btn-ghost" style={{ textDecoration: 'none' }}>
+                          Open App Builder
                         </Link>
                       ) : null}
                     </div>

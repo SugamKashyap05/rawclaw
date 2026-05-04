@@ -43,6 +43,10 @@ from src.sessions import SessionManager
 from src.tools.registry import TOOL_REGISTRY
 from src.tools.mcp_gateway import MCPGateway
 from src.tools.mcp_tool_wrapper import wrap_mcp_tools
+from src.tools.builtin.browser_capability import (
+    check_browser_page_read_capability,
+    reset_browser_capability_cache,
+)
 from src.tools.skill_loader import SkillLoader
 from src.tools.skill_researcher import SkillResearcher
 from src.tools.mcp_discovery import MCPDiscovery
@@ -141,6 +145,13 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 50)
     logger.info("RawClaw Agent starting up...")
     logger.info("=" * 50)
+    logger.info(
+        "Phase 3 runtime flags: phase3=%s sandbox_worker_pool=%s api=%s redis=%s",
+        os.getenv("RAWCLAW_PHASE3_ENABLED", "true"),
+        os.getenv("SANDBOX_WORKER_POOL_ENABLED", "true"),
+        os.getenv("RAWCLAW_API_URL", os.getenv("API_URL", "http://localhost:3000")),
+        os.getenv("RAWCLAW_REDIS_URL", os.getenv("REDIS_URL", "redis://localhost:6379")),
+    )
 
     # 1. Load and log SandboxConfig
     sandbox_config = get_sandbox_config()
@@ -263,6 +274,10 @@ async def lifespan(app: FastAPI):
             except ValueError as e:
                 logger.warning(f"MCP tool registration skipped: {e}")
 
+        await reset_browser_capability_cache()
+        browser_page_read_available = await check_browser_page_read_capability()
+        logger.info("Browser page-read capability available: %s", browser_page_read_available)
+
         # Index tools for semantic discovery
         mcp_discovery = getattr(app.state, "mcp_discovery", None)
         if mcp_discovery:
@@ -371,6 +386,30 @@ async def diagnose_web_fetch(url: str = "https://example.com"):
     return {
         "diagnosis": await web_fetch_tool.diagnose_connectivity(url),
     }
+
+
+@app.get("/api/tools/web_fetch/adaptive_profile")
+async def diagnose_web_fetch_adaptive_profile(url: str = "https://example.com"):
+    """Returns adaptive fetch diagnostics for a domain/url."""
+    from src.tools.builtin.web_fetch import WebFetchTool
+
+    tool = TOOL_REGISTRY.get_optional("web_fetch")
+    web_fetch_tool = tool if isinstance(tool, WebFetchTool) else WebFetchTool()
+    return {
+        "adaptiveProfile": web_fetch_tool.adaptive_diagnostics(url),
+    }
+
+
+@app.get("/api/agent/debug/role-trace")
+async def get_agent_role_trace(session_id: str):
+    """Returns the latest in-process Strategist/Scout/Analyst/Guardian trace for a session."""
+    role_trace = EXECUTOR.get_role_trace(session_id)
+    if not role_trace:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"No role trace found for session '{session_id}'"},
+        )
+    return {"roleTrace": role_trace}
 
 
 @app.get("/api/tools/{tool_name}")
@@ -566,6 +605,10 @@ async def mcp_connect(request: Request):
                 TOOL_REGISTRY.register(w)
             except ValueError as e:
                 logger.warning(f"Tool registration skipped: {e}")
+
+        await reset_browser_capability_cache()
+        browser_page_read_available = await check_browser_page_read_capability()
+        logger.info("Browser page-read capability available after MCP connect: %s", browser_page_read_available)
         
         tools_count = len(server.tools)
         

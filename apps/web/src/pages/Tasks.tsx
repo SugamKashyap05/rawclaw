@@ -630,9 +630,12 @@ function StatusBadge({ status }: { status: string }) {
 function getStatusColor(status: string, opacity = 1) {
   switch (status) {
     case 'queued': return `rgba(180, 180, 180, ${opacity})`;
+    case 'requeued': return `rgba(180, 180, 180, ${opacity * 0.9})`;
     case 'running': return `rgba(0, 240, 255, ${opacity})`;
-    case 'done': return `rgba(0, 255, 150, ${opacity})`;
+    case 'done':
+    case 'completed': return `rgba(0, 255, 150, ${opacity})`;
     case 'failed': return `rgba(255, 77, 77, ${opacity})`;
+    case 'stale': return `rgba(255, 170, 0, ${opacity})`;
     case 'cancelled': return `rgba(255, 255, 255, ${opacity * 0.3})`;
     default: return `rgba(255, 255, 255, ${opacity})`;
   }
@@ -641,9 +644,12 @@ function getStatusColor(status: string, opacity = 1) {
 function getStatusTextColor(status: string) {
   switch (status) {
     case 'queued': return 'var(--text-muted)';
+    case 'requeued': return 'var(--text-muted)';
     case 'running': return 'var(--neon-cyan)';
-    case 'done': return 'var(--neon-green, #00ff96)';
+    case 'done':
+    case 'completed': return 'var(--neon-green, #00ff96)';
     case 'failed': return 'var(--error, #ef4444)';
+    case 'stale': return '#ffb84d';
     case 'cancelled': return 'var(--text-muted)';
     default: return 'var(--text-primary)';
   }

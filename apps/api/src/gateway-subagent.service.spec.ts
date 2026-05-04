@@ -4,6 +4,7 @@ describe('GatewaySubagentService', () => {
   let agentsService: any;
   let routingService: any;
   let gatewayEvents: any;
+  let controlPlane: any;
   let gatewayExecutionService: any;
   let chatService: any;
   let prisma: any;
@@ -23,6 +24,20 @@ describe('GatewaySubagentService', () => {
 
     gatewayEvents = {
       publish: jest.fn().mockResolvedValue(undefined),
+    };
+
+    controlPlane = {
+      ensureQueueGroups: jest.fn().mockResolvedValue(undefined),
+      markRunQueued: jest.fn().mockResolvedValue(undefined),
+      appendShortTermMemory: jest.fn().mockResolvedValue(undefined),
+      enqueueSubagentJob: jest.fn().mockResolvedValue(undefined),
+      markRunStarted: jest.fn().mockResolvedValue(undefined),
+      markRunHeartbeat: jest.fn().mockResolvedValue(undefined),
+      markRunTerminal: jest.fn().mockResolvedValue(undefined),
+      captureRoleTraceFromProvenance: jest.fn().mockResolvedValue(undefined),
+      updateSubagentJob: jest.fn().mockResolvedValue(undefined),
+      acknowledgeSubagentJob: jest.fn().mockResolvedValue(undefined),
+      claimSubagentJobs: jest.fn().mockResolvedValue([]),
     };
 
     gatewayExecutionService = {
@@ -50,6 +65,7 @@ describe('GatewaySubagentService', () => {
       agentsService,
       routingService,
       gatewayEvents,
+      controlPlane,
       gatewayExecutionService,
       chatService,
       prisma,

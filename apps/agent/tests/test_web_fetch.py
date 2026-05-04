@@ -1,4 +1,6 @@
 import asyncio
+from pathlib import Path
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -481,6 +483,28 @@ def test_transport_diagnostics_preserves_root_cause_message():
 
     assert diagnostics["fetchFailureKind"] == "connect_failure"
     assert "Connection refused" in diagnostics["networkError"]
+
+
+def test_web_fetch_adaptive_diagnostics_exposes_profile():
+    tool = WebFetchTool()
+    db_dir = Path("apps/agent/tests/artifacts/tmp")
+    db_dir.mkdir(parents=True, exist_ok=True)
+    db_path = db_dir / f"adaptive-{uuid4().hex}.db"
+    tool._adaptive_store = tool._adaptive_store.__class__(str(db_path))
+    tool._adaptive_store.record_fetch_success("https://example.com/", "direct_http")
+    tool._adaptive_store.record_failure(
+        url="https://example.com/",
+        stage="fetch",
+        failure_kind="timeout",
+        transport_strategy="env_proxy_http",
+        details="timed out once",
+    )
+
+    diagnostics = tool.adaptive_diagnostics("https://example.com/")
+
+    assert diagnostics["profile"]["domain"] == "example.com"
+    assert diagnostics["profile"]["success_count"] >= 1
+    assert diagnostics["recentFailures"][0]["failure_kind"] == "timeout"
 
 
 def httpx_to_tool_result(input_payload):

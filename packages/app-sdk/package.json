@@ -1,0 +1,20 @@
+{
+  "name": "@rawclaw/app-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/app-sdk/src/index.js",
+  "types": "dist/app-sdk/src/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "echo 'LINT APP SDK'",
+    "test": "echo 'TEST APP SDK'",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rawclaw/shared": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.9.3"
+  }
+}

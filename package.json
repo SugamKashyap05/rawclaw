@@ -14,6 +14,7 @@
     "test": "cross-env TURBO_FORCE_GIT=0 turbo run test",
     "check-types": "cross-env TURBO_FORCE_GIT=0 turbo run check-types",
     "chat:cli": "node scripts/chat-cli.mjs",
+    "app-builder:cli": "node scripts/chat-cli.mjs --module app-builder",
     "verify:chat": "node scripts/chat-capability-check.mjs",
     "verify:system": "node scripts/system-verification.mjs",
     "verify:system:live": "node scripts/system-verification.mjs --live-web"

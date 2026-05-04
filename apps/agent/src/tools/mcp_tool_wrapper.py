@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 from src.tools.base_tool import BaseTool
 from src.tools.mcp_gateway import MCPGateway, MCPError
 from src.contracts.tool import ToolResult
+from src.tools.builtin.page_read_types import schema_accepts_url, schema_behavior_hash
 
 logger = logging.getLogger("rawclaw.mcp.wrapper")
 
@@ -32,6 +33,9 @@ class MCPToolWrapper(BaseTool):
         self.name = mcp_tool['name']
         self.description = mcp_tool.get("description", f"MCP tool from {server_name}")
         self.parameters = mcp_tool.get("inputSchema", {})
+        self.last_schema_hash = schema_behavior_hash(self.parameters)
+        self.accepts_url = schema_accepts_url(self.parameters)
+        self.mcp_server_id = server_name
         self.capability_tags = self._infer_capability_tags(server_name, self.name, self.description)
         self.requires_sandbox = False
         # MCP tools require confirmation by default, but web-search tools can run without
@@ -64,9 +68,17 @@ class MCPToolWrapper(BaseTool):
         search_keywords = ['search', 'fetch', 'browse', 'web']
         return any(kw in name.lower() for kw in search_keywords)
 
+    def refresh_schema_metadata(self) -> None:
+        """Refresh URL-purpose metadata if an MCP server hot-swapped the schema."""
+        schema_hash = schema_behavior_hash(self.parameters)
+        if schema_hash != self.last_schema_hash:
+            self.last_schema_hash = schema_hash
+            self.accepts_url = schema_accepts_url(self.parameters)
+
     async def execute(self, input: Dict[str, Any]) -> ToolResult:
         """Execute the MCP tool via the gateway."""
         start = time.time()
+        self.refresh_schema_metadata()
         try:
             result = await self._gateway.call_tool(
                 self._server_name,

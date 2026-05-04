@@ -10,6 +10,14 @@ type DesktopGatewayAlert = {
 };
 
 const WEB_APP_ORIGIN = 'http://localhost:5173';
+const DESKTOP_ROUTES = [
+  { label: 'Chat', path: '/' },
+  { label: 'App Builder', path: '/app-builder' },
+  { label: 'Gateway', path: '/gateway' },
+  { label: 'Operator', path: '/operator' },
+  { label: 'Tasks', path: '/tasks' },
+  { label: 'Learning', path: '/learning' },
+] as const;
 
 const App: React.FC = () => {
   const [version, setVersion] = useState<string>('');
@@ -84,7 +92,7 @@ const App: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>RawClaw</span>
           <span style={{ fontSize: '12px', color: '#8a93a6' }}>v{version}</span>
-          <span style={{ fontSize: '12px', color: '#5fe1ff' }}>Gateway-aware desktop shell</span>
+          <span style={{ fontSize: '12px', color: '#5fe1ff' }}>Phase 3 runtime desktop shell</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -97,9 +105,19 @@ const App: React.FC = () => {
               Open Latest Alert
             </button>
           ) : null}
-          <button onClick={() => navigateIframe('/gateway')} style={buttonStyle}>
-            Gateway Runtime
-          </button>
+          {DESKTOP_ROUTES.map((route) => (
+            <button
+              key={route.path}
+              onClick={() => navigateIframe(route.path)}
+              style={{
+                ...buttonStyle,
+                borderColor: iframePath === route.path ? '#5fe1ff' : buttonStyle.border as string,
+                color: iframePath === route.path ? '#5fe1ff' : '#fff',
+              }}
+            >
+              {route.label}
+            </button>
+          ))}
           <button onClick={handleNotification} style={buttonStyle}>
             Test Notification
           </button>

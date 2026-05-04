@@ -4,6 +4,7 @@ import {
   ActiveSessionRuntimeState,
   AgentRuntimeListResponse,
   GatewayEvent,
+  GatewayRunRecord,
   MemoryEvent,
   OperatorProvenanceSummary,
   OperatorRunSummary,
@@ -18,11 +19,13 @@ import {
 import { AgentsService } from './agents.service';
 import { ChatService, SessionWithMessages } from './chat.service';
 import { GatewayAutomationService } from './gateway-automation.service';
+import { GatewayControlPlaneService } from './gateway-control-plane.service';
 import { GatewayEventsService } from './gateway-events.service';
 import { GatewayRoutingService } from './gateway-routing.service';
 import { GatewaySubagentService } from './gateway-subagent.service';
 import { PrismaService } from './prisma.service';
 import { TasksService } from './tasks/tasks.service';
+import { AppBuilderService } from './app-builder/app-builder.service';
 
 type TimelineFilters = {
   limit?: number;
@@ -38,11 +41,13 @@ export class OperatorService {
     private readonly agentsService: AgentsService,
     private readonly chatService: ChatService,
     private readonly gatewayRoutingService: GatewayRoutingService,
+    private readonly gatewayControlPlaneService: GatewayControlPlaneService,
     private readonly gatewayEventsService: GatewayEventsService,
     private readonly gatewayAutomationService: GatewayAutomationService,
     private readonly gatewaySubagentService: GatewaySubagentService,
     private readonly tasksService: TasksService,
     private readonly prisma: PrismaService,
+    private readonly appBuilderService: AppBuilderService,
   ) {}
 
   private normalizeLimit(limit?: number): number {
@@ -359,11 +364,14 @@ export class OperatorService {
   private buildCurrentRuns(
     routes: SessionBinding[],
     gatewayEvents: GatewayEvent[],
+    gatewayRuns: GatewayRunRecord[],
     provenance: OperatorProvenanceSummary[],
     childRuns: any[],
     automationRuns: any[],
     taskRuns: any[],
+    appBuilderRuns: any[],
   ): OperatorRunSummary[] {
+    const gatewayRunsById = new Map(gatewayRuns.map((run) => [run.id, run]));
     const lastRunEventByBinding = new Map<string, GatewayEvent>();
     for (const event of gatewayEvents) {
       if (!event.bindingId || !event.runId) continue;
@@ -379,11 +387,26 @@ export class OperatorService {
       }
     }
 
+    const withGatewayContext = (run: OperatorRunSummary): OperatorRunSummary => {
+      const gatewayRun = gatewayRunsById.get(run.id);
+      if (!gatewayRun) {
+        return run;
+      }
+      return {
+        ...run,
+        executionMode: gatewayRun.executionMode ?? run.executionMode ?? null,
+        workerId: gatewayRun.workerId ?? run.workerId ?? null,
+        queueType: gatewayRun.queueType ?? run.queueType ?? null,
+        guardianOutcome: gatewayRun.guardianOutcome ?? run.guardianOutcome ?? null,
+        queueMetadata: gatewayRun.queueMetadata ?? run.queueMetadata ?? null,
+      };
+    };
+
     const routeRuns: OperatorRunSummary[] = routes
       .filter((route) => route.status === 'running' || route.status === 'error' || route.status === 'paused')
       .map((route) => {
         const event = lastRunEventByBinding.get(route.id);
-        return {
+        return withGatewayContext({
           id: event?.runId || route.id,
           kind: 'route',
           status: route.status,
@@ -400,10 +423,10 @@ export class OperatorService {
           routeId: route.id,
           latestError: route.lastError || null,
           provenance: provenanceBySession.get(route.sessionId) || null,
-        };
+        });
       });
 
-    const childRunSummaries: OperatorRunSummary[] = childRuns.map((record) => ({
+    const childRunSummaries: OperatorRunSummary[] = childRuns.map((record) => withGatewayContext({
       id: record.id,
       kind: 'child',
       status: record.status,
@@ -422,7 +445,7 @@ export class OperatorService {
       provenance: provenanceBySession.get(record.childSessionId) || null,
     }));
 
-    const automationRunSummaries: OperatorRunSummary[] = automationRuns.map((record) => ({
+    const automationRunSummaries: OperatorRunSummary[] = automationRuns.map((record) => withGatewayContext({
       id: record.id,
       kind: 'automation',
       status: record.status,
@@ -439,7 +462,7 @@ export class OperatorService {
       provenance: record.sessionId ? provenanceBySession.get(record.sessionId) || null : null,
     }));
 
-    const taskRunSummaries: OperatorRunSummary[] = taskRuns.map((record: any) => ({
+    const taskRunSummaries: OperatorRunSummary[] = taskRuns.map((record: any) => withGatewayContext({
       id: record.id,
       kind: 'task',
       status: record.status,
@@ -456,7 +479,24 @@ export class OperatorService {
       provenance: record.sessionId ? provenanceBySession.get(record.sessionId) || null : null,
     }));
 
-    return [...routeRuns, ...childRunSummaries, ...automationRunSummaries, ...taskRunSummaries]
+    const appBuilderRunSummaries: OperatorRunSummary[] = appBuilderRuns.map((record: any) => withGatewayContext({
+      id: record.id,
+      kind: 'app_builder',
+      status: record.status,
+      title: record.title || `App Builder ${record.phase}`,
+      summary: record.summary || record.project?.name || null,
+      sessionId: null,
+      bindingId: null,
+      agentId: 'app-builder',
+      startedAt: record.startedAt?.toISOString?.() || record.startedAt || null,
+      finishedAt: record.finishedAt?.toISOString?.() || record.finishedAt || null,
+      heartbeatAt: null,
+      routeId: null,
+      latestError: record.errorMessage || null,
+      provenance: null,
+    }));
+
+    return [...routeRuns, ...childRunSummaries, ...automationRunSummaries, ...taskRunSummaries, ...appBuilderRunSummaries]
       .sort((left, right) => {
         const rightTime = Date.parse(right.heartbeatAt || right.startedAt || right.finishedAt || '1970-01-01T00:00:00.000Z');
         const leftTime = Date.parse(left.heartbeatAt || left.startedAt || left.finishedAt || '1970-01-01T00:00:00.000Z');
@@ -467,10 +507,11 @@ export class OperatorService {
 
   async getSnapshot(limit?: number): Promise<OperatorSnapshot> {
     const boundedLimit = this.normalizeLimit(limit);
-    const [agents, routePayload, gatewayEvents, sessions, childRuns, automationRuns, taskRuns] = await Promise.all([
+    const [agents, routePayload, gatewayEvents, gatewayRuns, sessions, childRuns, automationRuns, taskRuns, appBuilderRuns] = await Promise.all([
       this.agentsService.list(),
       this.gatewayRoutingService.listBindingsWithSummary(),
       this.gatewayEventsService.listRecent(Math.max(boundedLimit, 80)),
+      this.gatewayControlPlaneService.listRecentRuns(Math.max(boundedLimit, 80)),
       this.chatService.listSessions(),
       this.prisma.childRun.findMany({ orderBy: [{ createdAt: 'desc' }], take: 40 }),
       this.prisma.gatewayAutomationRun.findMany({
@@ -479,6 +520,11 @@ export class OperatorService {
         take: 40,
       }),
       this.tasksService.listRecentRuns(),
+      this.prisma.appBuilderRun.findMany({
+        include: { project: true },
+        orderBy: [{ createdAt: 'desc' }],
+        take: 40,
+      }),
     ]);
 
     const provenance = this.collectProvenanceSummaries(sessions);
@@ -486,7 +532,7 @@ export class OperatorService {
     const reviewItems = this.collectReviewTimelineItems(sessions);
     const toolActivity = this.collectToolActivity(gatewayEvents, sessions);
     const timeline = this.mergeTimeline(gatewayEvents, memoryItems, this.toProvenanceTimelineItems(provenance), reviewItems, toolActivity);
-    const currentRuns = this.buildCurrentRuns(routePayload.routes, gatewayEvents, provenance, childRuns, automationRuns, taskRuns);
+    const currentRuns = this.buildCurrentRuns(routePayload.routes, gatewayEvents, gatewayRuns, provenance, childRuns, automationRuns, taskRuns, appBuilderRuns);
     const activeSessions = this.buildActiveSessions(routePayload.routes, sessions, currentRuns);
     const activeAgents = this.buildActiveAgents(agents, routePayload.routes, currentRuns, gatewayEvents);
     const subagentTree = this.buildSubagentTree(childRuns);
@@ -603,6 +649,35 @@ export class OperatorService {
       // fall through
     }
 
+    const appBuilderRun = await this.prisma.appBuilderRun.findUnique({ where: { id: runId } });
+    if (appBuilderRun) {
+      await this.prisma.appBuilderRun.update({
+        where: { id: runId },
+        data: {
+          status: 'cancelled',
+          finishedAt: new Date(),
+        },
+      });
+      if (appBuilderRun.gatewayRunId) {
+        await this.gatewayControlPlaneService.updateRun(appBuilderRun.gatewayRunId, {
+          status: 'cancelled',
+          finishedAt: new Date().toISOString(),
+          terminalOutcome: {
+            status: 'cancelled',
+            summary: `App Builder run ${runId} cancelled by operator.`,
+            completedAt: new Date().toISOString(),
+          },
+        });
+      }
+      return {
+        success: true,
+        action: 'cancel_run',
+        targetId: runId,
+        runId,
+        message: `Cancelled App Builder run ${runId}.`,
+      };
+    }
+
     throw new NotFoundException(`Run '${runId}' was not found in the operator control plane.`);
   }
 
@@ -633,6 +708,19 @@ export class OperatorService {
       };
     } catch {
       // fall through
+    }
+
+    const appBuilderRun = await this.prisma.appBuilderRun.findUnique({ where: { id: runId } });
+    if (appBuilderRun) {
+      const replacement = await this.appBuilderService.queueProjectPhase(appBuilderRun.projectId, appBuilderRun.phase as any);
+      return {
+        success: true,
+        action: 'retry_run',
+        targetId: runId,
+        runId,
+        replacementRunId: replacement.id,
+        message: `Queued App Builder retry ${replacement.id}.`,
+      };
     }
 
     if (await this.prisma.childRun.findUnique({ where: { id: runId } })) {

@@ -8,6 +8,9 @@ export interface ModelRoutingConfig {
   medium: string;
   high: string;
   outputReviewer: string;
+  appBuilder: string;
+  appBuilderPlanner: string;
+  appBuilderBuilder: string;
 }
 
 export interface ProviderConfigState {

@@ -1,0 +1,184 @@
+export const rawClawManifest = {
+  "appId": "an-image-viewing-reviewing-0-1-7",
+  "name": "An Image Viewing Reviewing",
+  "appType": "web_app",
+  "sourceType": "generated",
+  "version": "0.1.7",
+  "compatibility": {
+    "sdkVersion": "1.0.0",
+    "protocolVersion": "v1",
+    "minimumRuntimeVersion": "0.1.0",
+    "supportedFeatures": [
+      "http_commands",
+      "event_stream",
+      "app_registry"
+    ],
+    "deprecatedFeatures": []
+  },
+  "controlMode": "assist_only",
+  "routes": [
+    {
+      "id": "home",
+      "path": "/",
+      "label": "Home",
+      "description": "Primary application route."
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "list_images",
+      "name": "list images",
+      "description": "Generated control action for An Image Viewing Reviewing.",
+      "command": "list_images",
+      "requiresApproval": false,
+      "inputSchema": null,
+      "outputSchema": null
+    },
+    {
+      "id": "open_image",
+      "name": "open image",
+      "description": "Generated control action for An Image Viewing Reviewing.",
+      "command": "open_image",
+      "requiresApproval": false,
+      "inputSchema": {},
+      "outputSchema": null
+    },
+    {
+      "id": "zoom_image",
+      "name": "zoom image",
+      "description": "Generated control action for An Image Viewing Reviewing.",
+      "command": "zoom_image",
+      "requiresApproval": false,
+      "inputSchema": {},
+      "outputSchema": null
+    },
+    {
+      "id": "rotate_image",
+      "name": "rotate image",
+      "description": "Generated control action for An Image Viewing Reviewing.",
+      "command": "rotate_image",
+      "requiresApproval": false,
+      "inputSchema": {},
+      "outputSchema": null
+    },
+    {
+      "id": "fit_image",
+      "name": "fit image",
+      "description": "Generated control action for An Image Viewing Reviewing.",
+      "command": "fit_image",
+      "requiresApproval": false,
+      "inputSchema": {},
+      "outputSchema": null
+    },
+    {
+      "id": "mark_favorite",
+      "name": "mark favorite",
+      "description": "Generated control action for An Image Viewing Reviewing.",
+      "command": "mark_favorite",
+      "requiresApproval": false,
+      "inputSchema": {},
+      "outputSchema": null
+    },
+    {
+      "id": "approve_image",
+      "name": "approve image",
+      "description": "Generated control action for An Image Viewing Reviewing.",
+      "command": "approve_image",
+      "requiresApproval": false,
+      "inputSchema": {},
+      "outputSchema": null
+    },
+    {
+      "id": "reject_image",
+      "name": "reject image",
+      "description": "Generated control action for An Image Viewing Reviewing.",
+      "command": "reject_image",
+      "requiresApproval": false,
+      "inputSchema": {},
+      "outputSchema": null
+    },
+    {
+      "id": "filter_images",
+      "name": "filter images",
+      "description": "Generated control action for An Image Viewing Reviewing.",
+      "command": "filter_images",
+      "requiresApproval": false,
+      "inputSchema": {},
+      "outputSchema": null
+    },
+    {
+      "id": "get_viewer_state",
+      "name": "get viewer state",
+      "description": "Generated control action for An Image Viewing Reviewing.",
+      "command": "get_viewer_state",
+      "requiresApproval": false,
+      "inputSchema": {},
+      "outputSchema": {
+        "state": "object"
+      }
+    }
+  ],
+  "permissions": {
+    "required": [
+      "project.read",
+      "project.control"
+    ],
+    "dangerous": [
+      "project.deploy"
+    ],
+    "approvalRequired": true
+  },
+  "controlEndpoints": {
+    "commands": "http://localhost:3000/api/app-builder/apps/an-image-viewing-reviewing-0-1-7/control",
+    "events": "http://localhost:3000/api/app-builder/apps/an-image-viewing-reviewing-0-1-7/events/stream",
+    "health": "http://localhost:3000/api/app-builder/apps/an-image-viewing-reviewing-0-1-7/health"
+  },
+  "envRequirements": [
+    "RAWCLAW_API_URL"
+  ],
+  "deployment": {
+    "target": "local_managed",
+    "location": "E:\\2026 final projects\\rawclaw\\data\\app-builder\\projects\\an-image-viewing-reviewing"
+  },
+  "metadata": {
+    "projectId": "cmoq3z20n0000pss5flm46c5g",
+    "templateId": "web-dashboard",
+    "workspaceId": "default",
+    "sourcePath": null,
+    "domain": "generic_web",
+    "runtimeEvents": [
+      "image.opened",
+      "zoom.changed",
+      "image.rotated",
+      "image.approved",
+      "image.rejected",
+      "filters.changed"
+    ],
+    "uiSections": [
+      "hero",
+      "content area",
+      "support panel"
+    ]
+  }
+} as const;
+
+export function emitRawClawEvent(type: string, payload: Record<string, unknown>) {
+  window.dispatchEvent(new CustomEvent('rawclaw:event', {
+    detail: { type, payload, timestamp: new Date().toISOString() },
+  }));
+}
+
+export async function sendRawClawCommand(command: string, payload?: Record<string, unknown>) {
+  const response = await fetch(rawClawManifest.controlEndpoints.commands, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: crypto.randomUUID(),
+      appId: rawClawManifest.appId,
+      command,
+      payload: payload || null,
+      requestedAt: new Date().toISOString(),
+    }),
+  });
+  return response.json();
+}

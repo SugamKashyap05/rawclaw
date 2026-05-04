@@ -1,0 +1,723 @@
+{
+  "meta": {
+    "name": "rawclaw_workflow_map",
+    "version": "1.0.0",
+    "purpose": "Diagram-friendly workflow map for RawClaw agent, web research, fetch, extract, and evidence pipelines.",
+    "generatedFrom": [
+      "E:\\2026 final projects\\rawclaw\\apps\\agent\\src\\executor.py",
+      "E:\\2026 final projects\\rawclaw\\apps\\agent\\src\\research\\planner.py",
+      "E:\\2026 final projects\\rawclaw\\apps\\agent\\src\\research\\router.py",
+      "E:\\2026 final projects\\rawclaw\\apps\\agent\\src\\research\\judge.py",
+      "E:\\2026 final projects\\rawclaw\\apps\\agent\\src\\research\\answerability.py",
+      "E:\\2026 final projects\\rawclaw\\apps\\agent\\src\\research\\writer.py",
+      "E:\\2026 final projects\\rawclaw\\apps\\agent\\src\\research\\evidence_pipeline.py",
+      "E:\\2026 final projects\\rawclaw\\apps\\agent\\src\\tools\\builtin\\web_fetch.py",
+      "E:\\2026 final projects\\rawclaw\\apps\\agent\\src\\tools\\builtin\\web_extract.py"
+    ],
+    "notes": [
+      "This file is intended for converting code workflows into a Figma diagram.",
+      "Each workflow is normalized into nodes and edges.",
+      "Branch conditions are simplified but grounded in the current implementation."
+    ]
+  },
+  "sharedEntities": {
+    "tools": [
+      "web_search",
+      "web_fetch",
+      "web_extract"
+    ],
+    "researchStages": [
+      "planner",
+      "extract_router",
+      "evidence_judge",
+      "answerability_gate",
+      "final_writer"
+    ],
+    "evidenceStages": [
+      "select_evidence",
+      "synthesize_answer",
+      "loyalty_check"
+    ],
+    "resultKinds": [
+      "content",
+      "transport_failure"
+    ]
+  },
+  "workflowVariants": {
+    "researchCategories": [
+      {
+        "category": "sports_standings",
+        "taskType": "standings_brief",
+        "pageKind": "standings/table",
+        "expectedFields": [
+          "team",
+          "position",
+          "points",
+          "nrr",
+          "ranking_movement"
+        ],
+        "targetUrlBias": [
+          "https://www.iplt20.com/matches/points-table"
+        ],
+        "backendOrder": [
+          "crawl4ai",
+          "playwright",
+          "opencli",
+          "reader",
+          "web_fetch"
+        ],
+        "fetchRequired": true,
+        "exactStructuredDataNeeded": true
+      },
+      {
+        "category": "breaking_news",
+        "taskType": "news_summary",
+        "pageKind": "news/article",
+        "expectedFields": [
+          "event",
+          "date_time",
+          "what_changed"
+        ],
+        "backendOrder": [
+          "crawl4ai",
+          "reader",
+          "playwright",
+          "opencli",
+          "web_fetch"
+        ],
+        "fetchRequired": true,
+        "exactStructuredDataNeeded": false
+      },
+      {
+        "category": "product_company_updates",
+        "taskType": "news_summary",
+        "pageKind": "docs/changelog",
+        "expectedFields": [
+          "update_items",
+          "dates",
+          "what_changed"
+        ],
+        "backendOrder": [
+          "crawl4ai",
+          "reader",
+          "playwright",
+          "opencli",
+          "web_fetch"
+        ],
+        "fetchRequired": true,
+        "exactStructuredDataNeeded": false
+      },
+      {
+        "category": "technical_research",
+        "taskType": "technical_update_digest",
+        "pageKind": "docs/changelog",
+        "expectedFields": [
+          "update_items",
+          "dates",
+          "what_changed"
+        ],
+        "backendOrder": [
+          "crawl4ai",
+          "reader",
+          "playwright",
+          "opencli",
+          "web_fetch"
+        ],
+        "fetchRequired": true,
+        "exactStructuredDataNeeded": false
+      },
+      {
+        "category": "general_fact_finding",
+        "taskType": "general_fact_finding",
+        "pageKind": "general",
+        "expectedFields": [],
+        "backendOrder": [
+          "crawl4ai",
+          "playwright",
+          "reader",
+          "opencli",
+          "web_fetch"
+        ],
+        "fetchRequired": false,
+        "exactStructuredDataNeeded": false
+      },
+      {
+        "category": "interactive_or_authenticated",
+        "taskType": "browser_task",
+        "pageKind": "interactive/authenticated",
+        "expectedFields": [],
+        "backendOrder": [
+          "opencli",
+          "playwright",
+          "crawl4ai",
+          "reader",
+          "web_fetch"
+        ],
+        "fetchRequired": true,
+        "exactStructuredDataNeeded": false
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "id": "chat_request_main_loop",
+      "name": "Chat Request Main Loop",
+      "description": "Top-level agent execution path for a user request.",
+      "entry": {
+        "source": "chat_request",
+        "component": "Executor"
+      },
+      "nodes": [
+        {
+          "id": "chat_input",
+          "label": "Receive chat request",
+          "type": "input",
+          "component": "Executor"
+        },
+        {
+          "id": "intent_classification",
+          "label": "Classify request / choose lane",
+          "type": "decision",
+          "component": "Executor",
+          "outputs": [
+            "direct_model_answer",
+            "tool_call_loop",
+            "internal_research"
+          ]
+        },
+        {
+          "id": "tool_call_loop",
+          "label": "Tool calling loop",
+          "type": "process",
+          "component": "Executor",
+          "constraints": {
+            "maxAgentTurns": 10,
+            "maxToolsPerRequest": 16,
+            "maxSequentialThinkingTurns": 3
+          }
+        },
+        {
+          "id": "internal_research",
+          "label": "Internal research coordinator",
+          "type": "subworkflow",
+          "workflowRef": "internal_research_web"
+        },
+        {
+          "id": "final_response",
+          "label": "Stream final answer",
+          "type": "output",
+          "component": "Executor"
+        }
+      ],
+      "edges": [
+        {
+          "from": "chat_input",
+          "to": "intent_classification"
+        },
+        {
+          "from": "intent_classification",
+          "to": "tool_call_loop",
+          "condition": "request needs external tools but not internal research pipeline"
+        },
+        {
+          "from": "intent_classification",
+          "to": "internal_research",
+          "condition": "request is classified as guided web research or forced search-then-fetch"
+        },
+        {
+          "from": "tool_call_loop",
+          "to": "final_response"
+        },
+        {
+          "from": "internal_research",
+          "to": "final_response"
+        }
+      ]
+    },
+    {
+      "id": "internal_research_web",
+      "name": "Internal Research Web Workflow",
+      "description": "The multi-stage search -> extract -> evidence -> answer workflow used for grounded web answers.",
+      "entry": {
+        "source": "Executor.research"
+      },
+      "nodes": [
+        {
+          "id": "planner",
+          "label": "Research planner",
+          "type": "stage",
+          "component": "ResearchPlannerStage",
+          "outputs": [
+            "ResearchPlan"
+          ]
+        },
+        {
+          "id": "web_search",
+          "label": "Run web_search",
+          "type": "tool",
+          "component": "web_search"
+        },
+        {
+          "id": "extract_router",
+          "label": "Choose page kind, candidate URLs, backend order",
+          "type": "stage",
+          "component": "ExtractRouterStage",
+          "outputs": [
+            "ExtractionDecision"
+          ]
+        },
+        {
+          "id": "attempt_extract",
+          "label": "Run web_extract on strongest candidate URL",
+          "type": "tool",
+          "component": "web_extract"
+        },
+        {
+          "id": "evidence_judge",
+          "label": "Assess relevance, usability, sufficiency",
+          "type": "stage",
+          "component": "EvidenceJudgeStage",
+          "outputs": [
+            "EvidenceAssessment"
+          ]
+        },
+        {
+          "id": "answerability_gate",
+          "label": "Decide exact / partial / abstain",
+          "type": "stage",
+          "component": "AnswerabilityGateStage",
+          "outputs": [
+            "AnswerabilityDecision"
+          ]
+        },
+        {
+          "id": "final_writer",
+          "label": "Render grounded final answer",
+          "type": "stage",
+          "component": "FinalWriterStage",
+          "outputs": [
+            "FinalDraft"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "planner",
+          "to": "web_search"
+        },
+        {
+          "from": "web_search",
+          "to": "extract_router"
+        },
+        {
+          "from": "extract_router",
+          "to": "attempt_extract",
+          "condition": "should_attempt_extract == true"
+        },
+        {
+          "from": "extract_router",
+          "to": "evidence_judge",
+          "condition": "should_attempt_extract == false"
+        },
+        {
+          "from": "attempt_extract",
+          "to": "evidence_judge"
+        },
+        {
+          "from": "evidence_judge",
+          "to": "answerability_gate"
+        },
+        {
+          "from": "answerability_gate",
+          "to": "final_writer"
+        }
+      ],
+      "branchRules": [
+        {
+          "name": "forced_search_then_fetch",
+          "meaning": "Certain queries such as standings-style questions escalate from search directly into extract instead of allowing snippet-only answers."
+        },
+        {
+          "name": "guided_web_research",
+          "meaning": "Planner + router + judge + writer pipeline is preferred when the question depends on current web evidence."
+        }
+      ]
+    },
+    {
+      "id": "web_fetch_transport_ladder",
+      "name": "Web Fetch Transport Ladder",
+      "description": "Low-level page retrieval ladder inside web_fetch.",
+      "entry": {
+        "source": "web_extract fallback and direct fetch calls"
+      },
+      "nodes": [
+        {
+          "id": "safe_url_check",
+          "label": "SSRF / safe URL validation",
+          "type": "decision",
+          "component": "WebFetchTool"
+        },
+        {
+          "id": "direct_http",
+          "label": "direct_http",
+          "type": "attempt",
+          "config": {
+            "trust_env": false,
+            "http2": false,
+            "ipv4Transport": true
+          }
+        },
+        {
+          "id": "env_proxy_http",
+          "label": "env_proxy_http",
+          "type": "attempt",
+          "config": {
+            "trust_env": true,
+            "http2": false,
+            "ipv4Transport": true
+          }
+        },
+        {
+          "id": "browser_headers_http",
+          "label": "browser_headers_http",
+          "type": "attempt",
+          "config": {
+            "trust_env": true,
+            "browserishHeaders": true,
+            "http2": false,
+            "ipv4Transport": true
+          }
+        },
+        {
+          "id": "browser_public_fallback",
+          "label": "browser_public_fallback",
+          "type": "attempt",
+          "config": {
+            "allowBrowserFallback": true,
+            "maxBytes": 524288,
+            "settleTimeoutMs": 2000
+          }
+        },
+        {
+          "id": "fetch_content",
+          "label": "Return content payload",
+          "type": "output",
+          "resultKind": "content"
+        },
+        {
+          "id": "fetch_failure",
+          "label": "Return transport failure",
+          "type": "output",
+          "resultKind": "transport_failure"
+        }
+      ],
+      "edges": [
+        {
+          "from": "safe_url_check",
+          "to": "fetch_failure",
+          "condition": "unsafe_url"
+        },
+        {
+          "from": "safe_url_check",
+          "to": "direct_http",
+          "condition": "safe_url"
+        },
+        {
+          "from": "direct_http",
+          "to": "fetch_content",
+          "condition": "success"
+        },
+        {
+          "from": "direct_http",
+          "to": "env_proxy_http",
+          "condition": "failure"
+        },
+        {
+          "from": "env_proxy_http",
+          "to": "fetch_content",
+          "condition": "success"
+        },
+        {
+          "from": "env_proxy_http",
+          "to": "browser_headers_http",
+          "condition": "failure"
+        },
+        {
+          "from": "browser_headers_http",
+          "to": "fetch_content",
+          "condition": "success"
+        },
+        {
+          "from": "browser_headers_http",
+          "to": "browser_public_fallback",
+          "condition": "failure and browser fallback allowed"
+        },
+        {
+          "from": "browser_public_fallback",
+          "to": "fetch_content",
+          "condition": "success"
+        },
+        {
+          "from": "browser_public_fallback",
+          "to": "fetch_failure",
+          "condition": "failure"
+        }
+      ],
+      "transportFailureKinds": [
+        "unsafe_url",
+        "dns_failure",
+        "connect_failure",
+        "tls_failure",
+        "timeout",
+        "redirect_loop",
+        "http_status_error",
+        "proxy_required",
+        "browser_unavailable",
+        "browser_fallback_failed",
+        "execution_failure"
+      ]
+    },
+    {
+      "id": "web_extract_pipeline",
+      "name": "Web Extract Pipeline",
+      "description": "Page extraction, cleanup, structured field recovery, and quality classification.",
+      "entry": {
+        "source": "web_extract tool"
+      },
+      "nodes": [
+        {
+          "id": "fetch_page",
+          "label": "Fetch page content",
+          "type": "tool",
+          "component": "web_fetch"
+        },
+        {
+          "id": "classify_page_kind",
+          "label": "Resolve page kind",
+          "type": "decision",
+          "component": "WebExtractTool",
+          "outputs": [
+            "general",
+            "standings/table",
+            "docs/changelog",
+            "news/article",
+            "interactive/authenticated"
+          ]
+        },
+        {
+          "id": "detect_js_modes",
+          "label": "Detect explicit JS fallback or SPA empty shell",
+          "type": "process",
+          "component": "web_fetch + web_extract"
+        },
+        {
+          "id": "clean_content",
+          "label": "Clean content / remove fallback notice / strip nav boilerplate",
+          "type": "process",
+          "component": "WebExtractTool"
+        },
+        {
+          "id": "structured_extraction",
+          "label": "Extract structured data",
+          "type": "process",
+          "component": "WebExtractTool",
+          "outputs": [
+            "team",
+            "position",
+            "points",
+            "nrr",
+            "ranking_movement",
+            "page_items",
+            "headlines",
+            "sections",
+            "event",
+            "what_changed"
+          ]
+        },
+        {
+          "id": "quality_scoring",
+          "label": "Compute tier / quality / confidence / missingFields",
+          "type": "process",
+          "component": "WebExtractTool"
+        },
+        {
+          "id": "extract_output",
+          "label": "Return extract result",
+          "type": "output",
+          "component": "web_extract"
+        }
+      ],
+      "edges": [
+        {
+          "from": "fetch_page",
+          "to": "extract_output",
+          "condition": "fetch kind == transport_failure"
+        },
+        {
+          "from": "fetch_page",
+          "to": "classify_page_kind",
+          "condition": "fetch kind == content"
+        },
+        {
+          "from": "classify_page_kind",
+          "to": "detect_js_modes"
+        },
+        {
+          "from": "detect_js_modes",
+          "to": "clean_content"
+        },
+        {
+          "from": "clean_content",
+          "to": "structured_extraction"
+        },
+        {
+          "from": "structured_extraction",
+          "to": "quality_scoring"
+        },
+        {
+          "from": "quality_scoring",
+          "to": "extract_output"
+        }
+      ],
+      "specialCases": [
+        {
+          "case": "explicit_js_fallback_notice",
+          "effects": [
+            "jsRenderSuspected = true",
+            "jsFallbackDetected = true",
+            "confidence capped for partial extraction"
+          ]
+        },
+        {
+          "case": "spa_empty_shell_after_http_200",
+          "effects": [
+            "kind stays content",
+            "tier = failed",
+            "quality = extract_garbage",
+            "content note says JavaScript rendering required"
+          ]
+        },
+        {
+          "case": "release_page_title",
+          "effects": [
+            "structuredData.event extracted from page title when title contains Release"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "evidence_pipeline_post_extract",
+      "name": "Evidence Selection, Answer Synthesis, Loyalty Check",
+      "description": "Post-extract pipeline used to determine whether extracted evidence is usable and whether answers stay loyal to the page evidence.",
+      "entry": {
+        "source": "extract output"
+      },
+      "nodes": [
+        {
+          "id": "select_evidence",
+          "label": "Select evidence",
+          "type": "stage",
+          "component": "select_evidence",
+          "outputs": [
+            "EvidenceVerdict"
+          ]
+        },
+        {
+          "id": "synthesize_answer",
+          "label": "Synthesize answer from page content or structured data",
+          "type": "stage",
+          "component": "synthesize_answer",
+          "outputs": [
+            "SynthesisResult"
+          ]
+        },
+        {
+          "id": "loyalty_check",
+          "label": "Verify answer claims are traceable to extracted evidence",
+          "type": "stage",
+          "component": "loyalty_check",
+          "outputs": [
+            "LoyaltyResult"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "select_evidence",
+          "to": "synthesize_answer"
+        },
+        {
+          "from": "synthesize_answer",
+          "to": "loyalty_check"
+        }
+      ],
+      "selectionRules": [
+        "transport_failure -> unusable",
+        "empty_body content -> unusable",
+        "structuredRecordCount >= 3 -> usable via structured_data",
+        "clean tier + confidence >= 0.8 + wordCount >= 50 -> usable via page_content",
+        "partial tier + confidence >= 0.6 + wordCount >= 100 -> usable via page_content with warning",
+        "everything else -> unusable"
+      ],
+      "synthesisModes": [
+        {
+          "evidenceSource": "none",
+          "answerSource": "fallback_refused"
+        },
+        {
+          "evidenceSource": "structured_data",
+          "answerSource": "structured_data"
+        },
+        {
+          "evidenceSource": "page_content",
+          "answerSource": "page_content"
+        }
+      ],
+      "loyaltyRules": [
+        "Claims are checked against content, structuredData, and title.",
+        "Reasonable numeric paraphrase is tolerated.",
+        "Unsupported claims become violations.",
+        "Answer is loyal only when violations are empty and score >= 0.8."
+      ]
+    },
+    {
+      "id": "snippet_only_degraded_path",
+      "name": "Search-Only Degraded Path",
+      "description": "Fallback path when search succeeds weakly but extraction is unavailable or not attempted.",
+      "entry": {
+        "source": "internal research workflow"
+      },
+      "nodes": [
+        {
+          "id": "search_results_only",
+          "label": "Search results available",
+          "type": "state"
+        },
+        {
+          "id": "no_strong_fetch_evidence",
+          "label": "Fetch evidence missing, failed, or unusable",
+          "type": "state"
+        },
+        {
+          "id": "partial_or_abstain",
+          "label": "Final writer emits cautious partial answer or abstains",
+          "type": "output"
+        }
+      ],
+      "edges": [
+        {
+          "from": "search_results_only",
+          "to": "no_strong_fetch_evidence"
+        },
+        {
+          "from": "no_strong_fetch_evidence",
+          "to": "partial_or_abstain"
+        }
+      ],
+      "riskNotes": [
+        "This is the path that can yield snippet-heavy answers.",
+        "Typo-tolerant standings routing now tries to prevent this path for IPL standings questions."
+      ]
+    }
+  ]
+}

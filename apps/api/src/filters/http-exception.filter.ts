@@ -1,5 +1,5 @@
 import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 
 interface ExceptionResponse {
   message?: string | string[];
@@ -13,6 +13,10 @@ interface ErrorResponse {
   details: string | string[] | null;
   timestamp: string;
   path: string;
+  retryAfterMs?: number;
+  capacity?: unknown;
+  canRetry?: boolean;
+  errorCode?: string;
 }
 
 @Catch()
@@ -35,6 +39,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const message = typeof exceptionResponse === 'object' && exceptionResponse !== null
       ? exceptionResponse.message || exceptionResponse.error
       : String(exceptionResponse);
+    const retryAfterMs = typeof exceptionResponse.retryAfterMs === 'number' ? exceptionResponse.retryAfterMs : null;
+    if (retryAfterMs && status === HttpStatus.SERVICE_UNAVAILABLE) {
+      response.setHeader('Retry-After', String(Math.max(1, Math.ceil(retryAfterMs / 1000))));
+    }
 
     const errorShape: ErrorResponse = {
       error: status === HttpStatus.INTERNAL_SERVER_ERROR 
@@ -45,6 +53,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request.url,
     };
+    if (typeof exceptionResponse.code === 'string') errorShape.errorCode = exceptionResponse.code;
+    if (retryAfterMs) errorShape.retryAfterMs = retryAfterMs;
+    if ('capacity' in exceptionResponse) errorShape.capacity = exceptionResponse.capacity;
+    if (typeof exceptionResponse.canRetry === 'boolean') errorShape.canRetry = exceptionResponse.canRetry;
 
     response.status(status).json(errorShape);
   }

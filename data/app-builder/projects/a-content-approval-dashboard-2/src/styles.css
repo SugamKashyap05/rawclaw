@@ -1,0 +1,161 @@
+:root {
+  color-scheme: dark;
+  --bg: #060814;
+  --panel: rgba(12, 18, 28, 0.92);
+  --panel-border: rgba(255, 255, 255, 0.09);
+  --accent: #98f47d;
+  --muted: #9ba8c6;
+  --text: #f6f8ff;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(11, 211, 255, 0.16), transparent 30%),
+    radial-gradient(circle at top right, rgba(142, 255, 179, 0.12), transparent 22%),
+    linear-gradient(180deg, #05070f, #0a1120 40%, #060814);
+  color: var(--text);
+}
+
+button, input, textarea { font: inherit; }
+.app-shell {
+  min-height: 100vh;
+  padding: 2.5rem;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.hero-panel,
+.workspace-panel,
+.metric-card,
+.console-panel,
+.history-panel,
+.keypad-panel {
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  border-radius: 24px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.hero-panel {
+  padding: 1.5rem 1.6rem;
+}
+
+.hero-panel h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+}
+
+.hero-panel p {
+  margin: 0;
+  max-width: 65ch;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.grid.two-up {
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+}
+
+@media (max-width: 980px) {
+  .app-shell { padding: 1rem; }
+  .grid.two-up { grid-template-columns: 1fr; }
+}
+
+.calculator-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.72fr);
+  gap: 1rem;
+}
+
+@media (max-width: 920px) {
+  .calculator-shell { grid-template-columns: 1fr; }
+}
+
+.display-panel,
+.history-panel,
+.keypad-panel,
+.workspace-panel,
+.console-panel {
+  padding: 1.25rem;
+}
+
+.display-value {
+  font-size: clamp(2rem, 5vw, 3.6rem);
+  font-weight: 700;
+  text-align: right;
+  word-break: break-all;
+}
+
+.display-expression {
+  text-align: right;
+  color: var(--muted);
+  min-height: 1.5rem;
+}
+
+.keypad-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.key-btn {
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  border-radius: 18px;
+  min-height: 64px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.key-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(11,211,255,0.4);
+}
+
+.key-btn.accent {
+  background: linear-gradient(180deg, rgba(11,211,255,0.2), rgba(11,211,255,0.08));
+}
+
+.key-btn.primary {
+  background: linear-gradient(180deg, rgba(11,211,255,0.32), rgba(11,211,255,0.14));
+  color: white;
+}
+
+.history-list,
+.console-list,
+.metric-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.history-item,
+.console-item,
+.metric-card {
+  padding: 0.9rem 1rem;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .metric-grid { grid-template-columns: 1fr; }
+}

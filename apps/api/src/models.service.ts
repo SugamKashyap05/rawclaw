@@ -191,6 +191,17 @@ export class ModelsService {
         medium: this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (isAnthropic ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
         high: this.configService.get<string>('DEFAULT_HIGH_MODEL') || (isAnthropic ? 'anthropic/claude-3-5-sonnet' : 'ollama/llama3:8b'),
         outputReviewer: this.configService.get<string>('DEFAULT_REVIEWER_MODEL') || 'ollama/llama3.2:3b',
+        appBuilder: this.configService.get<string>('DEFAULT_APP_BUILDER_MODEL') || this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (isAnthropic ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
+        appBuilderPlanner:
+          this.configService.get<string>('DEFAULT_APP_BUILDER_PLANNER_MODEL')
+          || this.configService.get<string>('DEFAULT_APP_BUILDER_MODEL')
+          || this.configService.get<string>('DEFAULT_HIGH_MODEL')
+          || (isAnthropic ? 'anthropic/claude-3-5-sonnet' : 'ollama/llama3:8b'),
+        appBuilderBuilder:
+          this.configService.get<string>('DEFAULT_APP_BUILDER_BUILDER_MODEL')
+          || this.configService.get<string>('DEFAULT_APP_BUILDER_MODEL')
+          || this.configService.get<string>('DEFAULT_MEDIUM_MODEL')
+          || (isAnthropic ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
       },
       providerConfig: {
         openai: { enabled: isOpenAI },
@@ -216,6 +227,9 @@ export class ModelsService {
         medium: parsed.routing?.medium || fallback.routing.medium,
         high: parsed.routing?.high || fallback.routing.high,
         outputReviewer: parsed.routing?.outputReviewer || fallback.routing.outputReviewer,
+        appBuilder: parsed.routing?.appBuilder || fallback.routing.appBuilder,
+        appBuilderPlanner: parsed.routing?.appBuilderPlanner || fallback.routing.appBuilderPlanner,
+        appBuilderBuilder: parsed.routing?.appBuilderBuilder || fallback.routing.appBuilderBuilder,
       };
 
       return {

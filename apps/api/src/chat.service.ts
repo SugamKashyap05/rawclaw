@@ -1,7 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { RedisService } from './redis.service';
-import { AdvisoryEvent, ChatControlState, ChatMessage, ChatResponse, MemoryEvent, ToolCall, ReviewEvent, WorkflowState } from '@rawclaw/shared';
+import {
+  AdvisoryEvent,
+  ChatControlState,
+  ChatMessage,
+  ChatResponse,
+  ChatNluClarificationUpdateResult,
+  ChatNluPendingClarificationUpdate,
+  MemoryEvent,
+  PendingNluClarification,
+  ToolCall,
+  ReviewEvent,
+  WorkflowState,
+} from '@rawclaw/shared';
 import { ProvenanceSanitizer } from './common/provenance-sanitizer';
 
 interface Citation {
@@ -34,6 +46,9 @@ interface MessageWithRelations {
   reviewerPromptVersionHash?: string | null;
   workflowPromptIds?: string | null;
   runIds?: string | null;
+  branchId?: string | null;
+  parentMessageId?: string | null;
+  branchSequence?: number | null;
 }
 
 export interface SessionWithMessages {
@@ -45,6 +60,7 @@ export interface SessionWithMessages {
   updatedAt: Date;
   messages: ChatMessage[];
   chatControls?: ChatControlState;
+  pendingNluClarification?: PendingNluClarification | null;
 }
 
 @Injectable()
@@ -96,10 +112,19 @@ export class ChatService {
     return fallback.substring(0, 50) + (fallback.length > 50 ? '...' : '');
   }
 
-  private parseSessionControls(metadataJson: string | null | undefined): ChatControlState | undefined {
-    if (!metadataJson) return undefined;
+  private parseSessionMetadata(metadataJson: string | null | undefined): Record<string, any> {
+    if (!metadataJson) return {};
     try {
-      const parsed = JSON.parse(metadataJson) as { chatControls?: ChatControlState } | ChatControlState;
+      const parsed = JSON.parse(metadataJson);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private parseSessionControls(metadataJson: string | null | undefined): ChatControlState | undefined {
+    try {
+      const parsed = this.parseSessionMetadata(metadataJson) as { chatControls?: ChatControlState } | ChatControlState;
       const controls = (parsed as any)?.chatControls && typeof (parsed as any).chatControls === 'object'
         ? (parsed as any).chatControls as ChatControlState
         : (parsed as ChatControlState);
@@ -117,11 +142,32 @@ export class ChatService {
     }
   }
 
+  private parsePendingClarification(metadataJson: string | null | undefined): PendingNluClarification | null {
+    const metadata = this.parseSessionMetadata(metadataJson);
+    const pending = metadata?.pendingNluClarification;
+    if (!pending || typeof pending !== 'object') {
+      return null;
+    }
+    if (
+      typeof pending.id !== 'string' ||
+      typeof pending.originalUserContent !== 'string' ||
+      typeof pending.clarifyingQuestion !== 'string' ||
+      typeof pending.createdAt !== 'string' ||
+      typeof pending.updatedAt !== 'string' ||
+      typeof pending.attemptCount !== 'number' ||
+      !pending.candidateFrame
+    ) {
+      return null;
+    }
+    return pending as PendingNluClarification;
+  }
+
   async upsertSessionControls(sessionId: string, chatControls: ChatControlState): Promise<void> {
     const existing = await this.prisma.session.findUnique({
       where: { id: sessionId },
       select: { metadataJson: true },
     });
+    const currentMetadata = this.parseSessionMetadata(existing?.metadataJson);
     const currentControls = this.parseSessionControls(existing?.metadataJson) || {};
     const nextControls: ChatControlState = {
       ...currentControls,
@@ -132,13 +178,55 @@ export class ChatService {
 
     await this.prisma.session.upsert({
       where: { id: sessionId },
-      update: { metadataJson: JSON.stringify({ chatControls: nextControls }) },
+      update: { metadataJson: JSON.stringify({ ...currentMetadata, chatControls: nextControls }) },
       create: {
         id: sessionId,
         title: null,
         metadataJson: JSON.stringify({ chatControls: nextControls }),
       },
     });
+  }
+
+  async getPendingNluClarification(sessionId: string): Promise<PendingNluClarification | null> {
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { metadataJson: true },
+    });
+    return this.parsePendingClarification(session?.metadataJson);
+  }
+
+  async applyNluClarificationUpdate(
+    sessionId: string,
+    update?: ChatNluPendingClarificationUpdate | null,
+  ): Promise<ChatNluClarificationUpdateResult> {
+    if (!update) {
+      return { applied: false, reason: 'empty_update' };
+    }
+
+    const expectedUpdatedAt = update.expectedUpdatedAt ?? update.state?.updatedAt ?? null;
+    const baseMetadata = "COALESCE(NULLIF(metadataJson, ''), '{}')";
+    const whereLock = `((${expectedUpdatedAt === null ? '1' : '0'} = 1 AND json_extract(${baseMetadata}, '$.pendingNluClarification.updatedAt') IS NULL) OR json_extract(${baseMetadata}, '$.pendingNluClarification.updatedAt') = ?)`;
+    let updated = 0;
+
+    if (update.action === 'set' || update.action === 'increment') {
+      if (!update.state) {
+        return { applied: false, reason: 'empty_update' };
+      }
+      updated = await this.prisma.$executeRawUnsafe(
+        `UPDATE sessions SET metadataJson = json_set(${baseMetadata}, '$.pendingNluClarification', json(?)), updatedAt = CURRENT_TIMESTAMP WHERE id = ? AND ${whereLock}`,
+        JSON.stringify(update.state),
+        sessionId,
+        expectedUpdatedAt,
+      );
+    } else {
+      updated = await this.prisma.$executeRawUnsafe(
+        `UPDATE sessions SET metadataJson = json_remove(${baseMetadata}, '$.pendingNluClarification'), updatedAt = CURRENT_TIMESTAMP WHERE id = ? AND ${whereLock}`,
+        sessionId,
+        expectedUpdatedAt,
+      );
+    }
+
+    return updated > 0 ? { applied: true } : { applied: false, reason: 'stale' };
   }
 
   async createMessage(
@@ -266,6 +354,9 @@ export class ChatService {
       error: m.errorType ? { type: m.errorType, message: m.errorMessage || '' } : undefined,
       attachments: m.attachments ? JSON.parse(m.attachments) : undefined,
       createdAt: m.createdAt,
+      branchId: m.branchId || undefined,
+      parentMessageId: m.parentMessageId || undefined,
+      branchSequence: m.branchSequence ?? undefined,
       durationMs: m.durationMs || undefined,
       promptPackId: m.promptPackId || undefined,
       promptVersionHash: m.promptVersionHash || undefined,
@@ -298,6 +389,7 @@ export class ChatService {
       updatedAt: session.updatedAt,
       messages: session.messages.map((m: MessageWithRelations) => this.mapToChatMessage(m)),
       chatControls: this.parseSessionControls(session.metadataJson),
+      pendingNluClarification: this.parsePendingClarification(session.metadataJson),
     }));
   }
 
@@ -322,6 +414,7 @@ export class ChatService {
       updatedAt: session.updatedAt,
       messages: session.messages.map((m: MessageWithRelations) => this.mapToChatMessage(m)),
       chatControls: this.parseSessionControls(session.metadataJson),
+      pendingNluClarification: this.parsePendingClarification(session.metadataJson),
     };
   }
 

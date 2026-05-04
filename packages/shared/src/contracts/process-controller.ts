@@ -1,5 +1,5 @@
-export type HarnessRunStatus = 'queued' | 'running' | 'passed' | 'failed' | 'cancelled';
-export type HarnessProcessStatus = 'queued' | 'running' | 'passed' | 'failed' | 'timed_out' | 'cancelled';
+export type HarnessRunStatus = 'queued' | 'running' | 'passed' | 'failed' | 'cancelled' | 'superseded' | 'stale';
+export type HarnessProcessStatus = 'queued' | 'running' | 'passed' | 'failed' | 'timed_out' | 'cancelled' | 'superseded';
 
 export interface HarnessProcessRecord {
   id: string;

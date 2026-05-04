@@ -1,0 +1,18 @@
+export default function App() {
+  return (
+    <main className="app-shell">
+      <section className="hero-panel">
+        <div className="eyebrow">RawClaw Generated App</div>
+        <h1>A Clean Web Calculator</h1>
+        <p>create a plan</p>
+      </section>
+      <section className="workspace-panel">
+        <div className="eyebrow">Features</div>
+        <h2>What this app includes</h2>
+        <ul>
+          
+        </ul>
+      </section>
+    </main>
+  );
+}

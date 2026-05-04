@@ -1,0 +1,12 @@
+{
+  "name": "@rawclaw/swarm-worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "python run.py",
+    "start": "python run.py",
+    "build": "echo 'Build handled by Python environment/venv'",
+    "test": "pytest",
+    "check-types": "python -m py_compile run.py src/main.py src/config.py"
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "id": "snapshot-7ece683a-b6cf-4141-9836-31468933eb22",
+  "projectId": "cmonwzgxs000jwks50hpd7kya",
+  "baseSnapshotId": null,
+  "status": "initial",
+  "validationPassedAt": null,
+  "manifestPath": "E:\\2026 final projects\\rawclaw\\data\\app-builder\\projects\\a-clean-web-calculator-3\\.app-builder\\snapshots\\snapshot-7ece683a-b6cf-4141-9836-31468933eb22\\manifest.json",
+  "fileHashes": {
+    "docs/AGENT_MEMORY.md": "11151cd17198f1d41e25783038641bb6da771c2072dd96a1715072889c1ee696",
+    "docs/DECISIONS.md": "aaff6cc625daa96252f4d87790afee80b66619187721b7764a25e3254ec4ebfd",
+    "docs/PLAN.md": "4c47925754740b57c5aad10bb84aa8d2877b6c57d639212a2f1d22ce7ad53270",
+    "docs/PROJECT_BRIEF.md": "7816587a1b4dae546fac2d6e9b6d6b84ca7a62fc5314a51963bce1ae4f30e99f",
+    "docs/STATUS.md": "b54266d1b1e6e0c3d3f28debbff220f4b1affafcb35a5eb019eb68da64059f91",
+    "docs/TASKS.md": "62617d7818a1382aa21eb2b7759e9247225d1799df27dd663197629cb1af78b1",
+    "index.html": "5dd42d402d3435d5d40f6013af20c347b4f40f090ab452ade8de2e5b13635c8e",
+    "package.json": "be8d528ba2f758f1ae6a829ce3f2deaf32978641029d02a4c96a3a771071b927",
+    "rawclaw.app.manifest.json": "2dc6639098cb8bd099268e67bdad27fb49c53dcaf37f4e9eaeb7ec296eb7050f",
+    "README.md": "f36543d17c4ecfd8edd2f0e14509bbfbed367bfd8b52d25f1691537d0ce5ef8d",
+    "src/App.tsx": "968c8c74149b0133f12961ff61b0b8aeb5d2afe468414989b035d0ff87c75164",
+    "src/main.tsx": "240903a71d5933c9b6910e054295ec4551c18803cd024ad6ef6d52134d96202a",
+    "src/rawclaw-sdk.ts": "c3e691b34eb4d2d6a25525b205ef2693f5fa4ba23d563aff68d22dfb176d7907",
+    "src/styles.css": "26db0ad8b85f5751d0b5b6fb5e261f788848b3935aa13c312b799c5717d6064e",
+    "tsconfig.json": "cf007aba8fa663c79d0e474569ddb6f9267261b3e74310692f8010b3a41b82c8",
+    "vite.config.ts": "74cf369bfc627b81e41183200f614448dfc6f98dd3932802002f189171f6a3f5"
+  },
+  "files": {
+    "docs/AGENT_MEMORY.md": {
+      "hash": "11151cd17198f1d41e25783038641bb6da771c2072dd96a1715072889c1ee696",
+      "size": 92
+    },
+    "docs/DECISIONS.md": {
+      "hash": "aaff6cc625daa96252f4d87790afee80b66619187721b7764a25e3254ec4ebfd",
+      "size": 156
+    },
+    "docs/PLAN.md": {
+      "hash": "4c47925754740b57c5aad10bb84aa8d2877b6c57d639212a2f1d22ce7ad53270",
+      "size": 308
+    },
+    "docs/PROJECT_BRIEF.md": {
+      "hash": "7816587a1b4dae546fac2d6e9b6d6b84ca7a62fc5314a51963bce1ae4f30e99f",
+      "size": 380
+    },
+    "docs/STATUS.md": {
+      "hash": "b54266d1b1e6e0c3d3f28debbff220f4b1affafcb35a5eb019eb68da64059f91",
+      "size": 146
+    },
+    "docs/TASKS.md": {
+      "hash": "62617d7818a1382aa21eb2b7759e9247225d1799df27dd663197629cb1af78b1",
+      "size": 1047
+    },
+    "index.html": {
+      "hash": "5dd42d402d3435d5d40f6013af20c347b4f40f090ab452ade8de2e5b13635c8e",
+      "size": 309
+    },
+    "package.json": {
+      "hash": "be8d528ba2f758f1ae6a829ce3f2deaf32978641029d02a4c96a3a771071b927",
+      "size": 435
+    },
+    "rawclaw.app.manifest.json": {
+      "hash": "2dc6639098cb8bd099268e67bdad27fb49c53dcaf37f4e9eaeb7ec296eb7050f",
+      "size": 2216
+    },
+    "README.md": {
+      "hash": "f36543d17c4ecfd8edd2f0e14509bbfbed367bfd8b52d25f1691537d0ce5ef8d",
+      "size": 358
+    },
+    "src/App.tsx": {
+      "hash": "968c8c74149b0133f12961ff61b0b8aeb5d2afe468414989b035d0ff87c75164",
+      "size": 468
+    },
+    "src/main.tsx": {
+      "hash": "240903a71d5933c9b6910e054295ec4551c18803cd024ad6ef6d52134d96202a",
+      "size": 238
+    },
+    "src/rawclaw-sdk.ts": {
+      "hash": "c3e691b34eb4d2d6a25525b205ef2693f5fa4ba23d563aff68d22dfb176d7907",
+      "size": 2950
+    },
+    "src/styles.css": {
+      "hash": "26db0ad8b85f5751d0b5b6fb5e261f788848b3935aa13c312b799c5717d6064e",
+      "size": 3052
+    },
+    "tsconfig.json": {
+      "hash": "cf007aba8fa663c79d0e474569ddb6f9267261b3e74310692f8010b3a41b82c8",
+      "size": 599
+    },
+    "vite.config.ts": {
+      "hash": "74cf369bfc627b81e41183200f614448dfc6f98dd3932802002f189171f6a3f5",
+      "size": 112
+    }
+  },
+  "createdAt": "2026-05-04T06:54:06.130Z"
+}

@@ -1,5 +1,5 @@
 import { ToolCall, ToolResult } from './tool';
-import { ProvenanceTrace, ProvenanceStep } from './provenance';
+import { ProvenanceTrace } from './provenance';
 import { AssistantConfidenceState, AssistantLane } from './assistant';
 import { GatewayRoutingContext } from './gateway';
 
@@ -95,6 +95,157 @@ export interface MemoryEvent {
   entryId?: string;
 }
 
+export type ChatNluIntent =
+  | 'conversation'
+  | 'research'
+  | 'memory_capture'
+  | 'memory_query'
+  | 'task_create'
+  | 'advisory'
+  | 'code_help'
+  | 'troubleshooting'
+  | 'edit_request'
+  | 'tool_request'
+  | 'settings_control'
+  | 'clarification_needed'
+  | 'unknown';
+
+export type ChatNluFrameSource = 'deterministic' | 'semantic' | 'model' | 'override' | 'legacy_fallback' | 'timeout_fallback';
+export type ChatNluConfidenceState = 'direct' | 'inferred' | 'needs_clarification';
+export type ChatNluMemoryScope = 'session' | 'operator' | 'mission' | 'recent' | 'all';
+
+export type ChatNluRoutingFallbackReason =
+  | 'nlu_timeout'
+  | 'research_followup'
+  | 'tool_metadata_unavailable'
+  | 'tool_unavailable'
+  | 'invalid_nlu_override'
+  | 'clarification_expired'
+  | 'schema_unknown'
+  | 'selected_agent_unavailable'
+  | 'lane_unavailable'
+  | 'low_confidence'
+  | 'clarification_failed';
+
+export type ChatNluEntityType =
+  | 'url'
+  | 'file_path'
+  | 'date_time'
+  | 'person'
+  | 'tool_name'
+  | 'model_name'
+  | 'task_text'
+  | 'memory_fact'
+  | 'setting_key'
+  | 'selection_ref'
+  | 'attachment_ref';
+
+export interface ChatNluEntity {
+  type: ChatNluEntityType;
+  value: string;
+  normalizedValue?: string;
+  confidence: number;
+  span?: [number, number];
+  source: ChatNluFrameSource;
+}
+
+export interface ChatNluRecommendedTool {
+  name: string;
+  type: 'native' | 'mcp' | 'skill';
+  confidence: number;
+  reason:
+    | 'matched tool name'
+    | 'matched MCP server'
+    | 'matched research intent'
+    | 'matched selected skill'
+    | 'matched explicit chat control';
+  serverId?: string;
+  serverDisplayName?: string;
+  mayRequireConfirmation?: boolean;
+}
+
+export interface ChatNluFrame {
+  schemaVersion: 1;
+  intent: ChatNluIntent;
+  secondaryIntents?: Array<{ intent: ChatNluIntent; confidence: number; reason?: string }>;
+  recommendedLane: AssistantLane;
+  confidence: number;
+  confidenceState: ChatNluConfidenceState;
+  source: ChatNluFrameSource;
+  entities: ChatNluEntity[];
+  recommendedTools?: ChatNluRecommendedTool[];
+  memoryScopes?: {
+    capture?: ChatNluMemoryScope;
+    query?: ChatNluMemoryScope;
+  };
+  routingFallbackReason?: ChatNluRoutingFallbackReason;
+  clarificationQuestion?: string;
+  clarificationFailed?: boolean;
+  overrideApplied?: boolean;
+  notes?: string[];
+}
+
+export interface ChatNluOverride {
+  intent: ChatNluIntent | string;
+}
+
+export interface PendingNluClarification {
+  id: string;
+  originalUserContent: string;
+  clarifyingQuestion: string;
+  candidateFrame: ChatNluFrame;
+  attemptCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatNluPendingClarificationUpdate {
+  action: 'set' | 'clear' | 'increment';
+  state?: PendingNluClarification;
+  expectedUpdatedAt?: string | null;
+}
+
+export interface ChatNluClarificationUpdateResult {
+  applied: boolean;
+  reason?: 'stale' | 'missing_session' | 'empty_update';
+}
+
+export interface ChatNluAnalyzeResult {
+  frame: ChatNluFrame;
+  pendingClarificationUpdate?: ChatNluPendingClarificationUpdate;
+}
+
+export interface ChatNluAvailableTool {
+  name: string;
+  description?: string;
+  type: 'native' | 'mcp' | 'skill';
+  capabilityTags?: string[];
+  serverId?: string;
+  serverDisplayName?: string;
+}
+
+export interface ChatNluAnalyzeInput {
+  sessionId: string;
+  latestUserContent: string;
+  chatControlsSubset: Pick<ChatControlState, 'preferredWebMode' | 'toolUseMode' | 'selectedTools' | 'selectedPlugins'>;
+  selectedAgent: { id?: string; name?: string | null; skills?: string[] } | null;
+  availableTools: ChatNluAvailableTool[];
+  attachments: ChatAttachment[];
+  selection: DocumentSelection | null;
+  assistantStateSummary: string;
+  pendingClarification: PendingNluClarification | null;
+  nluOverride?: ChatNluOverride | null;
+  previousAssistantNlu?: ChatNluFrame | null;
+}
+
+export interface ChatContextBudget {
+  systemPromptChars: number;
+  messageHistoryChars: number;
+  toolDefinitionChars: number;
+  otherChars: number;
+  totalEstimatedChars: number;
+}
+
 export interface AdvisoryEvent {
   category: 'next_step' | 'follow_up' | 'reminder' | 'blocker' | 'briefing';
   summary: string;
@@ -110,6 +261,8 @@ export interface WorkflowState {
   runIds?: string[];
   assistantLane?: AssistantLane;
   confidenceState?: AssistantConfidenceState;
+  nlu?: ChatNluFrame;
+  contextBudget?: ChatContextBudget | null;
 }
 
 export interface ChatMessage {
@@ -137,6 +290,9 @@ export interface ChatMessage {
   };
   // P2 Metadata
   createdAt?: Date | string;
+  branchId?: string | null;
+  parentMessageId?: string | null;
+  branchSequence?: number | null;
   durationMs?: number;
   promptPackId?: string;
   promptVersionHash?: string;
@@ -200,6 +356,10 @@ export interface ChatRequest {
     workflowPromptIds?: string[];
     assistantLane?: AssistantLane;
   };
+  /** Optional prompt-pack override for internal surfaces such as App Builder. */
+  promptPackId?: string;
+  /** Optional system-level overlay appended for internal surfaces. */
+  promptOverlay?: string | null;
   /** Runtime gateway routing context resolved by the API or another caller */
   gateway_context?: GatewayContextPayload;
   // P2 Parameters
@@ -216,6 +376,7 @@ export interface ChatRequest {
   permissionMode?: PermissionMode;
   selectedPlugins?: string[];
   selectedTools?: string[];
+  nluOverride?: ChatNluOverride | null;
 }
 
 /**
@@ -266,6 +427,8 @@ export interface ChatStreamChunk {
     durationMs?: number;
     runIds?: string[];
     isDeepResearch?: boolean;
+    nlu?: ChatNluFrame;
+    contextBudget?: ChatContextBudget | null;
   };
 }
 

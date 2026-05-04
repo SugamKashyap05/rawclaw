@@ -1,0 +1,6 @@
+# A Clean Web Calculator Status
+
+- Project status: planned
+- Approval required: yes
+- Approval granted: yes
+- Updated at: 2026-05-04T06:57:29.206Z

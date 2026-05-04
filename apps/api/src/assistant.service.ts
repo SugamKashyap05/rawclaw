@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
-import { AdvisoryItem, AssistantBriefing, AssistantCommitment, AssistantState } from '@rawclaw/shared';
+import { AdvisoryItem, AssistantBriefing, AssistantCommitment, AssistantState, ChatNluFrame, MemorySearchResult } from '@rawclaw/shared';
 import { MemoryService } from './memory.service';
 import { TasksService } from './tasks/tasks.service';
 import { SelfImprovementService } from './self-improvement.service';
@@ -8,8 +8,13 @@ import { SelfImprovementService } from './self-improvement.service';
 const ASSISTANT_STATE_KEY = 'rawclaw.assistant_state';
 
 type IngestResult = {
-  memoryEvents: Array<{ layer: 'session' | 'operator' | 'mission'; action: 'captured' | 'updated'; summary: string; entryId?: string }>;
+  memoryEvents: Array<{ layer: 'session' | 'operator' | 'mission'; action: 'captured' | 'updated' | 'recalled'; summary: string; entryId?: string }>;
   advisoryEvents: Array<{ category: 'next_step' | 'follow_up' | 'reminder' | 'blocker' | 'briefing'; summary: string; actionState: 'suggested' | 'queued' | 'executed' }>;
+};
+
+type NluMemoryQueryResult = {
+  promptText: string | null;
+  memoryEvents: IngestResult['memoryEvents'];
 };
 
 @Injectable()
@@ -158,7 +163,7 @@ export class AssistantService {
     return normalized;
   }
 
-  async ingestUserTurn(sessionId: string, content: string): Promise<IngestResult> {
+  async ingestUserTurn(sessionId: string, content: string, nluFrame?: ChatNluFrame | null): Promise<IngestResult> {
     const text = (content || '').trim();
     const lower = text.toLowerCase();
     const current = await this.getState();
@@ -244,6 +249,30 @@ export class AssistantService {
       });
     }
 
+    if (
+      memoryEvents.length === 0 &&
+      nluFrame?.intent === 'memory_capture' &&
+      nluFrame.confidence >= 0.82
+    ) {
+      const fact = (nluFrame.entities || []).find((entity) => entity.type === 'memory_fact' && entity.confidence >= 0.75);
+      const captureScope = nluFrame.memoryScopes?.capture || 'session';
+      if (fact?.value && ['session', 'operator', 'mission'].includes(captureScope)) {
+        const collection = captureScope as 'session' | 'operator' | 'mission';
+        const entry = await this.memoryService.add({
+          content: fact.value.trim(),
+          collection,
+          source: collection === 'session' ? `session:${sessionId}` : 'assistant-state',
+          tags: ['assistant', 'nlu-memory-capture'],
+        });
+        memoryEvents.push({
+          layer: collection,
+          action: 'captured',
+          summary: `Captured an NLU-detected ${collection} memory fact.`,
+          entryId: entry.id,
+        });
+      }
+    }
+
     const remindMatch = text.match(/\bremind me to\s+(.+?)(?:[.?!]|$)/i);
     if (remindMatch?.[1]) {
       const summary = remindMatch[1].trim().replace(/[.?!]+$/, '');
@@ -285,6 +314,62 @@ export class AssistantService {
     }
 
     return { memoryEvents, advisoryEvents };
+  }
+
+  async queryMemoryForNlu(sessionId: string, content: string, nluFrame?: ChatNluFrame | null): Promise<NluMemoryQueryResult> {
+    const hasMemoryQuery =
+      nluFrame?.intent === 'memory_query' ||
+      Boolean(nluFrame?.secondaryIntents?.some((item) => item.intent === 'memory_query'));
+    if (!hasMemoryQuery) {
+      return { promptText: null, memoryEvents: [] };
+    }
+
+    const scope = nluFrame?.memoryScopes?.query || 'all';
+    const query = (content || '').trim();
+    const searches: Array<Promise<MemorySearchResult[]>> = [];
+    if (scope === 'all' || scope === 'session') {
+      searches.push(this.memoryService.search({ query, collection: 'session', source: `session:${sessionId}` }));
+    }
+    if (scope === 'all' || scope === 'operator') {
+      searches.push(this.memoryService.search({ query, collection: 'operator' }));
+    }
+    if (scope === 'all' || scope === 'mission') {
+      searches.push(this.memoryService.search({ query, collection: 'mission' }));
+    }
+    if (scope === 'all' || scope === 'recent') {
+      searches.push(this.memoryService.search({ query }));
+    }
+
+    const rawResults = (await Promise.all(searches)).flat();
+    const byKey = new Map<string, MemorySearchResult>();
+    for (const result of rawResults) {
+      const key = result.id || `${result.collection}:${result.content.toLowerCase()}`;
+      const existing = byKey.get(key);
+      if (!existing || result.score > existing.score) {
+        byKey.set(key, result);
+      }
+    }
+
+    const results = Array.from(byKey.values())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6);
+    if (!results.length) {
+      return { promptText: null, memoryEvents: [] };
+    }
+
+    const promptText = [
+      '## NLU Memory Query Results',
+      ...results.map((item) => `- [${item.collection}] ${item.preview || item.content}`),
+    ].join('\n');
+
+    return {
+      promptText,
+      memoryEvents: [{
+        layer: scope === 'operator' || scope === 'mission' ? scope : 'session',
+        action: 'recalled',
+        summary: `Recalled ${results.length} memory result(s) for NLU memory query.`,
+      }],
+    };
   }
 
   async buildTurnAdvisories(sessionId: string, latestUserContent: string, assistantContent: string, assistantLane: string): Promise<AdvisoryItem[]> {

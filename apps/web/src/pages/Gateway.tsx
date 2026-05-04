@@ -1,16 +1,66 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AutomationJob, BindingRule, GatewayEvent } from '@rawclaw/shared';
+import {
+  AppRegistryRecord,
+  AutomationJob,
+  BindingRule,
+  GatewayEvent,
+  GraphIngestionRecord,
+  KnowledgeGraphLineageView,
+  KnowledgeEdge,
+  KnowledgeNode,
+  QueueJobSummary,
+  ReflectionProposalView,
+  SimulationRun,
+  WorkerStatusSnapshot,
+} from '@rawclaw/shared';
 import { FiActivity, FiAlertTriangle, FiArrowRight, FiCpu, FiGitBranch, FiRefreshCw, FiShield, FiZap } from 'react-icons/fi';
 import { useGatewayRuntime } from '../hooks/useGatewayRuntime';
-import { fetchGatewayAutomationJobs, fetchGatewayRules } from '../lib/gateway';
+import {
+  approveReflectionProposal,
+  fetchGatewayAutomationJobs,
+  fetchGatewayKnowledgeGraph,
+  fetchGatewayRules,
+  fetchGatewayWorkers,
+  fetchRecentGraphIngestions,
+  fetchRecentQueueJobs,
+  fetchReflectionProposals,
+  fetchSimulations,
+  getProposalSimulationEligibility,
+  publishReflectionProposal,
+  queueSimulation,
+  rejectReflectionProposal,
+} from '../lib/gateway';
+import { fetchAppRegistryRecords } from '../lib/app-builder';
+
+const EMPTY_LINEAGE: KnowledgeGraphLineageView = {
+  supportingSources: [],
+  workerIds: [],
+  referencedEntities: [],
+  priorRunIds: [],
+};
 
 export default function Gateway() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [rules, setRules] = useState<BindingRule[]>([]);
   const [automationJobs, setAutomationJobs] = useState<AutomationJob[]>([]);
+  const [workers, setWorkers] = useState<WorkerStatusSnapshot[]>([]);
+  const [subagentQueueJobs, setSubagentQueueJobs] = useState<QueueJobSummary[]>([]);
+  const [automationQueueJobs, setAutomationQueueJobs] = useState<QueueJobSummary[]>([]);
+  const [sandboxQueueJobs, setSandboxQueueJobs] = useState<QueueJobSummary[]>([]);
+  const [builderQueueJobs, setBuilderQueueJobs] = useState<QueueJobSummary[]>([]);
+  const [appRegistryRecords, setAppRegistryRecords] = useState<AppRegistryRecord[]>([]);
+  const [graphNodes, setGraphNodes] = useState<KnowledgeNode[]>([]);
+  const [graphEdges, setGraphEdges] = useState<KnowledgeEdge[]>([]);
+  const [graphIngestions, setGraphIngestions] = useState<GraphIngestionRecord[]>([]);
+  const [graphLineage, setGraphLineage] = useState<KnowledgeGraphLineageView>(EMPTY_LINEAGE);
+  const [reflectionProposals, setReflectionProposals] = useState<ReflectionProposalView[]>([]);
+  const [simulationRuns, setSimulationRuns] = useState<SimulationRun[]>([]);
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [automationError, setAutomationError] = useState<string | null>(null);
+  const [phase3Error, setPhase3Error] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const selectedRouteId = searchParams.get('route');
   const selectedSessionId = searchParams.get('session');
   const workspaceFilter = searchParams.get('workspace') || 'all';
@@ -81,6 +131,49 @@ export default function Gateway() {
     };
   }, []);
 
+  const loadPhase3Data = async (runId?: string | null) => {
+    try {
+      const [nextWorkers, nextSubagentQueue, nextAutomationQueue, nextSandboxQueue, nextBuilderQueue, nextProposals, nextSimulations, nextRegistry] =
+        await Promise.all([
+          fetchGatewayWorkers(12),
+          fetchRecentQueueJobs('subagent', 8),
+          fetchRecentQueueJobs('automation', 8),
+          fetchRecentQueueJobs('sandbox', 8),
+          fetchRecentQueueJobs('builder', 8),
+          fetchReflectionProposals({ limit: 8 }),
+          fetchSimulations(8),
+          fetchAppRegistryRecords(),
+        ]);
+
+      setWorkers(nextWorkers);
+      setSubagentQueueJobs(nextSubagentQueue);
+      setAutomationQueueJobs(nextAutomationQueue);
+      setSandboxQueueJobs(nextSandboxQueue);
+      setBuilderQueueJobs(nextBuilderQueue);
+      setReflectionProposals(nextProposals);
+      setSimulationRuns(nextSimulations);
+      setAppRegistryRecords(nextRegistry.slice(0, 8));
+
+      if (runId) {
+        const graph = await fetchGatewayKnowledgeGraph({ runId, limit: 12 });
+        setGraphNodes(graph.nodes);
+        setGraphEdges(graph.edges);
+        setGraphIngestions(graph.ingestions);
+        setGraphLineage(graph.lineage || EMPTY_LINEAGE);
+      } else {
+        const ingestions = await fetchRecentGraphIngestions(8);
+        setGraphNodes([]);
+        setGraphEdges([]);
+        setGraphIngestions(ingestions);
+        setGraphLineage(EMPTY_LINEAGE);
+      }
+      setPhase3Error(null);
+    } catch (loadError) {
+      console.error('Failed to load Phase 3 runtime data', loadError);
+      setPhase3Error('Phase 3 worker, graph, or reflection data is temporarily unavailable.');
+    }
+  };
+
   useEffect(() => {
     if (selectedRouteId || !routes.length) {
       return;
@@ -105,6 +198,14 @@ export default function Gateway() {
     }
   }, [selectedRouteId, selectedSessionId, routes, filteredRoutes, searchParams, setSearchParams]);
 
+  useEffect(() => {
+    const candidateRunId =
+      selectedDetail?.liveState?.runId
+      || selectedDetail?.childRunSummaries?.[0]?.id
+      || null;
+    void loadPhase3Data(candidateRunId);
+  }, [selectedDetail?.liveState?.runId, selectedDetail?.childRunSummaries, lastEventAt]);
+
   const selectedRoute = selectedDetail?.route || routes.find((route) => route.id === selectedRouteId) || null;
   const globalAlerts = recentEvents.filter((event) =>
     event.type === 'run.failed'
@@ -112,6 +213,71 @@ export default function Gateway() {
     || event.type === 'subagent.failed'
     || event.type === 'automation.run.failed',
   );
+  const selectedGraphRunId =
+    selectedDetail?.liveState?.runId
+    || selectedDetail?.childRunSummaries?.[0]?.id
+    || null;
+  const busyWorkers = workers.filter((worker) => worker.status === 'busy').length;
+  const offlineWorkers = workers.filter((worker) => worker.status === 'offline').length;
+
+  const reviewProposal = async (proposalView: ReflectionProposalView, action: 'approve' | 'reject') => {
+    const proposal = proposalView.proposal;
+    setActionMessage(null);
+    setBusyAction(`${action}:${proposal.id}`);
+    try {
+      if (action === 'approve') {
+        await approveReflectionProposal(proposal.id, 'Approved from Gateway runtime surface.');
+      } else {
+        await rejectReflectionProposal(proposal.id, 'Rejected from Gateway runtime surface.');
+      }
+      setActionMessage(`Proposal ${action}d: ${proposal.title}`);
+      await loadPhase3Data(selectedGraphRunId);
+    } catch (actionError: any) {
+      console.error(`Failed to ${action} proposal`, actionError);
+      setActionMessage(extractApiError(actionError, `Unable to ${action} that proposal right now.`));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const publishProposalAction = async (proposalView: ReflectionProposalView) => {
+    const proposal = proposalView.proposal;
+    setActionMessage(null);
+    setBusyAction(`publish:${proposal.id}`);
+    try {
+      await publishReflectionProposal(proposal.id, 'Published from Gateway runtime surface.');
+      setActionMessage(`Proposal published: ${proposal.title}`);
+      await loadPhase3Data(selectedGraphRunId);
+    } catch (actionError: any) {
+      console.error('Failed to publish proposal', actionError);
+      setActionMessage(extractApiError(actionError, 'Unable to publish that proposal right now.'));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const runProposalSimulation = async (proposalView: ReflectionProposalView) => {
+    const proposal = proposalView.proposal;
+    setActionMessage(null);
+    setBusyAction(`simulate:${proposal.id}`);
+    try {
+      await queueSimulation({
+        runId: proposal.runId ?? selectedGraphRunId,
+        proposalId: proposal.id,
+        inputEnvelope: {
+          proposalId: proposal.id,
+          runId: proposal.runId ?? selectedGraphRunId,
+        },
+      });
+      setActionMessage(`Simulation queued for ${proposal.title}`);
+      await loadPhase3Data(selectedGraphRunId);
+    } catch (actionError: any) {
+      console.error('Failed to queue simulation', actionError);
+      setActionMessage(extractApiError(actionError, 'Unable to queue that simulation right now.'));
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   return (
     <div style={{ display: 'grid', gap: '1.25rem' }}>
@@ -149,7 +315,10 @@ export default function Gateway() {
             <span>{isStreamLive ? 'Live stream connected' : 'Live stream reconnecting'}</span>
             {lastEventAt ? <span className="mono" style={{ color: 'var(--text-muted)' }}>{formatTimestamp(lastEventAt)}</span> : null}
           </div>
-          {streamError ? <span style={{ color: '#ffd26a' }}>{streamError}</span> : null}
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {actionMessage ? <span style={{ color: 'var(--text-secondary)' }}>{actionMessage}</span> : null}
+            {streamError ? <span style={{ color: '#ffd26a' }}>{streamError}</span> : null}
+          </div>
         </div>
       </section>
 
@@ -451,6 +620,231 @@ export default function Gateway() {
           )}
         </div>
       </section>
+
+      {phase3Error ? <WarningCard title="Phase 3 runtime data unavailable" message={phase3Error} /> : null}
+
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', alignItems: 'start' }}>
+        <div className="glass-card" style={{ display: 'grid', gap: '0.85rem' }}>
+          <SectionTitle icon={<FiCpu />} title="Worker Swarm" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.7rem' }}>
+            <MetricCard label="Workers" value={workers.length} tone="info" />
+            <MetricCard label="Busy" value={busyWorkers} tone={busyWorkers > 0 ? 'warn' : 'default'} />
+            <MetricCard label="Offline" value={offlineWorkers} tone={offlineWorkers > 0 ? 'bad' : 'good'} />
+          </div>
+          {workers.length ? (
+            workers.map((worker) => (
+              <div key={worker.workerId} style={{ border: '1px solid var(--border-glass)', borderRadius: '14px', padding: '0.85rem', background: 'rgba(255,255,255,0.03)', display: 'grid', gap: '0.35rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
+                  <strong>{worker.workerId}</strong>
+                  <StatusPill status={worker.status} />
+                </div>
+                <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                  {worker.workerType} | {worker.hostname} | pid {worker.pid}
+                </div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                  queues {worker.queues.join(', ')} | roles {worker.roles.join(', ')}
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem' }}>
+                  {worker.currentJobId ? `current job ${worker.currentJobId}` : 'idle'} | heartbeat {formatTimestamp(worker.lastHeartbeatAt)}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div style={{ color: 'var(--text-muted)' }}>No Phase 3 workers are registered yet.</div>
+          )}
+        </div>
+
+        <div className="glass-card" style={{ display: 'grid', gap: '0.85rem' }}>
+          <SectionTitle icon={<FiActivity />} title="Queue Activity" />
+          <QueuePanel title="Scout / Analyst Queue" jobs={subagentQueueJobs} />
+          <QueuePanel title="Automation Queue" jobs={automationQueueJobs} />
+          <QueuePanel title="Sandbox Pool" jobs={sandboxQueueJobs} />
+          <QueuePanel title="App Builder Queue" jobs={builderQueueJobs} />
+        </div>
+
+        <div className="glass-card" style={{ display: 'grid', gap: '0.85rem' }}>
+          <SectionTitle icon={<FiGitBranch />} title="Graph Trace" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.7rem' }}>
+            <MetricCard label="Run Nodes" value={graphNodes.length} tone="info" />
+            <MetricCard label="Run Edges" value={graphEdges.length} tone="warn" />
+            <MetricCard label="Ingestions" value={graphIngestions.length} tone="good" />
+          </div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
+            {selectedGraphRunId ? `Showing lineage for run ${selectedGraphRunId}` : 'No selected run yet, showing recent ingestion history.'}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.75rem' }}>
+            <LineageList title="Supporting Sources" items={graphLineage.supportingSources} />
+            <LineageList title="Workers" items={graphLineage.workerIds} mono />
+            <LineageList title="Referenced Entities" items={graphLineage.referencedEntities} />
+            <LineageList title="Prior Runs" items={graphLineage.priorRunIds} mono />
+          </div>
+          {graphNodes.length ? (
+            <div style={{ display: 'grid', gap: '0.55rem' }}>
+              {graphNodes.slice(0, 6).map((node) => (
+                <div key={node.id} style={{ border: '1px solid var(--border-glass)', borderRadius: '12px', padding: '0.75rem', background: 'rgba(255,255,255,0.03)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                    <strong>{node.label}</strong>
+                    <StatusPill status={node.kind} />
+                  </div>
+                  <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: '0.25rem' }}>{node.ref}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: 'var(--text-muted)' }}>No graph nodes captured for the current selection yet.</div>
+          )}
+          {graphIngestions.length ? (
+            <div style={{ display: 'grid', gap: '0.45rem' }}>
+              {graphIngestions.slice(0, 4).map((ingestion) => (
+                <div key={ingestion.id} style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                  {ingestion.runId} | {ingestion.status} | {ingestion.nodeCount} nodes / {ingestion.edgeCount} edges
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="glass-card" style={{ display: 'grid', gap: '0.85rem' }}>
+          <SectionTitle icon={<FiShield />} title="Registered Apps" />
+          {appRegistryRecords.length ? (
+            <div style={{ display: 'grid', gap: '0.7rem' }}>
+              {appRegistryRecords.map((record) => (
+                <div key={record.id} style={{ border: '1px solid var(--border-glass)', borderRadius: '12px', padding: '0.75rem', background: 'rgba(255,255,255,0.03)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                    <strong>{record.appId}</strong>
+                    <StatusPill status={record.status} />
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', marginTop: '0.25rem', fontSize: '0.82rem' }}>{record.version}</div>
+                  <div style={{ color: 'var(--text-secondary)', marginTop: '0.35rem' }}>{record.controlEndpoint}</div>
+                  <div style={{ marginTop: '0.45rem' }}>
+                    <Link to="/app-builder" className="btn-ghost" style={{ textDecoration: 'none' }}>Open App Builder</Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: 'var(--text-muted)' }}>No App Builder registry records are available yet.</div>
+          )}
+        </div>
+
+        <div className="glass-card" style={{ display: 'grid', gap: '0.85rem' }}>
+          <SectionTitle icon={<FiShield />} title="Reflection Review" />
+          {reflectionProposals.length ? (
+            reflectionProposals.map((proposalView) => {
+              const proposal = proposalView.proposal;
+              const eligibility = getProposalSimulationEligibility(proposalView, simulationRuns);
+              const canApprove = proposal.status === 'proposed' && eligibility.canApprove;
+
+              return (
+              <div key={proposal.id} style={{ border: '1px solid var(--border-glass)', borderRadius: '14px', padding: '0.9rem', background: 'rgba(255,255,255,0.03)', display: 'grid', gap: '0.45rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
+                  <strong>{proposal.title}</strong>
+                  <StatusPill status={proposal.status} />
+                </div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', lineHeight: 1.55 }}>{proposal.rationale}</div>
+                <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                  {proposal.kind} | run {proposal.runId || 'n/a'}
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', lineHeight: 1.5 }}>
+                  {eligibility.canApprove
+                    ? `Simulation gate passed${eligibility.latestSimulationId ? ` via ${eligibility.latestSimulationId}` : ''}.`
+                    : eligibility.reasons.join(' ')}
+                </div>
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                  {proposal.status === 'proposed' ? (
+                    <>
+                      <button className="btn-ghost" disabled={busyAction === `approve:${proposal.id}` || !canApprove} onClick={() => void reviewProposal(proposalView, 'approve')}>
+                        Approve
+                      </button>
+                      <button className="btn-ghost" disabled={busyAction === `reject:${proposal.id}`} onClick={() => void reviewProposal(proposalView, 'reject')}>
+                        Reject
+                      </button>
+                    </>
+                  ) : null}
+                  {proposal.status === 'approved' ? (
+                    <button className="btn-ghost" disabled={busyAction === `publish:${proposal.id}`} onClick={() => void publishProposalAction(proposalView)}>
+                      Publish
+                    </button>
+                  ) : null}
+                  <button className="btn-ghost" disabled={busyAction === `simulate:${proposal.id}`} onClick={() => void runProposalSimulation(proposalView)}>
+                    Simulate
+                  </button>
+                </div>
+              </div>
+            )})
+          ) : (
+            <div style={{ color: 'var(--text-muted)' }}>No reflection proposals have been generated yet.</div>
+          )}
+          <div style={{ borderTop: '1px solid var(--border-glass)', paddingTop: '0.8rem', display: 'grid', gap: '0.45rem' }}>
+            <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>RECENT SIMULATIONS</div>
+            {simulationRuns.length ? (
+              simulationRuns.map((run) => (
+                <div key={run.id} style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                  {run.id} | {run.status} | {run.proposalId || 'no proposal'}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: 'var(--text-muted)' }}>No simulations have run yet.</div>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function QueuePanel({ title, jobs }: { title: string; jobs: QueueJobSummary[] }) {
+  return (
+    <div style={{ display: 'grid', gap: '0.45rem' }}>
+      <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{title.toUpperCase()}</div>
+      {jobs.length ? (
+        jobs.map((job) => (
+          <div key={`${title}-${job.id}`} style={{ border: '1px solid var(--border-glass)', borderRadius: '12px', padding: '0.75rem', background: 'rgba(255,255,255,0.03)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
+              <strong>{job.title}</strong>
+              <StatusPill status={job.status} />
+            </div>
+            {job.summary ? (
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', marginTop: '0.3rem', lineHeight: 1.45 }}>
+                {job.summary}
+              </div>
+            ) : null}
+            <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: '0.25rem' }}>
+              {[job.id, job.runId || null, job.workerId ? `worker ${job.workerId}` : null].filter(Boolean).join(' | ')}
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem' }}>
+              {job.queueType} | updated {formatTimestamp(job.updatedAt || job.createdAt)}
+            </div>
+          </div>
+        ))
+      ) : (
+        <div style={{ color: 'var(--text-muted)' }}>No recent jobs recorded.</div>
+      )}
+    </div>
+  );
+}
+
+function LineageList({
+  title,
+  items,
+  mono = false,
+}: {
+  title: string;
+  items: string[];
+  mono?: boolean;
+}) {
+  return (
+    <div style={{ display: 'grid', gap: '0.45rem', padding: '0.75rem', border: '1px solid var(--border-glass)', borderRadius: '12px', background: 'rgba(255,255,255,0.03)' }}>
+      <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>{title.toUpperCase()}</div>
+      {items.length ? (
+        items.slice(0, 4).map((item) => (
+          <div key={`${title}-${item}`} className={mono ? 'mono' : ''} style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.45 }}>
+            {item}
+          </div>
+        ))
+      ) : (
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>No lineage captured yet.</div>
+      )}
     </div>
   );
 }
@@ -642,6 +1036,13 @@ function describeRuleScope(rule: BindingRule): string {
   ].filter(Boolean);
 
   return selectors.length ? selectors.join(' | ') : 'global fallback rule';
+}
+
+function extractApiError(error: unknown, fallback: string): string {
+  if (typeof error === 'object' && error && 'message' in error && typeof (error as any).message === 'string') {
+    return (error as any).message;
+  }
+  return fallback;
 }
 
 const fieldStyle = {

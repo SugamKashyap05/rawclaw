@@ -1,9 +1,10 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { AgentProfile, AnnounceBackMode, AutomationJob, AutomationRun, AutomationRunStatus, ChatMessage, ChatRequest, ContextForkMode, CreateAutomationJobRequest, UpdateAutomationJobRequest } from '@rawclaw/shared';
+import { AgentProfile, AutomationJob, AutomationQueueJob, AutomationRun, AutomationRunStatus, ChatMessage, ChatRequest, ContextForkMode, CreateAutomationJobRequest, UpdateAutomationJobRequest } from '@rawclaw/shared';
 import { randomUUID } from 'crypto';
 import { AgentsService } from './agents.service';
 import { ChatService } from './chat.service';
+import { GatewayControlPlaneService } from './gateway-control-plane.service';
 import { GatewayEventsService } from './gateway-events.service';
 import { GatewayExecutionService } from './gateway-execution.service';
 import { GatewayRoutingService } from './gateway-routing.service';
@@ -18,13 +19,14 @@ interface CronParser {
 const parser = require('cron-parser') as CronParser;
 
 @Injectable()
-export class GatewayAutomationService implements OnModuleInit {
+export class GatewayAutomationService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(GatewayAutomationService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly routingService: GatewayRoutingService,
     private readonly gatewayEvents: GatewayEventsService,
+    private readonly controlPlane: GatewayControlPlaneService,
     private readonly gatewayExecutionService: GatewayExecutionService,
     private readonly agentsService: AgentsService,
     private readonly chatService: ChatService,
@@ -32,8 +34,11 @@ export class GatewayAutomationService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    void this.controlPlane.bootstrapQueueGroups();
     await this.reconcileNextRuns();
   }
+
+  onModuleDestroy() {}
 
   private normalizeNullable(value?: string | null): string | null {
     const trimmed = typeof value === 'string' ? value.trim() : '';
@@ -395,6 +400,8 @@ export class GatewayAutomationService implements OnModuleInit {
           nextRunAt: job.status === 'active' ? this.getNextRun(job.schedule) : null,
         },
       });
+      const selectedAgent = await this.resolveAgent(resolved.binding.agentId || job.agentId || null);
+      const requestPayload = await this.buildRequest(job, selectedAgent, resolved.binding as any);
 
       await this.gatewayEvents.publish({
         type: 'automation.run.queued',
@@ -405,20 +412,53 @@ export class GatewayAutomationService implements OnModuleInit {
         summary: `Automation run queued for ${job.name}`,
         payload: { jobId: job.id, kind: job.kind, attempt },
       });
-
-      setTimeout(() => {
-        void this.executeRun(job, run.id, resolved.binding.id);
-      }, 0);
+      await this.controlPlane.markRunQueued({
+        id: run.id,
+        kind: 'automation',
+        sessionId: resolved.binding.sessionId,
+        bindingId: resolved.binding.id,
+        agentId: resolved.binding.agentId,
+        queueType: 'automation',
+        jobId: run.id,
+        summary: `Automation run queued for ${job.name}`,
+        metadata: {
+          jobId: job.id,
+          kind: job.kind,
+          attempt,
+        },
+      });
+      await this.controlPlane.enqueueAutomationJob({
+        runId: run.id,
+        jobId: job.id,
+        bindingId: resolved.binding.id,
+        sessionId: resolved.binding.sessionId,
+        agentId: resolved.binding.agentId,
+        requestPayload: requestPayload as unknown as Record<string, unknown>,
+        workerId: null,
+      });
+      await this.controlPlane.appendShortTermMemory({
+        sessionId: resolved.binding.sessionId,
+        runId: run.id,
+        subagentId: null,
+        kind: 'handoff_context',
+        value: {
+          jobId: job.id,
+          jobName: job.name,
+          prompt: job.prompt,
+          kind: job.kind,
+          toolIds: job.toolIds ? JSON.parse(job.toolIds) : [],
+        },
+      });
       return this.mapAutomationRun(run);
     } finally {
       await this.redis.delete(this.lockKey(job.id));
     }
   }
 
-  private async executeRun(job: any, runId: string, bindingId: string): Promise<void> {
+  private async executeRun(job: any, runId: string, bindingId: string): Promise<'completed' | 'failed' | 'cancelled'> {
     const run = await this.prisma.gatewayAutomationRun.findUnique({ where: { id: runId } });
     if (!run) {
-      return;
+      return 'failed';
     }
 
     const binding = await this.prisma.sessionBinding.findUnique({ where: { id: bindingId } });
@@ -427,7 +467,8 @@ export class GatewayAutomationService implements OnModuleInit {
         where: { id: runId },
         data: { status: 'failed', errorMessage: 'Binding disappeared before execution.', finishedAt: new Date() },
       });
-      return;
+      await this.controlPlane.markRunTerminal(runId, 'failed', 'Binding disappeared before execution.', 'Binding disappeared before execution.');
+      return 'failed';
     }
 
     let selectedAgent = await this.resolveAgent(binding.agentId || job.agentId || null);
@@ -438,6 +479,7 @@ export class GatewayAutomationService implements OnModuleInit {
       data: { status: 'running', startedAt: new Date(), heartbeatAt: new Date() },
     });
     await this.routingService.markRunStarted(binding.id, runId);
+    await this.controlPlane.markRunStarted(runId, `Automation run started for ${job.name}`);
     await this.gatewayEvents.publish({
       type: 'automation.run.started',
       sessionId: binding.sessionId,
@@ -458,6 +500,7 @@ export class GatewayAutomationService implements OnModuleInit {
             data: { heartbeatAt: new Date() },
           });
           await this.routingService.heartbeat(binding.id, runId);
+          await this.controlPlane.markRunHeartbeat(runId);
           await this.gatewayEvents.publish({
             type: 'automation.run.heartbeat',
             sessionId: binding.sessionId,
@@ -488,6 +531,14 @@ export class GatewayAutomationService implements OnModuleInit {
           heartbeatAt: new Date(),
         },
       });
+      await this.controlPlane.captureRoleTraceFromProvenance({
+        sessionId: binding.sessionId,
+        runId,
+        provenanceTrace: result.provenanceTrace,
+        bindingId: binding.id,
+        agentId: binding.agentId,
+        source: 'automation',
+      });
       await this.prisma.gatewayAutomationJob.update({
         where: { id: job.id },
         data: {
@@ -496,6 +547,7 @@ export class GatewayAutomationService implements OnModuleInit {
         },
       });
       await this.routingService.markRunFinished(binding.id, runId, 'completed');
+      await this.controlPlane.markRunTerminal(runId, 'completed', summary, null);
       await this.gatewayEvents.publish({
         type: 'automation.run.completed',
         sessionId: binding.sessionId,
@@ -510,6 +562,7 @@ export class GatewayAutomationService implements OnModuleInit {
         agentId: binding.agentId || undefined,
         runIds: [runId],
       });
+      return 'completed';
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const cancelled = message === 'Cancelled by operator';
@@ -524,6 +577,12 @@ export class GatewayAutomationService implements OnModuleInit {
         },
       });
       await this.routingService.markRunFinished(binding.id, runId, 'failed', message);
+      await this.controlPlane.markRunTerminal(
+        runId,
+        cancelled ? 'cancelled' : 'failed',
+        cancelled ? 'Automation run cancelled by operator.' : `Automation run failed: ${message}`,
+        message,
+      );
       await this.gatewayEvents.publish({
         type: cancelled ? 'automation.run.cancelled' : 'automation.run.failed',
         sessionId: binding.sessionId,
@@ -549,6 +608,249 @@ export class GatewayAutomationService implements OnModuleInit {
           },
         });
       }
+      return cancelled ? 'cancelled' : 'failed';
+    }
+  }
+
+  private async getQueuedRunContext(runId: string): Promise<{
+    queueJob: AutomationQueueJob;
+    run: any;
+    job: any;
+    binding: any;
+  }> {
+    const queueJob = await this.controlPlane.getAutomationJob(runId);
+    if (!queueJob) {
+      throw new NotFoundException(`Queued automation job for run '${runId}' not found.`);
+    }
+    const run = await this.prisma.gatewayAutomationRun.findUnique({
+      where: { id: runId },
+      include: { job: true },
+    });
+    if (!run) {
+      throw new NotFoundException(`Automation run '${runId}' not found.`);
+    }
+    const binding = await this.prisma.sessionBinding.findUnique({ where: { id: queueJob.bindingId } });
+    if (!binding) {
+      throw new NotFoundException(`Binding '${queueJob.bindingId}' not found for automation run '${runId}'.`);
+    }
+    return { queueJob, run, job: run.job, binding };
+  }
+
+  async markQueuedRunStarted(runId: string, workerId: string): Promise<void> {
+    const { queueJob, run, job, binding } = await this.getQueuedRunContext(runId);
+    await this.prisma.gatewayAutomationRun.update({
+      where: { id: runId },
+      data: { status: 'running', startedAt: new Date(), heartbeatAt: new Date() },
+    });
+    await this.controlPlane.updateAutomationJob(runId, {
+      status: 'running',
+      workerId,
+    });
+    await this.controlPlane.putWorkerLease({
+      workerId,
+      jobId: runId,
+      queueType: 'automation',
+      runId,
+      sessionId: queueJob.sessionId,
+      lastHeartbeatAt: new Date().toISOString(),
+      leaseExpiresAt: new Date(Date.now() + 60000).toISOString(),
+    });
+    await this.controlPlane.heartbeatWorker({
+      workerId,
+      currentJobId: runId,
+      currentRunId: runId,
+      leaseExpiresAt: new Date(Date.now() + 60000).toISOString(),
+      status: 'busy',
+    });
+    await this.routingService.markRunStarted(binding.id, runId);
+    await this.controlPlane.markRunStarted(runId, `Automation run started for ${job.name}`, workerId);
+    await this.gatewayEvents.publish({
+      type: 'automation.job.started',
+      sessionId: queueJob.sessionId,
+      bindingId: queueJob.bindingId,
+      runId,
+      agentId: queueJob.agentId ?? null,
+      summary: `Automation job started on worker ${workerId}`,
+      payload: { jobId: job.id, workerId },
+    });
+  }
+
+  async markQueuedRunHeartbeat(runId: string, workerId: string): Promise<void> {
+    const { queueJob, binding } = await this.getQueuedRunContext(runId);
+    const leaseExpiresAt = new Date(Date.now() + 60000).toISOString();
+    await this.prisma.gatewayAutomationRun.update({
+      where: { id: runId },
+      data: { heartbeatAt: new Date() },
+    });
+    await this.controlPlane.updateAutomationJob(runId, {
+      workerId,
+    });
+    await this.controlPlane.putWorkerLease({
+      workerId,
+      jobId: runId,
+      queueType: 'automation',
+      runId,
+      sessionId: queueJob.sessionId,
+      lastHeartbeatAt: new Date().toISOString(),
+      leaseExpiresAt,
+    });
+    await this.controlPlane.heartbeatWorker({
+      workerId,
+      currentJobId: runId,
+      currentRunId: runId,
+      leaseExpiresAt,
+      status: 'busy',
+    });
+    await this.routingService.heartbeat(binding.id, runId);
+    await this.controlPlane.markRunHeartbeat(runId, workerId);
+  }
+
+  async completeQueuedRun(params: {
+    runId: string;
+    workerId: string;
+    output: string;
+    sources?: string[];
+    toolCalls?: Record<string, unknown>[];
+    provenanceTrace?: Record<string, unknown> | null;
+  }): Promise<void> {
+    const { queueJob, job, binding } = await this.getQueuedRunContext(params.runId);
+    const summary = this.summarizeOutput(params.output, `${job.name} completed.`);
+    await this.prisma.gatewayAutomationRun.update({
+      where: { id: params.runId },
+      data: {
+        status: 'completed',
+        summary,
+        output: params.output,
+        sourcesJson: JSON.stringify(params.sources || []),
+        toolCallsJson: JSON.stringify(params.toolCalls || []),
+        provenanceJson: params.provenanceTrace ? JSON.stringify(params.provenanceTrace) : null,
+        finishedAt: new Date(),
+        heartbeatAt: new Date(),
+      },
+    });
+    await this.controlPlane.captureRoleTraceFromProvenance({
+      sessionId: binding.sessionId,
+      runId: params.runId,
+      provenanceTrace: params.provenanceTrace || null,
+      bindingId: binding.id,
+      agentId: binding.agentId,
+      workerId: params.workerId,
+      source: 'automation',
+    });
+    await this.prisma.gatewayAutomationJob.update({
+      where: { id: job.id },
+      data: {
+        lastRunAt: new Date(),
+        nextRunAt: job.status === 'active' ? this.getNextRun(job.schedule) : null,
+      },
+    });
+    await this.routingService.markRunFinished(binding.id, params.runId, 'completed');
+    await this.controlPlane.markRunTerminal(params.runId, 'completed', summary, null, params.workerId);
+    await this.controlPlane.updateAutomationJob(params.runId, {
+      status: 'completed',
+      workerId: params.workerId,
+    });
+    await this.controlPlane.clearWorkerLease(params.runId);
+    await this.controlPlane.heartbeatWorker({
+      workerId: params.workerId,
+      currentJobId: null,
+      currentRunId: null,
+      leaseExpiresAt: null,
+      status: 'online',
+    });
+    await this.gatewayEvents.publish({
+      type: 'automation.run.completed',
+      sessionId: binding.sessionId,
+      bindingId: binding.id,
+      runId: params.runId,
+      agentId: binding.agentId,
+      summary: `Automation run completed for ${job.name}`,
+      payload: { jobId: job.id, kind: job.kind, summary, workerId: params.workerId },
+    });
+    await this.gatewayEvents.publish({
+      type: 'automation.job.completed',
+      sessionId: queueJob.sessionId,
+      bindingId: queueJob.bindingId,
+      runId: params.runId,
+      agentId: queueJob.agentId ?? null,
+      summary: `Automation queue worker completed run ${params.runId}`,
+      payload: { jobId: queueJob.jobId, workerId: params.workerId, status: 'completed' },
+    });
+    await this.chatService.createMessage(binding.sessionId, 'assistant', summary, {
+      agentId: binding.agentId || undefined,
+      runIds: [params.runId],
+    });
+  }
+
+  async failQueuedRun(params: {
+    runId: string;
+    workerId: string;
+    error: string;
+    cancelled?: boolean;
+  }): Promise<void> {
+    const { queueJob, job, binding, run } = await this.getQueuedRunContext(params.runId);
+    const cancelled = params.cancelled || params.error === 'Cancelled by operator';
+    await this.prisma.gatewayAutomationRun.update({
+      where: { id: params.runId },
+      data: {
+        status: cancelled ? 'cancelled' : 'failed',
+        summary: cancelled ? 'Automation run cancelled by operator.' : `Automation run failed: ${params.error}`,
+        errorMessage: params.error,
+        finishedAt: new Date(),
+        heartbeatAt: new Date(),
+      },
+    });
+    await this.routingService.markRunFinished(binding.id, params.runId, 'failed', params.error);
+    await this.controlPlane.markRunTerminal(
+      params.runId,
+      cancelled ? 'cancelled' : 'failed',
+      cancelled ? 'Automation run cancelled by operator.' : `Automation run failed: ${params.error}`,
+      params.error,
+      params.workerId,
+    );
+    await this.controlPlane.updateAutomationJob(params.runId, {
+      status: cancelled ? 'cancelled' : 'failed',
+      workerId: params.workerId,
+    });
+    await this.controlPlane.clearWorkerLease(params.runId);
+    await this.controlPlane.heartbeatWorker({
+      workerId: params.workerId,
+      currentJobId: null,
+      currentRunId: null,
+      leaseExpiresAt: null,
+      status: 'online',
+    });
+    await this.gatewayEvents.publish({
+      type: cancelled ? 'automation.run.cancelled' : 'automation.run.failed',
+      sessionId: binding.sessionId,
+      bindingId: binding.id,
+      runId: params.runId,
+      agentId: binding.agentId,
+      summary: cancelled ? `Automation run cancelled for ${job.name}` : `Automation run failed for ${job.name}`,
+      payload: { jobId: job.id, kind: job.kind, error: params.error, cancelled, workerId: params.workerId },
+    });
+    await this.gatewayEvents.publish({
+      type: 'automation.job.failed',
+      sessionId: queueJob.sessionId,
+      bindingId: queueJob.bindingId,
+      runId: params.runId,
+      agentId: queueJob.agentId ?? null,
+      summary: `Automation queue worker failed run ${params.runId}`,
+      payload: { jobId: queueJob.jobId, workerId: params.workerId, cancelled, error: params.error },
+    });
+    if (!cancelled && run.attempt <= job.maxRetries) {
+      const nextAttempt = run.attempt + 1;
+      setTimeout(() => {
+        void this.launchJob(job, nextAttempt);
+      }, 0);
+    } else {
+      await this.prisma.gatewayAutomationJob.update({
+        where: { id: job.id },
+        data: {
+          lastRunAt: new Date(),
+          nextRunAt: job.status === 'active' ? this.getNextRun(job.schedule) : null,
+        },
+      });
     }
   }
 
@@ -667,4 +969,5 @@ export class GatewayAutomationService implements OnModuleInit {
       });
     }
   }
+
 }

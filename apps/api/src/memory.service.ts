@@ -76,6 +76,7 @@ export class MemoryService {
   }
 
   async clear(collection?: string): Promise<{ cleared: number }> {
+    // Memory scope clearing is intentionally independent from pending NLU clarification state.
     try {
       const response = await firstValueFrom(
         this.httpService.delete<{ cleared: number }>(`${this.agentUrl}/api/memory/clear`, {
@@ -104,6 +105,17 @@ export class MemoryService {
   async deleteEntry(id: string): Promise<{ success: true }> {
     await this.prisma.memoryEntry.delete({ where: { id } });
     return { success: true };
+  }
+
+  async updateEntry(id: string, payload: { content?: string; tags?: string[] }): Promise<MemoryEntry> {
+    const updated = await this.prisma.memoryEntry.update({
+      where: { id },
+      data: {
+        ...(typeof payload.content === 'string' ? { content: payload.content } : {}),
+        ...(Array.isArray(payload.tags) ? { tags: JSON.stringify(payload.tags) } : {}),
+      },
+    });
+    return this.toEntry(updated);
   }
 
   async getCommandOverview(sessionId?: string): Promise<CommandMemoryOverview> {

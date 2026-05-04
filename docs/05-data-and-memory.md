@@ -7,10 +7,17 @@ RawClaw should maintain several distinct memory types:
 ### Short-term memory
 - recent messages and session state
 - optimized for continuity during active work
+- Redis-backed control-plane working memory for strategist briefs, search terms, scout evidence, analyst verdicts, guardian verdicts, and queued handoff context
 
 ### Long-term semantic memory
 - facts, summaries, and reusable knowledge
 - indexed for vector retrieval
+- Chroma remains the semantic retrieval layer and should not be replaced by queue or graph state
+
+### Runtime knowledge graph
+- explicit lineage over sessions, runs, workers, URLs, documents, entities, and memory items
+- optimized for operator inspection, source-to-answer traceability, and contradiction/support analysis
+- written post-run so graph ingestion never blocks final response delivery
 
 ### Workspace memory
 - human-readable documents such as:
@@ -48,3 +55,9 @@ RawClaw should maintain several distinct memory types:
 - SQLite for platform state
 - Redis for active session and queue state
 - ChromaDB for semantic retrieval
+
+The current Phase 3 split is:
+
+- SQLite / Prisma for platform records, graph tables, and reflection/simulation storage
+- Redis for active runs, queue state, worker heartbeats, role traces, and short-term swarm memory
+- Chroma for long-term semantic memory

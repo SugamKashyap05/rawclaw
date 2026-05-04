@@ -16,5 +16,8 @@ export * from './contracts/assistant';
 export * from './contracts/process-controller';
 export * from './contracts/gateway';
 export * from './contracts/operator';
+export * from './contracts/app-builder';
+export * from './constants/chat-nlu-intent-examples';
+export * from './constants/chat-nlu-intent-examples.test-fixtures';
 
 export const RAWCLAW_VERSION = '0.1.0';
