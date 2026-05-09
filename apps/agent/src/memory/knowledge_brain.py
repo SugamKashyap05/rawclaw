@@ -47,6 +47,7 @@ class KnowledgeBrain:
         tags: Optional[list[str]] = None,
         source: Optional[str] = None,
         limit: int = 4,
+        turn_id: str = "no-turn-id",
     ) -> dict[str, list[dict[str, Any]]]:
         internal = []
         external = []
@@ -105,6 +106,7 @@ class KnowledgeBrain:
                     tags=tags,
                     source=spec["source"],
                     n_results=limit,
+                    turn_id=turn_id,
                 )
                 stage_counts[f'{spec["label"]}:literal'] = len(literal_hits)
                 stage_counts[f'{spec["label"]}:semantic'] = len(semantic_hits)
@@ -121,7 +123,8 @@ class KnowledgeBrain:
                     break
 
             logger.info(
-                "memory_retrieval collections_queried=%s entries_returned=%s session_id=%s query=%r stage_counts=%s",
+                "memory_retrieval turn_id=%s collections_queried=%s entries_returned=%s session_id=%s query=%r stage_counts=%s",
+                turn_id,
                 collections_queried,
                 len(internal),
                 session_id,
@@ -160,6 +163,7 @@ class KnowledgeBrain:
         collection: Optional[str] = None,
         tags: Optional[list[str]] = None,
         source: Optional[str] = None,
+        turn_id: str = "no-turn-id",
     ) -> str:
         logger.info(f"Building context for query: {query[:50]}...")
         try:
@@ -169,6 +173,7 @@ class KnowledgeBrain:
                 collection=collection,
                 tags=tags,
                 source=source,
+                turn_id=turn_id,
             )
         except Exception as e:
             logger.error(f"Context retrieval failed globally: {e}")

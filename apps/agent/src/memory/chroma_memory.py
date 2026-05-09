@@ -17,6 +17,7 @@ import chromadb
 # Heavy imports moved to lazy loaders
 
 from src.config import settings
+from src.memory.retrieval_audit import retrieve_with_audit
 
 logger = logging.getLogger("rawclaw.memory")
 
@@ -255,16 +256,21 @@ class ChromaMemory:
         collection: str,
         source: Optional[str] = None,
         threshold: float = 0.95,
+        turn_id: str = "memory-maintenance",
     ) -> Optional[dict[str, Any]]:
         if self.collection is None or not content.strip():
             return None
 
         try:
-            results = self.collection.query(
-                query_embeddings=[self._embed(content)],
-                n_results=5,
+            _, _, results = retrieve_with_audit(
+                collection=self.collection,
+                query=content,
+                turn_id=turn_id,
+                k=5,
+                token_limit=8192,
+                query_embedding=self._embed(content),
                 where=self._build_where(collection=collection, source=source),
-                include=["documents", "metadatas", "distances"],
+                include=["documents", "metadatas", "distances", "ids"],
             )
         except Exception as error:
             logger.warning("Near-duplicate memory check failed: %s", error)
@@ -306,6 +312,7 @@ class ChromaMemory:
         tags: Optional[list[str]] = None,
         source: Optional[str] = None,
         collection: Optional[str] = None,
+        turn_id: str = "no-turn-id",
     ) -> list[dict]:
         if self.collection is None:
             return []
@@ -354,11 +361,15 @@ class ChromaMemory:
 
         try:
             query_limit = max(n_results * 4, n_results)
-            results = self.collection.query(
-                query_embeddings=[self._embed(query)],
-                n_results=query_limit,
+            _, _, results = retrieve_with_audit(
+                collection=self.collection,
+                query=query,
+                turn_id=turn_id,
+                k=query_limit,
+                token_limit=4096,
+                query_embedding=self._embed(query),
                 where=self._build_where(session_id=session_id, collection=collection, source=source),
-                include=["documents", "metadatas", "distances"],
+                include=["documents", "metadatas", "distances", "ids"],
             )
         except Exception as error:
             logger.warning("Memory search failed: %s", error)
