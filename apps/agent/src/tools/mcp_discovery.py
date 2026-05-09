@@ -57,6 +57,7 @@ class MCPDiscovery:
                     tags=["mcp", "tool", server_name, name],
                     source=f"mcp://{server_name}",
                     collection=self.collection_name,
+                    doc_id=doc_id,
                     metadata={
                         "tool_name": name,
                         "server_name": server_name,

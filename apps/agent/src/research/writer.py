@@ -1,7 +1,11 @@
+import logging
 from typing import Callable, List, Optional
 
 from src.contracts.tool import ToolResult
 from src.research.types import AnswerabilityDecision, EvidenceAssessment, FinalDraft, ResearchPlan
+
+
+logger = logging.getLogger("rawclaw.research.writer")
 
 
 class FinalWriterStage:
@@ -28,6 +32,34 @@ class FinalWriterStage:
         search_status: str,
         fetch_status: str,
     ) -> FinalDraft:
+        evidence = assessment.search_evidence or []
+        evidence_chars = sum(
+            len(str(item.get("title") or ""))
+            + len(str(item.get("snippet") or ""))
+            + len(str(item.get("url") or ""))
+            for item in evidence
+            if isinstance(item, dict)
+        )
+        source_count = len({
+            str(item.get("url") or "").strip()
+            for item in evidence
+            if isinstance(item, dict) and str(item.get("url") or "").strip()
+        })
+        logger.debug(
+            "[SYNTHESIS_HANDOFF] query=%r category=%s decision=%s "
+            "evidence_count=%d search_status=%s fetch_status=%s "
+            "fetch_quality=%s source_count=%d evidence_chars=%d",
+            query[:160],
+            plan.category,
+            decision.mode,
+            len(evidence),
+            search_status,
+            fetch_status,
+            assessment.quality,
+            source_count,
+            evidence_chars,
+        )
+
         markdown = self._render_grounded_web_answer(
             query,
             search_result,
@@ -38,6 +70,13 @@ class FinalWriterStage:
             evidence_override=assessment.search_evidence,
             assessment_override=assessment.model_dump(),
             answerability_override=decision.model_dump(),
+        )
+        logger.debug(
+            "[SYNTHESIS_RENDERED] query=%r category=%s decision=%s rendered_chars=%d",
+            query[:160],
+            plan.category,
+            decision.mode,
+            len(markdown or ""),
         )
 
         confidence = "grounded" if decision.mode == "exact" else "limited"

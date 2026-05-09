@@ -101,7 +101,10 @@ async function preflightRuntimeDependencies() {
 
   const failed = results.filter((result) => !result.ok);
   if (failed.length && !runtime.allowDegradedStartup) {
-    console.error('Required runtime dependencies are unavailable. Start them with `docker compose up -d` or set RAWCLAW_ALLOW_DEGRADED_STARTUP=true to continue anyway.');
+    console.error(
+      'Required runtime dependencies are unavailable. Start them with `npm run runtime:up` '
+      + '(or `docker compose --profile worker up -d`) or set RAWCLAW_ALLOW_DEGRADED_STARTUP=true to continue anyway.',
+    );
     process.exit(1);
   }
 
@@ -119,36 +122,39 @@ function cleanupWindowsRawClawProcesses() {
 $ErrorActionPreference = 'SilentlyContinue'
 $workspace = '${workspace.replace(/'/g, "''")}'
 $currentPid = ${currentPid}
-$ports = @(3000, 8001)
+$ports = @(3000, 5173, 8001)
 
-# 1. Targets by workspace path
-$targetsByPath = Get-CimInstance Win32_Process | Where-Object {
+# 1. Candidate PIDs by workspace path
+$targetsByPath = @(Get-CimInstance Win32_Process | Where-Object {
   $_.ProcessId -ne $currentPid -and
   $_.CommandLine -and
   $_.CommandLine -like "*$workspace*" -and
   ($_.Name -in @('node.exe','python.exe','python3.exe','rawclaw.exe'))
-}
+} | Select-Object -ExpandProperty ProcessId)
 
-# 2. Targets by port ownership
-$targetsByPort = foreach ($port in $ports) {
-  $conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+# 2. Candidate PIDs by port ownership
+$targetsByPort = @(foreach ($port in $ports) {
+  $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
   if ($conn) {
     foreach ($c in $conn) {
       if ($c.OwningProcess -and $c.OwningProcess -ne $currentPid) {
-        Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
+        $c.OwningProcess
       }
     }
   }
-}
+})
 
-$allTargets = ($targetsByPath + $targetsByPort) | Select-Object -Unique ProcessId, Name
+$allTargetIds = @($targetsByPath + $targetsByPort) |
+  Where-Object { $_ -and $_ -ne $currentPid } |
+  Sort-Object -Unique
 
-foreach ($proc in $allTargets) {
+foreach ($targetId in $allTargetIds) {
   try {
-    Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
-    Write-Output ("Stopped stale RawClaw process {0} ({1})" -f $proc.ProcessId, $proc.Name)
+    $proc = Get-Process -Id $targetId -ErrorAction Stop
+    Stop-Process -Id $targetId -Force -ErrorAction Stop
+    Write-Output ("Stopped stale RawClaw process {0} ({1})" -f $proc.Id, $proc.ProcessName)
   } catch {
-    Write-Output ("Failed to stop process {0}: {1}" -f $proc.ProcessId, $_.Exception.Message)
+    Write-Output ("Failed to stop process {0}: {1}" -f $targetId, $_.Exception.Message)
   }
 }
 `;

@@ -187,21 +187,21 @@ export class ModelsService {
     // Default model defaults synced with agent's settings.py
     const fallback = {
       routing: {
-        low: this.configService.get<string>('DEFAULT_LOW_MODEL') || 'ollama/qwen2.5:1.5b',
-        medium: this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (isAnthropic ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
-        high: this.configService.get<string>('DEFAULT_HIGH_MODEL') || (isAnthropic ? 'anthropic/claude-3-5-sonnet' : 'ollama/llama3:8b'),
-        outputReviewer: this.configService.get<string>('DEFAULT_REVIEWER_MODEL') || 'ollama/llama3.2:3b',
-        appBuilder: this.configService.get<string>('DEFAULT_APP_BUILDER_MODEL') || this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (isAnthropic ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
+        low: this.configService.get<string>('DEFAULT_LOW_MODEL') || 'ollama/gemma4:e4b',
+        medium: this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (isAnthropic ? 'anthropic/claude-3-haiku' : 'ollama/gemma4:31b-cloud'),
+        high: this.configService.get<string>('DEFAULT_HIGH_MODEL') || (isAnthropic ? 'anthropic/claude-3-5-sonnet' : 'ollama/gemma4:31b-cloud'),
+        outputReviewer: this.configService.get<string>('DEFAULT_REVIEWER_MODEL') || 'ollama/gemma4:31b-cloud',
+        appBuilder: this.configService.get<string>('DEFAULT_APP_BUILDER_MODEL') || this.configService.get<string>('DEFAULT_MEDIUM_MODEL') || (isAnthropic ? 'anthropic/claude-3-haiku' : 'ollama/gemma4:31b-cloud'),
         appBuilderPlanner:
           this.configService.get<string>('DEFAULT_APP_BUILDER_PLANNER_MODEL')
           || this.configService.get<string>('DEFAULT_APP_BUILDER_MODEL')
           || this.configService.get<string>('DEFAULT_HIGH_MODEL')
-          || (isAnthropic ? 'anthropic/claude-3-5-sonnet' : 'ollama/llama3:8b'),
+          || (isAnthropic ? 'anthropic/claude-3-5-sonnet' : 'ollama/gemma4:31b-cloud'),
         appBuilderBuilder:
           this.configService.get<string>('DEFAULT_APP_BUILDER_BUILDER_MODEL')
           || this.configService.get<string>('DEFAULT_APP_BUILDER_MODEL')
           || this.configService.get<string>('DEFAULT_MEDIUM_MODEL')
-          || (isAnthropic ? 'anthropic/claude-3-haiku' : 'ollama/llama3.2:3b'),
+          || (isAnthropic ? 'anthropic/claude-3-haiku' : 'ollama/gemma4:31b-cloud'),
       },
       providerConfig: {
         openai: { enabled: isOpenAI },

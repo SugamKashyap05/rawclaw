@@ -16,6 +16,7 @@ import { ModelsService } from './models.service';
 import { DocsController } from './docs.controller';
 import { DocsService } from './docs.service';
 import { MemoryController } from './memory.controller';
+import { MemoryMaintenanceService } from './memory-maintenance.service';
 import { MemoryService } from './memory.service';
 import { AgentsController } from './agents.controller';
 import { AgentsService } from './agents.service';
@@ -27,7 +28,12 @@ import { SystemController } from './system.controller';
 import { SystemService } from './system.service';
 import { WorkspaceController } from './workspace.controller';
 import { ChatOrchestratorService } from './chat-orchestrator.service';
+import { ChatTransformerService } from './chat-transformer.service';
 import { ChatNluService } from './chat-nlu.service';
+import { EmissionTransformerService } from './emission-transformer.service';
+import { IntakeTransformerService } from './intake-transformer.service';
+import { PersistenceTransformerService } from './persistence-transformer.service';
+import { ContextTransformerService } from './context-transformer.service';
 import { DocumentProcessorService } from './document-processor.service';
 import { PromptCatalogService } from './prompt-catalog.service';
 import { PromptsController } from './prompts.controller';
@@ -74,6 +80,8 @@ import { GeneratedContentSecurityService } from './app-builder/generated-content
 import { AppBuilderHarnessMetadataService } from './app-builder/app-builder-harness-metadata.service';
 import { AppBuilderHarnessJanitorService } from './app-builder/app-builder-harness-janitor.service';
 import { AppBuilderStorageService } from './app-builder/app-builder-storage.service';
+import { BootstrapController } from './bootstrap.controller';
+import { BootstrapService } from './bootstrap.service';
 
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
@@ -108,6 +116,7 @@ import { AuthModule } from './auth/auth.module';
     PromptsController,
     SelfImprovementController,
     AssistantController,
+    BootstrapController,
     ProcessControllerController,
     GatewayController,
     GatewayWorkerController,
@@ -118,13 +127,19 @@ import { AuthModule } from './auth/auth.module';
   providers: [
     RedisService,
     ChatService,
+    ChatTransformerService,
     ChatNluService,
+    EmissionTransformerService,
+    IntakeTransformerService,
+    PersistenceTransformerService,
+    ContextTransformerService,
     ChatOrchestratorService,
     PrismaService,
     ToolConfirmationService,
     ModelsService,
     DocsService,
     MemoryService,
+    MemoryMaintenanceService,
     AgentsService,
     SettingsService,
     SkillsService,
@@ -133,6 +148,7 @@ import { AuthModule } from './auth/auth.module';
     PromptCatalogService,
     SelfImprovementService,
     AssistantService,
+    BootstrapService,
     ProcessControllerService,
     GatewayEventsService,
     GatewayControlPlaneService,

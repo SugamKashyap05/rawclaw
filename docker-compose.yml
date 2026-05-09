@@ -5,7 +5,7 @@
 #   Redis    → localhost:6379
 #   ChromaDB → localhost:8010  (agent reads CHROMA_PORT=8010)
 #
-# Run: docker compose up -d
+# Run: docker compose --profile worker up -d
 
 name: rawclaw-dev-runtime
 
@@ -25,6 +25,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    networks:
+      - rawclaw
 
   chromadb:
     image: chromadb/chroma:latest
@@ -43,9 +45,55 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    networks:
+      - rawclaw
+
+  swarm-worker:
+    image: python:3.11-slim
+    container_name: rawclaw-swarm-worker
+    profiles: ["worker"]
+    restart: on-failure
+    working_dir: /workspace/apps/swarm-worker
+    volumes:
+      - .:/workspace
+    environment:
+      RAWCLAW_REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis:6379
+      RAWCLAW_CHROMA_URL: http://chromadb:8000
+      CHROMA_URL: http://chromadb:8000
+      RAWCLAW_API_URL: ${RAWCLAW_WORKER_API_URL:-http://host.docker.internal:3000}
+      API_URL: ${RAWCLAW_WORKER_API_URL:-http://host.docker.internal:3000}
+      RAWCLAW_AGENT_URL: ${RAWCLAW_WORKER_AGENT_URL:-http://host.docker.internal:8001}
+      AGENT_URL: ${RAWCLAW_WORKER_AGENT_URL:-http://host.docker.internal:8001}
+      PYTHONUNBUFFERED: "1"
+    command:
+      - sh
+      - -c
+      - pip install --no-cache-dir -r requirements.txt && python run.py
+    depends_on:
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import redis; r = redis.Redis(host='redis', port=6379); r.ping()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - rawclaw
 
 volumes:
   redis_data:
     driver: local
   chroma_data:
     driver: local
+
+networks:
+  rawclaw:
+    driver: bridge

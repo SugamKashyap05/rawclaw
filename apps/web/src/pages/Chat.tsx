@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AdvisoryEvent, AgentProfile, ChatControlState, ChatNluIntent, ChatStreamChunk, MemoryEvent, PermissionMode, PreferredWebMode, ReviewEvent, SettingsPayload, ToolInfo, ToolResult, ToolUseMode, WorkflowState, SystemStatusSnapshot } from '@rawclaw/shared';
+import { AdvisoryEvent, AgentProfile, ChatControlState, ChatNluIntent, ChatStreamChunk, CoworkerActivityFrame, COWORKER_WORK_STORY_TEMPLATES, MemoryEvent, PermissionMode, PreferredWebMode, ReviewEvent, SettingsPayload, ToolInfo, ToolResult, ToolUseMode, WorkflowState, SystemStatusSnapshot } from '@rawclaw/shared';
 import { api } from '../lib/api';
 import { AUTH_TOKEN_KEY } from '../lib/auth';
 import { ChatSidebar } from '../components/ChatSidebar';
@@ -21,12 +21,20 @@ import { BrowserResult } from '../components/chat/BrowserResult';
 import { FileResult } from '../components/chat/FileResult';
 import { CodeResult } from '../components/chat/CodeResult';
 import { TerminalResult } from '../components/chat/TerminalResult';
+import { GenericToolCard } from '../components/chat/GenericToolCard';
+import { ToolResultCard } from '../components/chat/ToolResultCard';
 import { ProvenanceTrace } from '../components/chat/ProvenanceTrace';
+import { WorkStoryCard } from '../components/chat/WorkStoryCard';
 import { InitialAnalysisCard } from '../components/chat/InitialAnalysisCard';
+import { buildSearchAttemptMeta } from '../components/chat/researchUiSummary';
 import { FileBrowserPanel } from '../components/chat/FileBrowserPanel';
 import { ChatAttachment, DocumentSelection, DocumentEditRequest, DocumentEditAction } from '@rawclaw/shared';
 import { DocumentCanvas } from '../components/chat/DocumentCanvas';
 import { ErrorCard } from '../components/chat/ErrorCard';
+import { InterruptedBanner } from '../components/chat/InterruptedBanner';
+import { modelShortName, resolveAgentLabel, summarizeMemoryEvents } from '../components/chat/messageMetadataUtils';
+import { hexToRgba, resolveAgentAccent } from '../components/chat/agentVisuals';
+import { isUserFacingToolResult } from '../components/chat/toolVisibility';
 import { processFileForAttachment } from '../lib/chat-attachments';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -79,7 +87,7 @@ interface Props {
   systemStatus: SystemStatusSnapshot;
 }
 
-interface SessionMessage {
+export interface SessionMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   attachments?: ChatAttachment[];
@@ -88,7 +96,11 @@ interface SessionMessage {
   provenanceTrace?: ChatStreamChunk['provenanceTrace'];
   citations?: Array<{ url: string; title?: string }>;
   memoryRecall?: boolean;
+  agentId?: string;
   modelId?: string;
+  streamStatus?: 'completed' | 'incomplete' | 'failed';
+  sourceChipAgentId?: string;
+  sourceChipModelId?: string;
   isLocal?: boolean;
   createdAt?: string | Date;
   durationMs?: number;
@@ -101,6 +113,8 @@ interface SessionMessage {
   workflowState?: WorkflowState;
   memoryEvents?: MemoryEvent[];
   advisoryEvents?: AdvisoryEvent[];
+  coworkerActivityFrame?: CoworkerActivityFrame;
+  transformTrace?: any;
   id?: string;
   thinking?: string;
   harnessLogs?: any[];
@@ -110,11 +124,16 @@ interface SessionMessage {
     type:
       | 'agent_unavailable'
       | 'agent_error'
+      | 'stream_failed'
       | 'provider_routing_failed'
       | 'model_unavailable'
       | 'mcp_unavailable'
       | 'tool_failed'
       | 'stream_interrupted'
+      | 'stream_timeout'
+      | 'execution_timeout'
+      | 'turn_limit_reached'
+      | 'sequential_thinking_limit_reached'
       | 'auth_failure'
       | 'request_too_large'
       | 'context_limit_exceeded'
@@ -122,6 +141,21 @@ interface SessionMessage {
     message: string;
     details?: string;
   };
+  retryState?: {
+    mode: 'retrying' | 'manual';
+    attempt: number;
+    maxAttempts: number;
+  };
+}
+
+type SessionErrorType = NonNullable<SessionMessage['error']>['type'];
+
+interface ParsedChatErrorPayload {
+  status: number;
+  error?: string;
+  message: string;
+  details?: string;
+  retryable?: boolean;
 }
 
 interface ChatSessionPayload {
@@ -217,6 +251,71 @@ function normalizeAssistantDisplayText(content?: string): string {
   return normalized.replace(/[ \t]{2,}/g, ' ').trim();
 }
 
+function buildFallbackWorkStory(message: Pick<SessionMessage, 'content' | 'toolResults' | 'streamStatus' | 'error'>): string {
+  const visibleResult = (message.toolResults || [])[0];
+  if (
+    message.streamStatus === 'failed'
+    || message.error?.type === 'stream_failed'
+    || message.error?.type === 'agent_error'
+  ) {
+    const toolLabel = visibleResult?.tool_name?.replace(/^skill_/, '').replace(/_/g, ' ') || 'the response';
+    return COWORKER_WORK_STORY_TEMPLATES.degraded(toolLabel, 'the response could not be delivered cleanly');
+  }
+  if (message.streamStatus === 'incomplete' || message.error?.type === 'stream_interrupted') {
+    const toolLabel = visibleResult?.tool_name?.replace(/^skill_/, '').replace(/_/g, ' ') || 'the request';
+    return COWORKER_WORK_STORY_TEMPLATES.degraded(toolLabel, 'the connection was interrupted');
+  }
+  if (visibleResult?.tool_name) {
+    const toolLabel = visibleResult.tool_name.replace(/^skill_/, '').replace(/_/g, ' ');
+    return COWORKER_WORK_STORY_TEMPLATES.degraded(toolLabel, 'the final normalized activity frame was unavailable');
+  }
+  return COWORKER_WORK_STORY_TEMPLATES.direct;
+}
+
+export function buildFallbackActivityFrame(
+  message: Pick<
+    SessionMessage,
+    'content' | 'toolResults' | 'streamStatus' | 'error' | 'agentId' | 'sourceChipAgentId' | 'modelId' | 'sourceChipModelId' | 'isLocal' | 'workflowState'
+  >,
+  agents: AgentProfile[],
+): CoworkerActivityFrame | undefined {
+  const hasVisibleToolResults = Boolean((message.toolResults || []).length);
+  if (message.streamStatus === 'failed' && !hasVisibleToolResults) {
+    return undefined;
+  }
+
+  const sourceAgentId = message.sourceChipAgentId || message.agentId;
+  const sourceModelId = message.sourceChipModelId || message.modelId;
+  const sourceLabel = resolveAgentLabel(sourceAgentId, agents) || (sourceAgentId ? 'Assistant' : 'RawClaw');
+  const sourceModelLabel = modelShortName(sourceModelId);
+  const degradedCount = (message.toolResults || []).filter((result) => {
+    const output = (result.output || {}) as Record<string, any>;
+    return Boolean(result.error) || String(output.evidenceStatus || '').toLowerCase() === 'degraded';
+  }).length;
+
+  return {
+    visibilityState: 'degraded',
+    responseMode: message.streamStatus === 'incomplete' ? 'interrupted' : (message.content.trim() ? 'partial' : 'error'),
+    workStory: buildFallbackWorkStory(message),
+    lane: message.workflowState?.assistantLane || null,
+    confidenceState: message.workflowState?.confidenceState || null,
+    source: {
+      agentId: sourceAgentId,
+      agentLabel: sourceLabel,
+      modelId: sourceModelId,
+      modelLabel: sourceModelLabel,
+      isLocal: message.isLocal,
+    },
+    evidenceSummary: {
+      total: (message.toolResults || []).length,
+      degraded: degradedCount,
+      failed: (message.toolResults || []).filter((result) => Boolean(result.error)).length,
+      strongestSource: null,
+      sourceCount: 0,
+    },
+  };
+}
+
 function collapseRepeatedAssistantContent(content: string): string {
   let collapsed = content.replace(/(.{50,180}?)(?:\s+\1){2,}/gis, '$1 ...');
 
@@ -278,21 +377,37 @@ export function parseEditSuggestion(content?: string): { suggestion: string | nu
   return { suggestion, textContent };
 }
 
-function normalizeErrorType(errorCode?: string): NonNullable<SessionMessage['error']>['type'] {
+export function normalizeErrorType(errorCode?: string): NonNullable<SessionMessage['error']>['type'] {
   switch (errorCode) {
     case 'Aborted':
     case 'stream_interrupted':
       return 'stream_interrupted';
+    case 'stream_error':
+    case 'stream_failed':
+      return 'stream_failed';
+    case 'stream_timeout':
+      return 'stream_timeout';
+    case 'execution_timeout':
+      return 'execution_timeout';
+    case 'turn_limit_reached':
+      return 'turn_limit_reached';
+    case 'sequential_thinking_limit_reached':
+      return 'sequential_thinking_limit_reached';
     case 'provider_routing_failed':
       return 'provider_routing_failed';
     case 'tool_failed':
       return 'tool_failed';
     case 'auth_failure':
       return 'auth_failure';
+    case 'provider_http_error':
+    case 'provider_offline':
+    case 'provider_exception':
     case 'model_unavailable':
       return 'model_unavailable';
     case 'mcp_unavailable':
       return 'mcp_unavailable';
+    case 'generator_error':
+    case 'gateway_error':
     case 'agent_error':
       return 'agent_error';
     case 'agent_unavailable':
@@ -303,8 +418,155 @@ function normalizeErrorType(errorCode?: string): NonNullable<SessionMessage['err
     case 'unsupported_file_type':
       return 'unsupported_file_type';
     default:
-      return 'agent_unavailable';
+      return 'agent_error';
   }
+}
+
+function getErrorDetailLabel(type: NonNullable<SessionMessage['error']>['type'], rawMessage?: string): string {
+  switch (type) {
+    case 'stream_failed':
+      return 'Something went wrong while sending the response. Your message was received - please try again.';
+    case 'model_unavailable':
+      return 'The selected model could not complete this request. Check your model settings or switch models.';
+    case 'provider_routing_failed':
+      return 'RawClaw could not find a working model route for this request.';
+    case 'stream_timeout':
+    case 'execution_timeout':
+      return rawMessage || 'The request took too long to finish.';
+    default:
+      return rawMessage || 'Generation error';
+  }
+}
+
+function isLikelyNetworkFailure(value: string): boolean {
+  return [
+    'failed to fetch',
+    'networkerror',
+    'network error',
+    'load failed',
+    'econnrefused',
+    'connection refused',
+    'socket hang up',
+    'agent unavailable',
+    'agent service unavailable',
+  ].some((fragment) => value.includes(fragment));
+}
+
+function isLikelyStreamFailure(value: string): boolean {
+  return [
+    'stream_error',
+    'stream_failed',
+    'emission_transformer',
+    'sending the response',
+    'chat stream',
+    'client-visible event',
+    'activity frame',
+    'sse',
+  ].some((fragment) => value.includes(fragment));
+}
+
+async function parseChatErrorResponse(response: Response): Promise<ParsedChatErrorPayload> {
+  const contentType = response.headers.get('content-type') || '';
+  let rawText = '';
+  let payload: Record<string, unknown> | null = null;
+
+  if (contentType.includes('application/json')) {
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+  } else {
+    rawText = await response.text();
+    if (rawText) {
+      try {
+        payload = JSON.parse(rawText) as Record<string, unknown>;
+      } catch {
+        payload = null;
+      }
+    }
+  }
+
+  if (!rawText && !payload) {
+    rawText = await response.text().catch(() => '');
+  }
+
+  return {
+    status: response.status,
+    error: typeof payload?.error === 'string' ? payload.error : undefined,
+    message:
+      typeof payload?.message === 'string'
+        ? payload.message
+        : rawText || `Chat request failed with status ${response.status}`,
+    details: typeof payload?.details === 'string' ? payload.details : undefined,
+    retryable: typeof payload?.retryable === 'boolean' ? payload.retryable : undefined,
+  };
+}
+
+function mapCaughtChatError(error: unknown): NonNullable<SessionMessage['error']> {
+  if ((error as any)?.name === 'AbortError') {
+    return {
+      type: 'stream_interrupted',
+      message: 'Stream stopped by user',
+    };
+  }
+
+  const code = typeof (error as any)?.error === 'string' ? String((error as any).error) : undefined;
+  const status = typeof (error as any)?.status === 'number' ? Number((error as any).status) : undefined;
+  const message = error instanceof Error ? error.message : String((error as any)?.message || 'Chat failed.');
+  const details = typeof (error as any)?.details === 'string' ? (error as any).details : undefined;
+  const combined = `${code || ''} ${message || ''} ${details || ''}`.toLowerCase();
+
+  let type: SessionErrorType = 'agent_error';
+  let userMessage = message || 'Chat failed.';
+
+  if (combined.includes('entity too large') || combined.includes('413') || combined.includes('payload too large')) {
+    type = 'request_too_large';
+    userMessage = 'Request too large';
+  } else if (status === 401 || status === 403 || combined.includes('auth_failure')) {
+    type = 'auth_failure';
+    userMessage = 'Authentication failed';
+  } else if (combined.includes('turn_limit_reached') || combined.includes('maximum reasoning turns')) {
+    type = 'turn_limit_reached';
+    userMessage = 'Reasoning limit reached';
+  } else if (combined.includes('sequential_thinking_limit_reached') || combined.includes('sequential thinking turns')) {
+    type = 'sequential_thinking_limit_reached';
+    userMessage = 'Reasoning limit reached';
+  } else if (combined.includes('stream_timeout') || combined.includes('stream timed out')) {
+    type = 'stream_timeout';
+  } else if (combined.includes('execution_timeout') || combined.includes('timed out after')) {
+    type = 'execution_timeout';
+  } else if (
+    combined.includes('provider_http_error')
+    || combined.includes('provider_offline')
+    || combined.includes('provider_exception')
+    || combined.includes('ollama returned')
+    || combined.includes('does not support chat')
+    || combined.includes('does not support tools')
+    || combined.includes('selected model failed')
+    || combined.includes('model returned an error')
+  ) {
+    type = 'model_unavailable';
+    userMessage = 'The selected model could not complete this request. Check your model settings or switch models.';
+  } else if (combined.includes('provider') || combined.includes('routing')) {
+    type = 'provider_routing_failed';
+    userMessage = 'RawClaw could not find a working model route for this request.';
+  } else if (isLikelyNetworkFailure(combined)) {
+    type = 'agent_unavailable';
+    userMessage = 'Agent is unreachable. Please wait and retry.';
+  } else if (code === 'stream_error' || code === 'stream_failed' || isLikelyStreamFailure(combined)) {
+    type = 'stream_failed';
+  } else if (status && status >= 400 && status < 500 && !code) {
+    type = 'agent_error';
+  } else if (code) {
+    type = normalizeErrorType(code);
+  }
+
+  return {
+    type,
+    message: userMessage,
+    ...(details ? { details } : {}),
+  };
 }
 
 function normalizeChatControls(controls?: Partial<ChatControlState> | null): ChatControlState {
@@ -444,6 +706,23 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
     () => agents.find((agent) => agent.id === selectedAgentId) || null,
     [agents, selectedAgentId],
   );
+
+  const sessionParticipants = useMemo(() => {
+    const seen = new Set<string>();
+    return messages.reduce<Array<{ agentId: string; label: string; anchorId: string; accent: string }>>((items, message, index) => {
+      if (message.role !== 'assistant') return items;
+      const agentId = message.sourceChipAgentId || message.agentId || 'main';
+      if (seen.has(agentId)) return items;
+      seen.add(agentId);
+      items.push({
+        agentId,
+        label: resolveAgentLabel(agentId, agents) || 'RawClaw',
+        anchorId: `assistant-message-${index}`,
+        accent: resolveAgentAccent(agentId),
+      });
+      return items;
+    }, []);
+  }, [agents, messages]);
 
   const toolGroups = useMemo(() => ({
     built_in: toolInventory.filter((tool) => getToolGroup(tool) === 'built_in'),
@@ -640,12 +919,18 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
     }
   };
 
-  const consumeStream = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
+  const consumeStream = async (
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    options: { replaceOnFirstContent?: boolean; clearRecoveryOnFirstContent?: boolean } = {},
+  ): Promise<{ state: 'done' | 'error' | 'incomplete'; assistantText: string; errorType?: NonNullable<SessionMessage['error']>['type'] }> => {
     const decoder = new TextDecoder();
     let assistantText = '';
     const toolCalls: any[] = [];
     const toolResults: ToolResult[] = [];
     let streamBuffer = '';
+    let sawDoneEvent = false;
+    let sawContent = false;
+    let sawActivityFrame = false;
     while (true) {
       const { value, done } = await reader.read();
       
@@ -672,8 +957,17 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
               if (!sanitizedContent) {
                 continue;
               }
-              assistantText += sanitizedContent;
-              patchAssistant({ content: assistantText });
+              if (!sawContent && options.replaceOnFirstContent) {
+                assistantText = sanitizedContent;
+              } else {
+                assistantText += sanitizedContent;
+              }
+              sawContent = true;
+              patchAssistant({
+                content: assistantText,
+                streamStatus: 'completed',
+                ...(options.clearRecoveryOnFirstContent ? { retryState: undefined, error: undefined } : {}),
+              });
             } else if (data.type === 'thinking' && data.thinking) {
               setMessages((current) => {
                 const next = [...current];
@@ -695,6 +989,9 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
               // The backend now sends provenanceTrace as a sanitized object
               const trace = data.provenanceTrace || (data as any).provenance_trace || (data as any).provenance || data;
               patchAssistant({ provenanceTrace: trace });
+            } else if ((data.type as string) === 'activity_frame' && (data as any).activityFrame) {
+              sawActivityFrame = true;
+              patchAssistant({ coworkerActivityFrame: (data as any).activityFrame });
             } else if (data.type === 'metadata' && data.metadata) {
               const metadataPatch: Partial<SessionMessage> = {};
               if (data.metadata.modelId !== undefined) metadataPatch.modelId = data.metadata.modelId;
@@ -739,16 +1036,49 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
               patchAssistant({ approvalRequired: { reason: (data as any).reason, complexity: (data as any).complexity } });
             } else if (data.type === 'error') {
               const err = data as any;
+              const normalizedType = normalizeErrorType(err.error);
+              const hasPartial = assistantText.trim().length > 0;
+              const fallbackFrame = !sawActivityFrame
+                ? buildFallbackActivityFrame({
+                    content: assistantText,
+                    toolResults,
+                    streamStatus: hasPartial ? 'incomplete' : 'failed',
+                    error: {
+                      type: normalizedType,
+                      message: err.message || err.error || 'Generation error',
+                    },
+                    agentId: selectedAgentId || undefined,
+                    sourceChipAgentId: selectedAgentId || undefined,
+                    modelId: selectedModel,
+                    sourceChipModelId: selectedModel,
+                    isLocal: selectedModel.startsWith('ollama/'),
+                    workflowState: undefined,
+                  }, agents)
+                : undefined;
               patchAssistant({
+                streamStatus: hasPartial ? 'incomplete' : 'failed',
+                ...(fallbackFrame ? { coworkerActivityFrame: fallbackFrame } : {}),
                 error: {
-                  type: normalizeErrorType(err.error),
-                  message: err.message || err.error || 'Generation error',
-                  details: ''
+                  type: normalizedType,
+                  message: getErrorDetailLabel(normalizedType, err.message || err.error || 'Generation error'),
+                  details: (
+                    normalizedType === 'model_unavailable'
+                    || normalizedType === 'stream_failed'
+                    || normalizedType === 'agent_error'
+                  )
+                    ? (err.message || err.error || 'Generation error')
+                    : ''
                 }
               });
-              return; // Terminate on error
+              return {
+                state: hasPartial ? 'incomplete' : 'error',
+                assistantText,
+                errorType: normalizedType,
+              };
             } else if (data.type === 'done') {
-              return; // Clean termination
+              sawDoneEvent = true;
+              patchAssistant({ streamStatus: 'completed', retryState: undefined });
+              return { state: 'done', assistantText }; // Clean termination
             }
           } catch (e) {
             console.warn('Malformed pipe frame:', payload, e);
@@ -768,6 +1098,166 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
         break;
       }
     }
+    if (!sawDoneEvent && assistantText.trim().length > 0) {
+      const fallbackFrame = !sawActivityFrame
+        ? buildFallbackActivityFrame({
+            content: assistantText,
+            toolResults,
+            streamStatus: 'incomplete',
+            error: {
+              type: 'stream_interrupted',
+              message: 'Connection interrupted before the response finished.',
+            },
+            agentId: selectedAgentId || undefined,
+            sourceChipAgentId: selectedAgentId || undefined,
+            modelId: selectedModel,
+            sourceChipModelId: selectedModel,
+            isLocal: selectedModel.startsWith('ollama/'),
+            workflowState: undefined,
+          }, agents)
+        : undefined;
+      patchAssistant({
+        streamStatus: 'incomplete',
+        ...(fallbackFrame ? { coworkerActivityFrame: fallbackFrame } : {}),
+        error: {
+          type: 'stream_interrupted',
+          message: 'Connection interrupted before the response finished.',
+        },
+      });
+      return { state: 'incomplete', assistantText, errorType: 'stream_interrupted' };
+    }
+
+    if (!sawDoneEvent) {
+      const fallbackFrame = !sawActivityFrame
+        ? buildFallbackActivityFrame({
+            content: assistantText,
+            toolResults,
+            streamStatus: 'failed',
+            error: {
+              type: 'stream_failed',
+              message: 'Something went wrong while sending the response.',
+            },
+            agentId: selectedAgentId || undefined,
+            sourceChipAgentId: selectedAgentId || undefined,
+            modelId: selectedModel,
+            sourceChipModelId: selectedModel,
+            isLocal: selectedModel.startsWith('ollama/'),
+            workflowState: undefined,
+          }, agents)
+        : undefined;
+      patchAssistant({
+        streamStatus: 'failed',
+        ...(fallbackFrame ? { coworkerActivityFrame: fallbackFrame } : {}),
+        error: {
+          type: 'stream_failed',
+          message: 'Something went wrong while sending the response.',
+        },
+      });
+      return { state: 'error', assistantText, errorType: 'stream_failed' };
+    }
+
+    return { state: 'done', assistantText };
+  };
+
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const getPersistedIncompleteAssistant = async (): Promise<SessionMessage | null> => {
+    await wait(150);
+    const response = await api.get<ChatSessionPayload>(`/chat/sessions/${sessionId}`);
+    const persisted = [...(response.data?.messages || [])]
+      .reverse()
+      .find((message) => message.role === 'assistant' && message.streamStatus === 'incomplete');
+    return persisted || null;
+  };
+
+  const recoverInterruptedTurn = async (
+    buildRetryRequest: (messageId: string) => Record<string, unknown>,
+  ) => {
+    const delays = [1000, 2000, 4000];
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+
+    for (let index = 0; index < delays.length; index += 1) {
+      patchAssistant({
+        streamStatus: 'incomplete',
+        retryState: {
+          mode: 'retrying',
+          attempt: index + 1,
+          maxAttempts: delays.length,
+        },
+        error: {
+          type: 'stream_interrupted',
+          message: `Connection interrupted. Reconnecting ${index + 1}/${delays.length}...`,
+        },
+      });
+      await wait(delays[index]);
+
+      let persisted: SessionMessage | null = null;
+      try {
+        persisted = await getPersistedIncompleteAssistant();
+      } catch (error) {
+        console.warn('Could not load incomplete assistant message before retry:', error);
+      }
+
+      if (!persisted?.id) {
+        continue;
+      }
+
+      patchAssistant({
+        id: persisted.id,
+        createdAt: persisted.createdAt,
+        streamStatus: 'incomplete',
+      });
+
+      try {
+        const response = await fetch('/api/chat/regenerate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(buildRetryRequest(persisted.id)),
+        });
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        if (!response.body) {
+          throw new Error('No response body from retry stream.');
+        }
+
+        const outcome = await consumeStream(response.body.getReader(), {
+          replaceOnFirstContent: true,
+          clearRecoveryOnFirstContent: true,
+        });
+        if (outcome.state === 'done') {
+          return true;
+        }
+      } catch (error) {
+        console.warn(`Retry attempt ${index + 1} failed:`, error);
+      }
+    }
+
+    let persisted: SessionMessage | null = null;
+    try {
+      persisted = await getPersistedIncompleteAssistant();
+    } catch (error) {
+      console.warn('Could not reload incomplete assistant message after retries:', error);
+    }
+
+    patchAssistant({
+      ...(persisted?.id ? { id: persisted.id, createdAt: persisted.createdAt } : {}),
+      streamStatus: 'incomplete',
+      retryState: {
+        mode: 'manual',
+        attempt: delays.length,
+        maxAttempts: delays.length,
+      },
+      error: {
+        type: 'stream_interrupted',
+        message: 'Connection interrupted before I finished.',
+      },
+    });
+    return false;
   };
 
   const send = async (explicitEditRequest?: DocumentEditRequest) => {
@@ -796,11 +1286,21 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
     setMessages((current) => [
       ...current,
       { role: 'user', content: prompt, attachments: currentAttachments.length > 0 ? currentAttachments : undefined },
-      { role: 'assistant', content: '', toolResults: [] },
+      {
+        role: 'assistant',
+        content: '',
+        toolResults: [],
+        agentId: selectedAgentId || undefined,
+        modelId: selectedModel,
+        sourceChipAgentId: selectedAgentId || undefined,
+        sourceChipModelId: selectedModel,
+        isLocal: selectedModel.startsWith('ollama/'),
+      },
     ]);
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    let shouldReloadHistoryAfterRecovery = false;
 
       try {
         const token = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -830,9 +1330,9 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
           requestBody.complexity = selectedModel.split(':')[1];
         }
         
-        const response = await fetch('/api/chat/send', {
-          method: 'POST',
-          headers: {
+      const response = await fetch('/api/chat/send', {
+        method: 'POST',
+        headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
@@ -841,43 +1341,45 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
         });
 
       if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || `Chat request failed with status ${response.status}`);
+        const parsedError = await parseChatErrorResponse(response);
+        const requestError = new Error(parsedError.message) as Error & ParsedChatErrorPayload;
+        requestError.name = 'ChatRequestError';
+        Object.assign(requestError, parsedError);
+        throw requestError;
       }
 
       if (!response.body) throw new Error('No response body from chat stream.');
-      await consumeStream(response.body.getReader());
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        patchAssistant({
-          error: {
-            type: 'stream_interrupted',
-            message: 'Stream stopped by user',
+      const outcome = await consumeStream(response.body.getReader());
+      if (outcome.state === 'incomplete') {
+        const recovered = await recoverInterruptedTurn((messageId) => {
+          const retryBody: Record<string, unknown> = {
+            sessionId,
+            messageId,
+            temperature,
+            top_p,
+            agentId: selectedAgentId || undefined,
+            nluOverride: nluOverrideForRequest || undefined,
+          };
+          if (isComplexity) {
+            retryBody.complexity = selectedModel.split(':')[1];
+          } else {
+            retryBody.model = selectedModel;
           }
+          return retryBody;
         });
-      } else {
-        const message = error instanceof Error ? error.message : 'Chat failed.';
-        const lowerMsg = message.toLowerCase();
-        let errorType: NonNullable<SessionMessage['error']>['type'] = 'agent_unavailable';
-        let errorLabel = 'Connection failed';
-        if (lowerMsg.includes('entity too large') || lowerMsg.includes('413') || lowerMsg.includes('payload too large')) {
-          errorType = 'request_too_large';
-          errorLabel = 'Request too large';
-        } else if (lowerMsg.includes('provider') || lowerMsg.includes('routing')) {
-          errorType = 'provider_routing_failed';
+        if (recovered) {
+          shouldReloadHistoryAfterRecovery = true;
         }
-        patchAssistant({
-          error: {
-            type: errorType,
-            message: errorLabel,
-            details: message
-          }
-        });
       }
+    } catch (error: any) {
+      patchAssistant({ error: mapCaughtChatError(error) });
     } finally {
       setSending(false);
       abortControllerRef.current = null;
       setActiveSelection(null);
+      if (shouldReloadHistoryAfterRecovery) {
+        void loadHistory(sessionId, true);
+      }
     }
   };
 
@@ -905,7 +1407,19 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
       if (index === -1) return current;
       const truncated = current.slice(0, index + 1);
       truncated[index] = { ...truncated[index], content };
-      return [...truncated, { role: 'assistant', content: '', toolResults: [] }];
+      return [
+        ...truncated,
+        {
+          role: 'assistant',
+          content: '',
+          toolResults: [],
+          agentId: selectedAgentId || undefined,
+          modelId: selectedModel,
+          sourceChipAgentId: selectedAgentId || undefined,
+          sourceChipModelId: selectedModel,
+          isLocal: selectedModel.startsWith('ollama/'),
+        },
+      ];
     });
 
     try {
@@ -937,18 +1451,36 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
         signal: abortController.signal,
       });
 
-      if (!response.ok) throw new Error(await response.text());
-      if (response.body) await consumeStream(response.body.getReader());
+      if (!response.ok) {
+        const parsedError = await parseChatErrorResponse(response);
+        const requestError = new Error(parsedError.message) as Error & ParsedChatErrorPayload;
+        requestError.name = 'ChatRequestError';
+        Object.assign(requestError, parsedError);
+        throw requestError;
+      }
+      if (response.body) {
+        const outcome = await consumeStream(response.body.getReader());
+        if (outcome.state === 'incomplete') {
+          await recoverInterruptedTurn((retryMessageId) => {
+            const retryBody: Record<string, unknown> = {
+              sessionId,
+              messageId: retryMessageId,
+              temperature,
+              top_p,
+              agentId: selectedAgentId || undefined,
+            };
+            if (isComplexity) {
+              retryBody.complexity = selectedModel.split(':')[1];
+            } else {
+              retryBody.model = selectedModel;
+            }
+            return retryBody;
+          });
+        }
+      }
     } catch (e: any) {
       console.error('Edit failed:', e);
-      patchAssistant({
-        error: {
-          type: e.name === 'AbortError'
-            ? 'stream_interrupted'
-            : normalizeErrorType((e as any).error),
-          message: e.message || 'Edit failed',
-        }
-      });
+      patchAssistant({ error: mapCaughtChatError(e) });
     } finally {
       setSending(false);
       abortControllerRef.current = null;
@@ -976,7 +1508,19 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
       const index = current.findIndex((m) => m.id === messageId);
       if (index === -1) return current;
       const truncated = current.slice(0, index);
-      return [...truncated, { role: 'assistant', content: '', toolResults: [] }];
+      return [
+        ...truncated,
+        {
+          role: 'assistant',
+          content: '',
+          toolResults: [],
+          agentId: selectedAgentId || undefined,
+          modelId: selectedModel,
+          sourceChipAgentId: selectedAgentId || undefined,
+          sourceChipModelId: selectedModel,
+          isLocal: selectedModel.startsWith('ollama/'),
+        },
+      ];
     });
 
     try {
@@ -1008,18 +1552,37 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
         signal: abortController.signal,
       });
 
-      if (!response.ok) throw new Error(await response.text());
-      if (response.body) await consumeStream(response.body.getReader());
+      if (!response.ok) {
+        const parsedError = await parseChatErrorResponse(response);
+        const requestError = new Error(parsedError.message) as Error & ParsedChatErrorPayload;
+        requestError.name = 'ChatRequestError';
+        Object.assign(requestError, parsedError);
+        throw requestError;
+      }
+      if (response.body) {
+        const outcome = await consumeStream(response.body.getReader());
+        if (outcome.state === 'incomplete') {
+          await recoverInterruptedTurn((retryMessageId) => {
+            const retryBody: Record<string, unknown> = {
+              sessionId,
+              messageId: retryMessageId,
+              temperature,
+              top_p,
+              agentId: selectedAgentId || undefined,
+              nluOverride,
+            };
+            if (isComplexity) {
+              retryBody.complexity = selectedModel.split(':')[1];
+            } else {
+              retryBody.model = selectedModel;
+            }
+            return retryBody;
+          });
+        }
+      }
     } catch (e: any) {
       console.error('Regenerate failed:', e);
-      patchAssistant({
-        error: {
-          type: e.name === 'AbortError'
-            ? 'stream_interrupted'
-            : normalizeErrorType((e as any).error),
-          message: e.message || 'Regeneration failed',
-        }
-      });
+      patchAssistant({ error: mapCaughtChatError(e) });
     } finally {
       setSending(false);
       abortControllerRef.current = null;
@@ -1269,6 +1832,48 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
         >
           {loadingHistory && messages.length === 0 ? <ChatSkeleton /> : null}
 
+          {sessionParticipants.length > 0 ? (
+            <div
+              className="glass-card"
+              style={{
+                padding: '0.7rem 0.85rem',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '0.55rem',
+                alignItems: 'center',
+              }}
+            >
+              <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                SESSION PARTICIPANTS
+              </span>
+              {sessionParticipants.map((participant) => (
+                <button
+                  key={participant.agentId}
+                  type="button"
+                  onClick={() => {
+                    document.getElementById(participant.anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    borderRadius: '999px',
+                    border: `1px solid ${hexToRgba(participant.accent, 0.32)}`,
+                    background: hexToRgba(participant.accent, 0.12),
+                    color: participant.accent,
+                    padding: '0.32rem 0.62rem',
+                    fontSize: '0.74rem',
+                    cursor: 'pointer',
+                  }}
+                  title={`Jump to ${participant.label}'s first message`}
+                >
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: participant.accent }} />
+                  {participant.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {!loadingHistory && messages.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', padding: '1.5rem 0 1rem', textAlign: 'center', display: 'grid', gap: '0.85rem', alignContent: 'center', minHeight: '40vh', justifyItems: 'center' }}>
               <div style={{ display: 'grid', placeItems: 'center', width: 52, height: 52, border: '1px solid rgba(99,102,241,0.35)', background: 'rgba(99,102,241,0.08)' }}>
@@ -1294,6 +1899,7 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
               <MessageCard 
                 key={`${message.role}-${index}`} 
                 message={message} 
+                agents={agents}
                 onEdit={handleEdit}
                 onRegenerate={handleRegenerate}
                 onViewDocument={setActiveDocumentId}
@@ -1321,6 +1927,7 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
                   setPendingNluOverride(null);
                   setActiveSelection(null);
                 }}
+                messageAnchorId={message.role === 'assistant' ? `assistant-message-${index}` : undefined}
                 previousUserQuery={index > 0 && messages[index-1].role === 'user' ? messages[index-1].content : ''}
               />
             ))
@@ -1822,24 +2429,32 @@ export default function Chat({ selectedModel, temperature, top_p, systemStatus: 
   );
 }
 
-function getErrorMessage(type: string): string {
+export function getErrorMessage(type: string): string {
   switch (type) {
+    case 'stream_failed':
+      return 'Something went wrong while sending the response. Your message was received - please try again.';
     case 'agent_unavailable':
       return 'Agent Service Unavailable';
     case 'agent_error':
       return 'Agent Error';
     case 'model_unavailable':
-      return 'Model Provider Unavailable';
+      return 'Model Unavailable';
     case 'mcp_unavailable':
       return 'Tool System Unavailable';
     case 'tool_failed':
       return 'Tool Execution Failed';
     case 'stream_interrupted':
       return 'Stream Interrupted';
+    case 'stream_timeout':
+    case 'execution_timeout':
+      return 'Execution Timed Out';
+    case 'turn_limit_reached':
+    case 'sequential_thinking_limit_reached':
+      return 'Reasoning Limit Reached';
     case 'auth_failure':
       return 'Authentication Failed';
     case 'provider_routing_failed':
-      return 'Provider Routing Failed';
+      return 'Model Routing Failed';
     case 'request_too_large':
       return 'Attachment Too Large';
     case 'context_limit_exceeded':
@@ -1851,35 +2466,65 @@ function getErrorMessage(type: string): string {
     }
 }
 
-function MessageCard({ 
+function memoryDetailLabel(event: MemoryEvent): string {
+  return `${event.layer}: ${event.summary}`;
+}
+
+export function MessageCard({ 
   message, 
+  agents,
   onEdit, 
   onRegenerate,
   onViewDocument,
   onCorrectIntent,
   onUseSecondaryIntent,
   onTryClarificationAgain,
+  messageAnchorId,
   previousUserQuery
 }: { 
   message: SessionMessage; 
+  agents: AgentProfile[];
   onEdit: (id: string, content: string) => void;
   onRegenerate: (id: string) => void;
   onViewDocument: (id: string) => void;
   onCorrectIntent: (intent: ChatNluIntent, messageId?: string) => void;
   onUseSecondaryIntent: (intent: ChatNluIntent, originalContent: string) => void;
   onTryClarificationAgain: (content: string) => void;
+  messageAnchorId?: string;
   previousUserQuery?: string;
 }) {
   const isUser = message.role === 'user';
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showThinking, setShowThinking] = useState(true);
+  const [showMemoryDetails, setShowMemoryDetails] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [expanded, setExpanded] = useState(false);
+  const activityFrame = !isUser ? message.coworkerActivityFrame : undefined;
   const isLongResponse = !isUser && ((message.content?.length || 0) > 1400 || (message.content?.split('\n').length || 0) > 18);
   const secondaryIntents = [...(message.workflowState?.nlu?.secondaryIntents || [])]
     .sort((a, b) => b.confidence - a.confidence)
     .slice(0, 3);
+  const sourceAgentLabel = !isUser
+    ? activityFrame?.source.agentLabel || resolveAgentLabel(message.sourceChipAgentId || message.agentId, agents) || 'RawClaw'
+    : null;
+  const sourceModelLabel = !isUser
+    ? activityFrame?.source.modelLabel || modelShortName(message.sourceChipModelId || message.modelId)
+    : null;
+  const assistantAccent = !isUser ? resolveAgentAccent(message.sourceChipAgentId || message.agentId || 'main') : '#22d3ee';
+  const memorySummary = !isUser
+    ? summarizeMemoryEvents(message.memoryEvents) || (message.memoryRecall ? 'Used memory' : null)
+    : null;
+  const visibleToolResults = !isUser ? (message.toolResults || []).filter((result) => isUserFacingToolResult(result)) : [];
+  const searchAttemptMeta = !isUser ? buildSearchAttemptMeta(visibleToolResults) : [];
+  const isInterruptedMessage = !isUser && (
+    message.streamStatus === 'incomplete'
+    || message.error?.type === 'stream_interrupted'
+    || Boolean(message.retryState)
+  );
+  const interruptedDetails = message.error
+    ? message.error.message + (message.error.details ? `\n${message.error.details}` : '')
+    : 'Connection interrupted before the response finished.';
 
   const handleCopy = async () => {
     try {
@@ -1892,47 +2537,101 @@ function MessageCard({
   };
 
   return (
-    <div className="message-bubble" style={{ display: 'grid', gap: '0.65rem', justifyItems: isUser ? 'end' : 'start', position: 'relative' }}>
+    <div id={messageAnchorId} className="message-bubble" style={{ display: 'grid', gap: '0.65rem', justifyItems: isUser ? 'end' : 'start', position: 'relative' }}>
       <div
         className={`${isUser ? 'user-bubble' : 'assistant-bubble'} message-surface`}
         style={{
           maxWidth: '820px',
           padding: '1.25rem',
-          border: `1px solid ${isUser ? 'rgba(34,211,238,0.18)' : 'rgba(99,102,241,0.24)'}`,
-          borderLeft: `3px solid ${isUser ? 'rgba(34,211,238,0.9)' : 'rgba(99,102,241,0.9)'}`,
+          border: `1px solid ${isUser ? 'rgba(34,211,238,0.18)' : hexToRgba(assistantAccent, 0.24)}`,
+          borderLeft: `3px solid ${isUser ? 'rgba(34,211,238,0.9)' : assistantAccent}`,
           position: 'relative',
-          background: isUser ? 'rgba(34,211,238,0.04)' : 'rgba(255,255,255,0.03)'
+          background: isUser ? 'rgba(34,211,238,0.04)' : hexToRgba(assistantAccent, 0.05)
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', gap: '1rem' }}>
-          <div className="mono" style={{ fontSize: '0.65rem', color: isUser ? 'var(--neon-cyan)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ display: 'inline-flex', width: 22, height: 22, alignItems: 'center', justifyContent: 'center', border: `1px solid ${isUser ? 'rgba(34,211,238,0.35)' : 'rgba(99,102,241,0.35)'}`, background: isUser ? 'rgba(34,211,238,0.08)' : 'rgba(99,102,241,0.08)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.45rem', gap: '1rem', flexWrap: 'wrap' }}>
+          <div className="mono" style={{ fontSize: '0.65rem', color: isUser ? 'var(--neon-cyan)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', width: 22, height: 22, alignItems: 'center', justifyContent: 'center', border: `1px solid ${isUser ? 'rgba(34,211,238,0.35)' : hexToRgba(assistantAccent, 0.35)}`, background: isUser ? 'rgba(34,211,238,0.08)' : hexToRgba(assistantAccent, 0.12) }}>
               {isUser ? <FiUser size={12} /> : <FiCpu size={12} />}
             </span>
             {isUser ? 'USER' : 'RAWCLAW'}
-            <span style={{ opacity: 0.5, fontWeight: 400 }}>{formatTime(message.createdAt)}</span>
-          </div>
-          
-          {!isUser && (message.modelId || message.memoryRecall || message.workflowState?.assistantLane || message.workflowState?.confidenceState || message.workflowState?.nlu) && (
-            <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              {message.memoryRecall && (
-                <span style={{ 
-                  display: 'flex',
+            {!isUser && sourceAgentLabel ? (
+              <span
+                className="mono"
+                style={{
+                  display: 'inline-flex',
                   alignItems: 'center',
                   gap: '0.3rem',
-                  fontSize: '0.65rem', 
-                  padding: '2px 8px', 
-                  borderRadius: '10px', 
-                  background: 'rgba(0,255,150,0.08)', 
-                  color: '#00ff96', 
-                  border: '1px solid rgba(0,255,150,0.2)',
-                  fontWeight: 600,
-                  letterSpacing: '0.02em'
-                }}>
-                  <FiDatabase size={10} />
-                  RECALLED
-                </span>
-              )}
+                  fontSize: '0.65rem',
+                  color: assistantAccent,
+                  background: hexToRgba(assistantAccent, 0.12),
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  border: `1px solid ${hexToRgba(assistantAccent, 0.28)}`,
+                }}
+              >
+                {sourceModelLabel ? (
+                  message.isLocal ? <FiHome size={10} /> : <FiGlobe size={10} />
+                ) : null}
+                {sourceAgentLabel}
+                {sourceModelLabel ? <span style={{ opacity: 0.75 }}>| {sourceModelLabel}</span> : null}
+                {message.durationMs ? (
+                  <span style={{ marginLeft: '0.3rem', opacity: 0.6, borderLeft: '1px solid currentColor', paddingLeft: '0.4rem' }}>
+                    {(message.durationMs / 1000).toFixed(1)}s
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+            <span style={{ opacity: 0.5, fontWeight: 400 }}>{formatTime(message.createdAt)}</span>
+          </div>
+
+          {!isUser && (memorySummary || message.workflowState?.assistantLane || message.workflowState?.confidenceState || message.workflowState?.nlu) ? (
+            <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {memorySummary ? (
+                message.memoryEvents?.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowMemoryDetails((current) => !current)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      fontSize: '0.65rem',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      background: 'rgba(0,255,150,0.08)',
+                      color: '#00ff96',
+                      border: '1px solid rgba(0,255,150,0.2)',
+                      fontWeight: 600,
+                      letterSpacing: '0.02em',
+                      cursor: 'pointer',
+                    }}
+                    title="Show memory details"
+                  >
+                    <FiDatabase size={10} />
+                    {memorySummary}
+                  </button>
+                ) : (
+                  <span
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      fontSize: '0.65rem',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      background: 'rgba(0,255,150,0.08)',
+                      color: '#00ff96',
+                      border: '1px solid rgba(0,255,150,0.2)',
+                      fontWeight: 600,
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    <FiDatabase size={10} />
+                    {memorySummary}
+                  </span>
+                )
+              ) : null}
               {message.workflowState?.nlu && (
                 <span className="mono" style={{
                   display: 'flex',
@@ -1953,8 +2652,8 @@ function MessageCard({
                   aria-label="Correct intent"
                   value=""
                   onChange={(event) => {
-                  const value = event.target.value as ChatNluIntent;
-                  if (value) {
+                    const value = event.target.value as ChatNluIntent;
+                    if (value) {
                       onCorrectIntent(value, message.id);
                       event.currentTarget.value = '';
                     }
@@ -2044,29 +2743,8 @@ function MessageCard({
                   Try again
                 </button>
               ) : null}
-              {message.modelId && (
-                <span className="mono" style={{ 
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.3rem',
-                  fontSize: '0.65rem', 
-                  color: 'var(--text-muted)', 
-                  background: 'rgba(255,255,255,0.05)', 
-                  padding: '2px 8px', 
-                  borderRadius: '10px',
-                  border: '1px solid var(--border-glass)'
-                }}>
-                  {message.isLocal ? <FiHome size={10} /> : <FiGlobe size={10} />}
-                  {message.modelId.split('/').pop()}
-                  {message.durationMs && (
-                    <span style={{ marginLeft: '0.3rem', opacity: 0.6, borderLeft: '1px solid currentColor', paddingLeft: '0.4rem' }}>
-                      {(message.durationMs / 1000).toFixed(1)}s
-                    </span>
-                  )}
-                </span>
-              )}
             </div>
-          )}
+          ) : null}
         </div>
 
         {!isUser && secondaryIntents.length > 0 ? (
@@ -2113,7 +2791,7 @@ function MessageCard({
               </button>
             </div>
           </div>
-        ) : !message.error ? (
+        ) : (
           <div style={{ display: 'grid', gap: '1rem' }}>
             {message.thinking && (
               <div style={{ marginBottom: '0.8rem' }}>
@@ -2226,7 +2904,7 @@ function MessageCard({
                   </button>
                 )}
               </div>
-            ) : (
+            ) : !message.error ? (
               <div style={{ display: 'grid', gap: '0.75rem', color: 'var(--neon-cyan)', opacity: 0.9, minWidth: '340px' }}>
                 <div className="shimmer-block" style={{ height: '1rem', width: '58%' }} />
                 <div className="shimmer-block" style={{ height: '1rem', width: '92%' }} />
@@ -2248,9 +2926,18 @@ function MessageCard({
                   </span>
                 </div>
               </div>
-            )}
+            ) : null}
+            {!isUser && message.content && isInterruptedMessage ? (
+              <InterruptedBanner
+                details={interruptedDetails}
+                isRetrying={message.retryState?.mode === 'retrying'}
+                attempt={message.retryState?.attempt}
+                maxAttempts={message.retryState?.maxAttempts}
+                onRetry={message.retryState?.mode !== 'retrying' && message.id ? () => onRegenerate(message.id!) : undefined}
+              />
+            ) : null}
           </div>
-        ) : null}
+        )}
 
         {!isUser && message.tool_calls && message.tool_calls.length > 0 && (
           <div style={{ marginTop: '0.8rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -2439,7 +3126,7 @@ function MessageCard({
         )}
       </div>
 
-      {message.error ? (
+      {!message.content && message.error ? (
         <ErrorCard 
           type={message.error.type}
           message={getErrorMessage(message.error.type)}
@@ -2448,44 +3135,30 @@ function MessageCard({
         />
       ) : null}
 
-      {!isUser && message.toolResults && message.toolResults.length > 0 ? (
+      {!isUser && visibleToolResults.length > 0 ? (
         <div style={{ width: '100%', display: 'grid', gap: '0.8rem' }}>
-          {message.toolResults.map((result, index) => (
-            <ToolResultRenderer key={`${result.tool_name}-${index}`} result={result} />
+          {visibleToolResults.map((result, index) => (
+            <ToolResultRenderer key={`${result.tool_name}-${index}`} result={result} attemptMeta={searchAttemptMeta[index] || undefined} />
           ))}
         </div>
       ) : null}
 
-      {!isUser && ((message.memoryEvents && message.memoryEvents.length > 0) || (message.advisoryEvents && message.advisoryEvents.length > 0)) ? (
+      {!isUser ? <WorkStoryCard message={message} /> : null}
+
+      {!isUser && showMemoryDetails && message.memoryEvents && message.memoryEvents.length > 0 ? (
         <div style={{ width: '100%', display: 'grid', gap: '0.75rem' }}>
-          {message.memoryEvents?.length ? (
-            <div style={{ border: '1px solid var(--border-glass)', borderRadius: '12px', padding: '0.8rem', background: 'rgba(255,255,255,0.03)' }}>
-              <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginBottom: '0.45rem' }}>
-                MEMORY EVENTS
-              </div>
-              <div style={{ display: 'grid', gap: '0.35rem' }}>
-                {message.memoryEvents.map((event, index) => (
-                  <div key={`memory-${index}`} style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', lineHeight: 1.5 }}>
-                    - {event.layer}: {event.summary}
-                  </div>
-                ))}
-              </div>
+          <div style={{ border: '1px solid var(--border-glass)', borderRadius: '12px', padding: '0.8rem', background: 'rgba(255,255,255,0.03)' }}>
+            <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginBottom: '0.45rem' }}>
+              MEMORY DETAILS
             </div>
-          ) : null}
-          {message.advisoryEvents?.length ? (
-            <div style={{ border: '1px solid var(--border-glass)', borderRadius: '12px', padding: '0.8rem', background: 'rgba(255,255,255,0.03)' }}>
-              <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginBottom: '0.45rem' }}>
-                WHY I SUGGESTED THIS
-              </div>
-              <div style={{ display: 'grid', gap: '0.35rem' }}>
-                {message.advisoryEvents.map((event, index) => (
-                  <div key={`advisory-${index}`} style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', lineHeight: 1.5 }}>
-                    - {event.category}: {event.summary}
-                  </div>
-                ))}
-              </div>
+            <div style={{ display: 'grid', gap: '0.35rem' }}>
+              {message.memoryEvents.map((event, index) => (
+                <div key={`memory-${index}`} style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', lineHeight: 1.5 }}>
+                  - {memoryDetailLabel(event)}
+                </div>
+              ))}
             </div>
-          ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -2494,26 +3167,30 @@ function MessageCard({
   );
 }
 
-function ToolResultRenderer({ result }: { result: ToolResult }) {
+export function ToolResultRenderer({
+  result,
+  attemptMeta,
+}: {
+  result: ToolResult;
+  attemptMeta?: { attempt: number; total: number } | null;
+}) {
   const name = result.tool_name.toLowerCase();
-  if (name.includes('search')) return <WebSearchResult result={result} />;
-  if (name.includes('browser') || name.includes('fetch') || name.includes('navigate')) return <BrowserResult result={result} />;
-  if (name.includes('file')) return <FileResult result={result} />;
-  if (name.includes('python') || name.includes('code')) return <CodeResult result={result} />;
-  if (name.includes('shell') || name.includes('terminal') || name.includes('bash') || name.includes('command')) {
-    return <TerminalResult result={result} />;
+  let details: React.ReactNode;
+  if (name.includes('search')) details = <WebSearchResult result={result} framed={false} />;
+  else if (name.includes('browser') || name.includes('fetch') || name.includes('navigate') || name.includes('extract')) details = <BrowserResult result={result} framed={false} />;
+  else if (name.includes('file')) details = <FileResult result={result} framed={false} />;
+  else if (name.includes('python') || name.includes('code')) details = <CodeResult result={result} framed={false} />;
+  else if (name.includes('shell') || name.includes('terminal') || name.includes('bash') || name.includes('command')) {
+    details = <TerminalResult result={result} framed={false} />;
+  } else {
+    details = <GenericToolCard result={result} framed={false} />;
   }
 
-  return (
-    <div className="glass-card" style={{ padding: '1rem' }}>
-      <div className="mono" style={{ color: 'var(--neon-cyan)', fontSize: '0.74rem', marginBottom: '0.45rem' }}>
-        {result.tool_name}
-      </div>
-      <pre className="custom-scrollbar" style={{ margin: 0, whiteSpace: 'pre-wrap', overflowX: 'auto' }}>
-        {JSON.stringify(result.output ?? result.error ?? result.input, null, 2)}
-      </pre>
-    </div>
-  );
+  const sourceLabel = attemptMeta && name.includes('search')
+    ? `Web Search - Attempt ${attemptMeta.attempt}/${attemptMeta.total}`
+    : undefined;
+
+  return <ToolResultCard result={result} sourceLabel={sourceLabel}>{details}</ToolResultCard>;
 }
 
 export function formatTime(date?: string | Date) {

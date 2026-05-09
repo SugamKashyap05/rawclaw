@@ -306,6 +306,9 @@ def test_non_research_workflow_helpers_cover_memory_tool_and_interaction_paths(e
     forced_extract_from_homepage_prompt = executor._maybe_force_tool_call(
         "https://timesofindia.indiatimes.com/ tell me the top newss"
     )
+    forced_extract_from_read_url_prompt = executor._maybe_force_tool_call(
+        "Read https://example.com/ and tell me what is on the page."
+    )
     forced_read = executor._maybe_force_tool_call("Read README.md")
     forced_time = executor._maybe_force_tool_call("What is the current local date and time?")
 
@@ -327,6 +330,9 @@ def test_non_research_workflow_helpers_cover_memory_tool_and_interaction_paths(e
     assert forced_extract_from_homepage_prompt.input["url"] == "https://timesofindia.indiatimes.com/"
     assert forced_extract_from_homepage_prompt.input["taskType"] == "page_read"
     assert forced_extract_from_homepage_prompt.input["sourceMode"] == "user_named"
+    assert isinstance(forced_extract_from_read_url_prompt, ToolCall)
+    assert forced_extract_from_read_url_prompt.tool_name == "web_extract"
+    assert forced_extract_from_read_url_prompt.input["url"] == "https://example.com/"
     assert isinstance(forced_read, ToolCall)
     assert forced_read.tool_name == "read_file"
     assert isinstance(forced_time, ToolCall)
@@ -345,6 +351,87 @@ def test_live_sports_query_builder_preserves_year_team_and_metrics(executor: Exe
     assert "points table" in lowered or "standings" in lowered
     assert "wins" in lowered
     assert "losses" in lowered
+
+
+def test_sports_results_query_builder_adds_date_scoped_result_terms(executor: Executor):
+    query = "how many IPL matches were played this week"
+
+    plan = executor.research.planner.run(query)
+    built = executor._build_search_query(query, apply_domain_bias=False)
+    lowered = built.lower()
+
+    assert plan.category == "sports_results"
+    assert plan.task_type == "sports_results_brief"
+    assert plan.fetch_required is True
+    assert "ipl" in lowered
+    assert "results" in lowered or "fixtures" in lowered or "schedule" in lowered
+    assert "this week" in lowered
+    assert "match count" in lowered or "how many matches" in lowered
+
+
+def test_numeric_current_search_requires_dated_numeric_signals(executor: Executor):
+    weak = _tool_result(
+        "web_search",
+        output={
+            "results": [
+                {
+                    "title": "Indian Premier League Official Website",
+                    "url": "https://www.iplt20.com/",
+                    "snippet": "Latest videos, news, photos and official website content.",
+                }
+            ],
+            "status": "ok",
+        },
+    )
+    strong = _tool_result(
+        "web_search",
+        output={
+            "results": [
+                {
+                    "title": "IPL 2026 results this week",
+                    "url": "https://www.espncricinfo.com/series/indian-premier-league-2026/match-schedule-fixtures-and-results",
+                    "snippet": "May 4 to May 8, 2026 results show 5 matches played with scorecards.",
+                }
+            ],
+            "status": "ok",
+        },
+    )
+
+    assert executor._search_result_has_viable_results(weak, "how many IPL matches were played this week") is False
+    assert executor._search_result_has_viable_results(strong, "how many IPL matches were played this week") is True
+
+
+def test_abstain_writer_returns_failure_handoff_for_numeric_sports_query(executor: Executor):
+    search_result = _tool_result(
+        "web_search",
+        output={
+            "results": [
+                {
+                    "title": "IPL homepage",
+                    "url": "https://www.iplt20.com/",
+                    "snippet": "Official IPL website landing page.",
+                }
+            ],
+            "status": "ok",
+        },
+    )
+
+    answer = executor._render_grounded_web_answer(
+        "how many IPL matches were played this week",
+        search_result,
+        None,
+        search_status="ok",
+        fetch_status="not_attempted",
+        plan_override=executor._build_research_plan("how many IPL matches were played this week"),
+        evidence_override=[],
+        assessment_override={"reasons": ["The sports results evidence did not expose a verifiable date range and match count."]},
+        answerability_override={"mode": "abstain"},
+    )
+
+    assert "I searched for:" in answer
+    assert "What I found was not enough" in answer
+    assert "Best next check:" in answer
+    assert "iplt20.com/matches" in answer
 
 
 def test_source_ranking_prefers_official_ipl_table_sources(executor: Executor):

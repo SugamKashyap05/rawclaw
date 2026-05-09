@@ -19,6 +19,7 @@ from src.research.adaptive_store import AdaptiveResearchStore
 from src.tools.base_tool import BaseTool
 from src.tools.registry import TOOL_REGISTRY
 from src.tools.builtin.browser_capability import check_browser_page_read_capability
+from src.tools.builtin.page_read_types import normalize_redirected_url
 
 logger = logging.getLogger("rawclaw.tools.web_fetch")
 
@@ -312,7 +313,7 @@ def _exception_chain_messages(exc: BaseException) -> List[str]:
     return messages
 
 
-def _transport_diagnostics(exc: BaseException) -> Dict[str, Any]:
+def _transport_diagnostics(exc: BaseException, requested_url: str = "") -> Dict[str, Any]:
     root = _root_exception(exc)
     chain_messages = _exception_chain_messages(exc)
     message = " | caused by: ".join(chain_messages)
@@ -327,7 +328,7 @@ def _transport_diagnostics(exc: BaseException) -> Dict[str, Any]:
     if isinstance(exc, httpx.HTTPStatusError):
         diagnostics["fetchFailureKind"] = "http_status_error"
         diagnostics["httpStatus"] = exc.response.status_code
-        diagnostics["redirectedUrl"] = str(exc.response.url)
+        diagnostics["redirectedUrl"] = normalize_redirected_url(requested_url, str(exc.response.url))
         return diagnostics
     if isinstance(exc, httpx.TooManyRedirects):
         diagnostics["fetchFailureKind"] = "redirect_loop"
@@ -536,7 +537,7 @@ class WebFetchTool(BaseTool):
                 "finalUrl": str(response.url),
             }
         except Exception as exc:
-            diagnostics = _transport_diagnostics(exc)
+            diagnostics = _transport_diagnostics(exc, requested_url=url)
             return {
                 "ok": False,
                 "errorType": type(exc).__name__,
@@ -725,7 +726,10 @@ class WebFetchTool(BaseTool):
             "content": content,
             "httpStatus": int(output.get("httpStatus") or 200),
             "contentType": content_type,
-            "redirectedUrl": str(output.get("redirectedUrl") or output.get("url") or url),
+            "redirectedUrl": normalize_redirected_url(
+                url,
+                str(output.get("redirectedUrl") or output.get("url") or url),
+            ),
             "truncated": truncated,
             "bytesRead": bytes_read,
             "encoding": str(output.get("encoding") or "utf-8"),
@@ -777,7 +781,7 @@ class WebFetchTool(BaseTool):
             "content": content,
             "httpStatus": 200,
             "contentType": "text/html; charset=utf-8",
-            "redirectedUrl": final_url,
+            "redirectedUrl": normalize_redirected_url(url, final_url),
             "truncated": truncated,
             "bytesRead": bytes_read,
             "encoding": "utf-8",
@@ -895,7 +899,7 @@ class WebFetchTool(BaseTool):
                     "content": content,
                     "httpStatus": response.status_code,
                     "contentType": content_type,
-                    "redirectedUrl": str(response.url),
+                    "redirectedUrl": normalize_redirected_url(url, str(response.url)),
                     "transportStrategy": attempt_name,
                     "truncated": truncated,
                     "bytesRead": bytes_read,
@@ -1000,7 +1004,7 @@ class WebFetchTool(BaseTool):
             except Exception as exc:
                 last_error = exc
                 last_http_error = exc
-                diagnostics = _transport_diagnostics(exc)
+                diagnostics = _transport_diagnostics(exc, requested_url=url)
                 attempts.append(
                     {
                         "attempt": attempt["name"],
@@ -1082,7 +1086,7 @@ class WebFetchTool(BaseTool):
                 )
             except Exception as exc:
                 last_error = exc
-                diagnostics = _transport_diagnostics(exc)
+                diagnostics = _transport_diagnostics(exc, requested_url=url)
                 diagnostics["fetchFailureKind"] = (
                     "browser_unavailable"
                     if isinstance(exc, BrowserFallbackUnavailableError)
@@ -1107,16 +1111,16 @@ class WebFetchTool(BaseTool):
             )
             if browser_failed and not isinstance(last_error, BrowserFallbackUnavailableError):
                 diagnostics = {
-                    **_transport_diagnostics(last_error),
+                    **_transport_diagnostics(last_error, requested_url=url),
                     "fetchFailureKind": "browser_fallback_failed",
                 }
             elif isinstance(last_error, BrowserFallbackUnavailableError) and last_http_error is not None:
-                diagnostics = _transport_diagnostics(last_http_error)
+                diagnostics = _transport_diagnostics(last_http_error, requested_url=url)
                 diagnostics["networkError"] = (
                     f"{diagnostics.get('networkError')} (browser fallback unavailable: {last_error})"
                 )
             else:
-                diagnostics = _transport_diagnostics(last_error)
+                diagnostics = _transport_diagnostics(last_error, requested_url=url)
             self._adaptive_store.record_failure(
                 url=url,
                 stage="fetch",

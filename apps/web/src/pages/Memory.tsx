@@ -17,6 +17,9 @@ export default function Memory() {
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const profileEntryCount = (overview?.operator.length ?? 0) + (overview?.mission.length ?? 0) + (overview?.session.length ?? 0);
+  const vectorWarnings = (stats?.warnings?.length ? stats.warnings : buildVectorWarnings(stats)) || [];
+  const vectorCollectionCounts = Object.entries(stats?.collectionCounts || {}).sort((a, b) => b[1] - a[1]);
 
   useEffect(() => {
     void load();
@@ -128,10 +131,10 @@ export default function Memory() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.85rem' }}>
-          <Metric label="Total Entries" value={String(stats?.totalEntries ?? 0)} />
-          <Metric label="Operator" value={String(overview?.operator.length ?? 0)} />
-          <Metric label="Mission" value={String(overview?.mission.length ?? 0)} />
-          <Metric label="Session" value={String(overview?.session.length ?? 0)} />
+          <Metric label="Vector Memory Entries" value={String(stats?.totalEntries ?? 0)} />
+          <Metric label="Profile Memory Entries" value={String(profileEntryCount)} />
+          <Metric label="Vector Collections" value={String(stats?.collections.length ?? 0)} />
+          <Metric label="Operator Profile Facts" value={String(overview?.operator.length ?? 0)} />
         </div>
       </section>
 
@@ -139,7 +142,10 @@ export default function Memory() {
         <div className="glass-card" style={{ display: 'grid', gap: '0.9rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
             <FiUser />
-            <h2 style={{ fontSize: '1.05rem', margin: 0 }}>What RawClaw Knows</h2>
+            <div>
+              <h2 style={{ fontSize: '1.05rem', margin: 0 }}>Profile Memory</h2>
+              <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>PRISMA + ASSISTANT STATE</div>
+            </div>
           </div>
           <Detail title="Operator" body={assistantState?.operatorProfile.name || 'Operator name not set yet.'} />
           <Detail title="Preferences" body={(assistantState?.operatorProfile.preferences || []).join('; ') || 'No operator preferences stored yet.'} />
@@ -154,7 +160,10 @@ export default function Memory() {
         <div className="glass-card" style={{ display: 'grid', gap: '0.9rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
             <FiBookOpen />
-            <h2 style={{ fontSize: '1.05rem', margin: 0 }}>Memory Layers</h2>
+            <div>
+              <h2 style={{ fontSize: '1.05rem', margin: 0 }}>Profile Layers</h2>
+              <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>DURABLE HUMAN-FACING MEMORY</div>
+            </div>
           </div>
           <LayerPreview title="Operator Memory" items={overview?.operator || []} />
           <LayerPreview title="Mission Memory" items={overview?.mission || []} />
@@ -167,7 +176,10 @@ export default function Memory() {
           <div className="glass-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
               <FiDatabase style={{ color: 'var(--neon-cyan)' }} />
-              <span className="mono" style={{ fontSize: '0.8rem' }}>[ MEMORY_STATS ]</span>
+              <div>
+                <span className="mono" style={{ fontSize: '0.8rem' }}>[ VECTOR_MEMORY ]</span>
+                <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: '0.25rem' }}>CHROMA RETRIEVAL INDEX</div>
+              </div>
             </div>
             <div style={{ display: 'grid', gap: '0.75rem', fontSize: '0.9rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -181,6 +193,34 @@ export default function Memory() {
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                 Embedding Mode: {stats?.embeddingModel ?? 'loading'}
               </div>
+              {vectorWarnings.length > 0 && (
+                <div
+                  style={{
+                    border: '1px solid rgba(255, 190, 92, 0.28)',
+                    background: 'rgba(255, 190, 92, 0.08)',
+                    color: 'var(--warning)',
+                    borderRadius: '10px',
+                    padding: '0.75rem',
+                    fontSize: '0.8rem',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {vectorWarnings.map((warning) => (
+                    <div key={warning}>{warning}</div>
+                  ))}
+                </div>
+              )}
+              {vectorCollectionCounts.length > 0 && (
+                <div style={{ display: 'grid', gap: '0.45rem' }}>
+                  <div className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>COLLECTION COUNTS</div>
+                  {vectorCollectionCounts.slice(0, 8).map(([name, count]) => (
+                    <div key={name} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.82rem' }}>
+                      <span style={{ color: 'var(--text-secondary)', wordBreak: 'break-word' }}>{name}</span>
+                      <strong>{count}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.5rem' }}>
                 {(stats?.collections || ['operator', 'mission', 'session', 'default']).map((item: string) => (
                   <button
@@ -195,6 +235,7 @@ export default function Memory() {
                     }}
                   >
                     {item}
+                    {stats?.collectionCounts?.[item] !== undefined ? ` (${stats.collectionCounts[item]})` : ''}
                   </button>
                 ))}
               </div>
@@ -339,6 +380,20 @@ function normalizeTags(tags: string): string[] {
     .split(',')
     .map((tag) => tag.trim())
     .filter(Boolean);
+}
+
+function buildVectorWarnings(stats: MemoryStats | null): string[] {
+  if (!stats) return [];
+  const warnings: string[] = [];
+  if ((stats.totalEntries || 0) > 5000) {
+    warnings.push('Vector memory is large. Review session retention and cleanup.');
+  }
+  for (const [name, count] of Object.entries(stats.collectionCounts || {})) {
+    if (count > 1000) {
+      warnings.push(`Collection "${name}" is large (${count} entries).`);
+    }
+  }
+  return warnings;
 }
 
 const inputStyle: CSSProperties = {

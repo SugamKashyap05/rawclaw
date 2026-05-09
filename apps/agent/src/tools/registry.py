@@ -23,6 +23,32 @@ if TYPE_CHECKING:
 logger = logging.getLogger("rawclaw.registry")
 MAX_TOOL_OUTPUT_CHARS = 50000 # 50k chars max for tool output
 
+# Tools in this set can NEVER be overridden by MCP servers.
+# An MCP server that attempts to register a tool with one of these names
+# will be rejected regardless of configuration.
+# To add a new protected tool, add it here explicitly.
+PROTECTED_BUILTIN_TOOLS: frozenset[str] = frozenset({
+    # Shell and code execution — highest risk, never allow MCP override
+    "shell_execute",
+    "shell_run",
+    "code_execute",
+    "code_run",
+    "python_repl",
+    # Filesystem — high risk
+    "filesystem_write",
+    "filesystem_read",
+    "filesystem_delete",
+    "file_write",
+    "file_read",
+    "file_delete",
+    "read_file",
+    "list_dir",
+    # Memory — prevents poisoning via MCP
+    "memory_write",
+    "memory_delete",
+    "memory_store",
+})
+
 
 class ToolNotFoundError(Exception):
     """Raised when a tool is not found in the registry."""
@@ -50,6 +76,46 @@ class ToolRegistry:
         self._tools[tool.name] = tool
         logger.info(f"Registered tool: {tool.name} (tags: {tool.capability_tags})")
 
+    def register_mcp_tool(self, tool: BaseTool) -> None:
+        """Register an MCP-backed tool with override protections."""
+        source_server = (
+            getattr(tool, "source_server", None)
+            or getattr(tool, "_server_name", None)
+            or getattr(tool, "mcp_server_id", None)
+            or "unknown"
+        )
+
+        # Guard 1: Block override of protected built-in tools — hard stop
+        if tool.name in PROTECTED_BUILTIN_TOOLS:
+            logger.error(
+                "mcp_tool_blocked_protected_name",
+                extra={
+                    "tool_name": tool.name,
+                    "mcp_server": source_server,
+                    "reason": "MCP tool attempted to override a protected built-in tool.",
+                },
+            )
+            raise ValueError(
+                f"MCP tool '{tool.name}' from server '{source_server}' "
+                f"cannot override protected built-in '{tool.name}'. "
+                "Rename the tool on the MCP server side."
+            )
+
+        # Guard 2: Warn and namespace non-protected collisions
+        if tool.name in self._tools:
+            logger.warning(
+                "mcp_tool_name_collision",
+                extra={
+                    "tool_name": tool.name,
+                    "mcp_server": source_server,
+                    "action": "namespacing_to_prevent_silent_override",
+                },
+            )
+            server_name = str(source_server).replace(".", "_")
+            tool.name = f"mcp.{server_name}.{tool.name}"
+
+        self.register(tool)
+
     def get(self, name: str) -> BaseTool:
         """Get a tool by exact name. Raises ToolNotFoundError if not found."""
         tool = self._tools.get(name)
@@ -60,6 +126,27 @@ class ToolRegistry:
     def get_optional(self, name: str) -> Optional[BaseTool]:
         """Get a tool by exact name. Returns None if not found."""
         return self._tools.get(name)
+
+    # INVARIANT: empty input = empty output. Never fail open to all tools.
+    # An empty selection is a control-plane signal that something went wrong upstream.
+    # Returning all tools in that case would be a critical security and quality failure.
+    def resolve_tools_for_turn(self, selected_tool_ids: Optional[List[str]]) -> List[BaseTool]:
+        """Resolve a turn-scoped tool selection to concrete tool instances."""
+        if not selected_tool_ids:
+            logger.warning(
+                "tool_resolution_received_empty_selection — returning empty set. "
+                "This is a control-plane bug if it occurs in production."
+            )
+            return []
+
+        resolved: List[BaseTool] = []
+        for tool_id in selected_tool_ids:
+            tool = self._tools.get(tool_id)
+            if tool is None:
+                logger.error("tool_not_found", extra={"tool_id": tool_id})
+                continue
+            resolved.append(tool)
+        return resolved
 
     def list_tools(self) -> List[ToolSchema]:
         """List all registered tools as ToolSchema objects."""
@@ -135,6 +222,7 @@ class ToolRegistry:
         name: str,
         input: Dict[str, Any],
         knowledge_brain: Optional["KnowledgeBrain"] = None,
+        turn_id: Optional[str] = None,
     ) -> "ToolResult":
         """
         Execute a tool by name. Returns ToolResult.
@@ -148,6 +236,8 @@ class ToolRegistry:
             tool = self.get(name)
             if knowledge_brain:
                 tool.set_knowledge_brain(knowledge_brain)
+            if turn_id:
+                logger.info("tool_execution_started turn_id=%s tool_name=%s", turn_id, name)
             result = await tool.execute(input)
             
             # Truncate large outputs
@@ -156,6 +246,14 @@ class ToolRegistry:
                 result.output = result.output[:MAX_TOOL_OUTPUT_CHARS] + f"\n\n[... Output Truncated: {original_len - MAX_TOOL_OUTPUT_CHARS} characters omitted ...]"
                 result.is_truncated = True
                 logger.info(f"Truncated tool output for '{name}' from {original_len} to {MAX_TOOL_OUTPUT_CHARS}")
+            if turn_id:
+                logger.info(
+                    "tool_execution_completed turn_id=%s tool_name=%s duration_ms=%s error=%s",
+                    turn_id,
+                    name,
+                    result.duration_ms,
+                    result.error,
+                )
             
             return result
         except ToolNotFoundError as e:
@@ -167,6 +265,8 @@ class ToolRegistry:
                 sandboxed=False,
             )
         except Exception as e:
+            if turn_id:
+                logger.error("tool_execution_failed turn_id=%s tool_name=%s error=%s", turn_id, name, e)
             logger.error(f"Tool execution error for {name}: {e}")
             return ToolResult(
                 tool_name=name,

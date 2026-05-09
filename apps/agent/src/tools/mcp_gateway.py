@@ -370,12 +370,27 @@ class MCPServer:
     async def disconnect(self) -> None:
         """Disconnect from the MCP server."""
         if self._process:
-            self._process.terminate()
-            try:
-                await asyncio.wait_for(self._process.wait(), timeout=5)
-            except asyncio.TimeoutError:
-                self._process.kill()
+            process = self._process
             self._process = None
+            try:
+                if process.returncode is None:
+                    try:
+                        process.terminate()
+                    except ProcessLookupError:
+                        logger.debug("MCP %s: process already exited before terminate()", self.name)
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    try:
+                        process.kill()
+                    except ProcessLookupError:
+                        logger.debug("MCP %s: process already exited before kill()", self.name)
+                    try:
+                        await process.wait()
+                    except ProcessLookupError:
+                        logger.debug("MCP %s: process disappeared while waiting after kill()", self.name)
+            except ProcessLookupError:
+                logger.debug("MCP %s: process already exited during disconnect()", self.name)
         self._connected = False
 
 
@@ -465,7 +480,10 @@ class MCPGateway:
     async def disconnect_all(self) -> None:
         """Disconnect from all MCP servers."""
         for server in self._servers.values():
-            await server.disconnect()
+            try:
+                await server.disconnect()
+            except Exception as exc:
+                logger.warning("MCP server %s disconnect raised during shutdown: %s", server.name, exc)
 
     def get_all_tools(self) -> List[Dict]:
         """Get all tools from all connected MCP servers."""

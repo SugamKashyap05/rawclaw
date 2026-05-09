@@ -1,0 +1,4 @@
+-- SQLite rollback note:
+-- Dropping columns requires rebuilding the table.
+-- Revert application code first, then rebuild "messages" without
+-- "streamStatus" if permanent rollback is required.

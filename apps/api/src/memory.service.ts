@@ -89,6 +89,56 @@ export class MemoryService {
     }
   }
 
+  async dedupeToolDiscovery(dryRun = false): Promise<{
+    collection: string;
+    totalEntries: number;
+    duplicatesRemoved: number;
+    keptEntries: number;
+    dryRun?: boolean;
+    error?: string;
+  }> {
+    return await firstValueFrom(
+      this.httpService.post<{
+        collection: string;
+        totalEntries: number;
+        duplicatesRemoved: number;
+        keptEntries: number;
+        dryRun?: boolean;
+        error?: string;
+      }>(`${this.agentUrl}/api/memory/maintenance/dedupe-tool-discovery`, { dryRun }),
+    ).then((response) => response.data);
+  }
+
+  async pruneSessionIndex(options: { ttlDays?: number; maxEntriesPerSession?: number; dryRun?: boolean } = {}): Promise<{
+    collection: string;
+    totalEntries: number;
+    deletedEntries: number;
+    remainingEntries: number;
+    sessionsTouched: number;
+    ttlDays: number;
+    maxEntriesPerSession: number;
+    dryRun?: boolean;
+    error?: string;
+  }> {
+    return await firstValueFrom(
+      this.httpService.post<{
+        collection: string;
+        totalEntries: number;
+        deletedEntries: number;
+        remainingEntries: number;
+        sessionsTouched: number;
+        ttlDays: number;
+        maxEntriesPerSession: number;
+        dryRun?: boolean;
+        error?: string;
+      }>(`${this.agentUrl}/api/memory/maintenance/prune-sessions`, {
+        ttlDays: options.ttlDays ?? 14,
+        maxEntriesPerSession: options.maxEntriesPerSession ?? 100,
+        dryRun: options.dryRun ?? false,
+      }),
+    ).then((response) => response.data);
+  }
+
   async listEntries(options?: { collection?: string; source?: string; limit?: number }): Promise<MemoryEntry[]> {
     const rows = await this.prisma.memoryEntry.findMany({
       where: {
@@ -135,19 +185,37 @@ export class MemoryService {
   }
 
   private async getFallbackStats(): Promise<MemoryStats> {
-    const [count, collections] = await Promise.all([
+    const [count, collections, rows] = await Promise.all([
       this.prisma.memoryEntry.count(),
       this.prisma.memoryEntry.findMany({
         distinct: ['collection'],
         select: { collection: true },
         orderBy: { collection: 'asc' },
       }),
+      this.prisma.memoryEntry.findMany({
+        select: { collection: true },
+      }),
     ]);
+    const collectionCounts = rows.reduce<Record<string, number>>((acc, row: { collection: string }) => {
+      acc[row.collection] = (acc[row.collection] || 0) + 1;
+      return acc;
+    }, {});
+    const warnings: string[] = [];
+    if (count > 5000) {
+      warnings.push('Vector memory is large. Review session retention and cleanup.');
+    }
+    for (const [collection, collectionCount] of Object.entries(collectionCounts)) {
+      if (collectionCount > 1000) {
+        warnings.push(`Collection "${collection}" is large (${collectionCount} entries).`);
+      }
+    }
 
     return {
       totalEntries: count,
       collections: collections.map((item: { collection: string }) => item.collection),
+      collectionCounts,
       embeddingModel: 'prisma fallback (agent memory unavailable)',
+      warnings,
     };
   }
 

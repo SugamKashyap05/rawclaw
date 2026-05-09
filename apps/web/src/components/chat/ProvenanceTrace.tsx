@@ -1,6 +1,7 @@
 import { ProvenanceTrace as IProvenanceTrace } from '@rawclaw/shared';
 import { useState } from 'react';
 import { FiActivity, FiTool, FiCheckCircle, FiCpu, FiAlertTriangle, FiZap, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { sanitizeTraceSummary } from './tracePresentation';
 
 interface ProvenanceTraceProps {
   trace: Partial<IProvenanceTrace> | null | undefined;
@@ -123,7 +124,8 @@ export const ProvenanceTrace: React.FC<ProvenanceTraceProps> = ({ trace }) => {
             const timing = getTimeStatus(duration);
             const stepType = typeof step.stepType === 'string' ? step.stepType : (typeof rawStep.step_type === 'string' ? rawStep.step_type : 'unknown');
             const toolName = typeof step.toolName === 'string' ? step.toolName : (typeof rawStep.tool_name === 'string' ? rawStep.tool_name : null);
-            const outputSummary = typeof step.outputSummary === 'string' ? step.outputSummary : (typeof rawStep.output_summary === 'string' ? rawStep.output_summary : '');
+            const rawOutputSummary = typeof step.outputSummary === 'string' ? step.outputSummary : (typeof rawStep.output_summary === 'string' ? rawStep.output_summary : '');
+            const outputSummary = sanitizeTraceSummary(stepType, rawOutputSummary);
             const tone = getStepTone(stepType, outputSummary);
 
           return (

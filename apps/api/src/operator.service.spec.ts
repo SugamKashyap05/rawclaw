@@ -415,6 +415,22 @@ describe('OperatorService', () => {
     );
   });
 
+  it('degrades gracefully when gateway event and run feeds are unavailable', async () => {
+    gatewayEventsService.listRecent.mockRejectedValueOnce(new Error('redis unavailable'));
+    gatewayControlPlaneService.listRecentRuns.mockRejectedValueOnce(new Error('redis unavailable'));
+
+    const snapshot = await service.getSnapshot(50);
+
+    expect(snapshot.summary.activeRoutes).toBe(2);
+    expect(snapshot.summary.activeSessions).toBe(2);
+    expect(snapshot.currentRuns.length).toBeGreaterThan(0);
+    expect(snapshot.toolActivity).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ toolName: 'web_extract', source: 'chat_message' }),
+      ]),
+    );
+  });
+
   it('merges gateway, memory, provenance, review, and tool items into a descending filtered timeline', async () => {
     const timeline = await service.getTimeline({
       limit: 20,

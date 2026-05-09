@@ -1,8 +1,10 @@
 import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+import src.executor as executor_module
 from src.executor import Executor
 from src.contracts.chat import ChatRequest
+from src.contracts.tool import ToolResult
 
 @pytest.mark.asyncio
 async def test_sequential_thinking_interception():
@@ -34,7 +36,14 @@ async def test_sequential_thinking_interception():
     executor.model_router = mock_router
     
     # Mock tool execution
-    executor._execute_tool_with_confirmation = AsyncMock(return_value={"status": "ok"})
+    executor._execute_tool_with_confirmation = AsyncMock(
+        return_value=ToolResult(
+            tool_name="sequential_thinking",
+            input={},
+            output={"status": "ok"},
+            duration_ms=1,
+        )
+    )
     
     request = ChatRequest(
         session_id="test_session",
@@ -93,3 +102,56 @@ async def test_native_thinking_passthrough():
     thinking_events = [e for e in events if e.get("type") == "thinking"]
     assert len(thinking_events) == 1
     assert thinking_events[0]["thinking"] == "Native thinking steps..."
+
+@pytest.mark.asyncio
+async def test_sequential_thinking_cap_exits_without_timeout(monkeypatch):
+    monkeypatch.setattr(executor_module, "MAX_SEQUENTIAL_THINKING_TURNS", 3)
+
+    mock_router = MagicMock()
+    mock_router.normalize_model_id = AsyncMock(return_value="ollama/llama3")
+    mock_router.has_native_thinking.return_value = False
+
+    async def mock_complete(*args, **kwargs):
+        for thought_number in range(1, 6):
+            yield {
+                "type": "tool_call",
+                "tool_call": {
+                    "name": "sequential_thinking",
+                    "arguments": {
+                        "thought": f"Looping thought {thought_number}",
+                        "thoughtNumber": thought_number,
+                        "totalThoughts": 99,
+                        "nextThoughtNeeded": True,
+                    },
+                },
+            }
+
+    mock_router.complete.side_effect = mock_complete
+
+    executor = Executor()
+    executor.model_router = mock_router
+    executor._execute_tool_with_confirmation = AsyncMock(
+        return_value=ToolResult(
+            tool_name="sequential_thinking",
+            input={},
+            output={"status": "ok"},
+            duration_ms=1,
+        )
+    )
+
+    request = ChatRequest(
+        session_id="test_session",
+        messages=[{"role": "user", "content": "think step by step forever"}],
+        model="llama3",
+    )
+
+    events = []
+    async for event in executor.execute(request):
+        events.append(json.loads(event))
+
+    thinking_events = [event for event in events if event.get("type") == "thinking"]
+    error_events = [event for event in events if event.get("type") == "error"]
+
+    assert len(thinking_events) <= executor_module.MAX_SEQUENTIAL_THINKING_TURNS
+    assert any(event.get("error") == "sequential_thinking_limit_reached" for event in error_events)
+    assert not any(event.get("error") == "execution_timeout" for event in error_events)

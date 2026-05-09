@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
-import { FiPlus, FiClock, FiX, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { OperatorSnapshot, OperatorTimelineKind } from '@rawclaw/shared';
+import { FiPlus, FiClock, FiX, FiChevronLeft, FiChevronRight, FiActivity, FiRefreshCw } from 'react-icons/fi';
 import { api } from '../lib/api';
+import { fetchOperatorSnapshot } from '../lib/operator';
 import { formatDistanceToNow } from 'date-fns';
+import { isUserFacingToolName } from './chat/toolVisibility';
 
 interface Session {
   id: string;
@@ -10,11 +13,138 @@ interface Session {
   updatedAt: string;
 }
 
+interface LiveWorkRow {
+  id: string;
+  label: string;
+  detail?: string;
+}
+
+const LIVE_WORK_ALLOWED_TIMELINE_KINDS = new Set<OperatorTimelineKind>(['memory_event', 'review']);
+
+const EMPTY_SNAPSHOT: OperatorSnapshot = {
+  summary: {
+    activeAgents: 0,
+    activeSessions: 0,
+    activeRoutes: 0,
+    currentRuns: 0,
+    toolEvents: 0,
+    memoryEvents: 0,
+    degradedCount: 0,
+    subagentCount: 0,
+  },
+  activeAgents: [],
+  activeSessions: [],
+  currentRuns: [],
+  toolActivity: [],
+  timeline: [],
+  provenance: [],
+  subagentTree: [],
+  routes: [],
+};
+
+function formatToolRow(toolName: string, phase?: string): string {
+  const lowered = toolName.toLowerCase();
+  if (!isUserFacingToolName(toolName)) return '';
+  if (lowered.includes('web_extract')) return phase === 'start' ? 'Page read running' : 'Page read complete';
+  if (lowered.includes('search')) return phase === 'start' ? 'Web search running' : 'Web search complete';
+  if (lowered.includes('memory')) return 'Memory captured';
+  if (lowered.includes('review')) return 'Review requested changes';
+  return '';
+}
+
+function isActionableReview(summary?: string | null, detail?: string | null): boolean {
+  const combined = `${summary || ''} ${detail || ''}`.toLowerCase();
+  if (!combined.trim()) return false;
+  if (combined.includes('approved')) return false;
+  return combined.includes('reject') || combined.includes('requested changes') || combined.includes('needs revision');
+}
+
+function buildLiveWorkRows(snapshot: OperatorSnapshot, sessionId?: string): LiveWorkRow[] {
+  if (!sessionId) return [];
+
+  const sessionRuns = snapshot.currentRuns
+    .filter((run) => run.sessionId === sessionId || run.parentSessionId === sessionId)
+    .filter((run) => ['running', 'queued', 'failed'].includes(String(run.status || '').toLowerCase()))
+    .sort((a, b) => {
+      const priority = (status?: string | null) => (status === 'running' ? 0 : status === 'queued' ? 1 : 2);
+      return priority(a.status) - priority(b.status);
+    })
+    .slice(0, 3)
+    .map((run) => {
+      const kind = run.kind === 'app_builder'
+        ? 'App Builder'
+        : run.kind === 'automation'
+          ? 'Automation'
+          : run.kind === 'task'
+            ? 'Task'
+            : run.title || 'Run';
+      const statusLabel =
+        run.status === 'running'
+          ? 'running'
+          : run.status === 'queued'
+            ? 'queued'
+            : run.status === 'failed'
+              ? 'needs attention'
+              : String(run.status || 'active');
+      return {
+        id: `run-${run.id}`,
+        label: run.status === 'failed' ? 'Run needs attention' : `${kind} ${statusLabel}`,
+        detail: run.summary || run.latestError || undefined,
+      };
+    });
+
+  const toolRows = snapshot.toolActivity
+    .filter((item) => item.sessionId === sessionId)
+    .map((item) => {
+      const label = formatToolRow(item.toolName, item.phase);
+      return label ? {
+        id: `tool-${item.id}`,
+        label,
+        detail: item.summary,
+      } : null;
+    })
+    .filter(Boolean) as LiveWorkRow[];
+
+  const timelineRows = snapshot.timeline
+    .filter((item) => item.sessionId === sessionId || item.parentSessionId === sessionId)
+    // Keep provenance heartbeat rows such as "Answer trace updated" out of LIVE WORK.
+    .filter((item) => LIVE_WORK_ALLOWED_TIMELINE_KINDS.has(item.kind))
+    .map((item) => {
+      if (item.kind === 'memory_event') {
+        return {
+          id: `timeline-${item.id}`,
+          label: item.memoryAction === 'captured' ? 'Memory captured' : 'Memory used',
+          detail: item.summary,
+        };
+      }
+      if (item.kind === 'review' && isActionableReview(item.summary, item.detail)) {
+        return {
+          id: `timeline-${item.id}`,
+          label: 'Review requested changes',
+          detail: item.detail || item.summary,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean) as LiveWorkRow[];
+
+  const deduped = [...sessionRuns, ...toolRows, ...timelineRows].filter((row, index, all) => (
+    all.findIndex((candidate) => candidate.label === row.label) === index
+  ));
+
+  return deduped.slice(0, 6);
+}
+
 export function ChatSidebar() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showLiveWork, setShowLiveWork] = useState(true);
+  const [liveSnapshot, setLiveSnapshot] = useState<OperatorSnapshot>(EMPTY_SNAPSHOT);
+  const [liveWorkError, setLiveWorkError] = useState(false);
   const { sessionId } = useParams();
   const navigate = useNavigate();
+
+  const liveWorkRows = useMemo(() => buildLiveWorkRows(liveSnapshot, sessionId), [liveSnapshot, sessionId]);
 
   // Load collapsed state from localStorage on mount
   useEffect(() => {
@@ -42,6 +172,40 @@ export function ChatSidebar() {
   useEffect(() => {
     fetchSessions();
   }, [sessionId]); // Refresh list when session id changes (likely after creation)
+
+  useEffect(() => {
+    if (isCollapsed || !sessionId) return;
+
+    let disposed = false;
+
+    const loadLiveWork = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const next = await fetchOperatorSnapshot(80);
+        if (!disposed) {
+          setLiveSnapshot(next);
+          setLiveWorkError(false);
+        }
+      } catch (err) {
+        console.error('Failed to load live work snapshot', err);
+        if (!disposed) {
+          setLiveWorkError(true);
+        }
+      }
+    };
+
+    void loadLiveWork();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void loadLiveWork();
+      }
+    }, 10000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [isCollapsed, sessionId]);
 
   const fetchSessions = async () => {
     try {
@@ -207,6 +371,88 @@ export function ChatSidebar() {
             ))}
           </div>
         )}
+
+        <div style={{ marginTop: '1.1rem', display: 'grid', gap: '0.55rem' }}>
+          <button
+            type="button"
+            onClick={() => setShowLiveWork((current) => !current)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.5rem',
+              padding: '0 0.5rem',
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+          >
+            <span className="mono" style={{ fontSize: '0.65rem' }}>LIVE WORK</span>
+            {showLiveWork ? <FiChevronLeft size={12} style={{ transform: 'rotate(-90deg)' }} /> : <FiChevronRight size={12} style={{ transform: 'rotate(90deg)' }} />}
+          </button>
+
+          {showLiveWork ? (
+            <div style={{ display: 'grid', gap: '0.4rem' }}>
+              {liveWorkError ? (
+                <div
+                  style={{
+                    padding: '0.7rem 0.8rem',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-glass)',
+                    background: 'rgba(255,255,255,0.03)',
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.78rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                  }}
+                >
+                  <FiRefreshCw size={12} />
+                  Checking on your work...
+                </div>
+              ) : liveWorkRows.length === 0 ? (
+                <div
+                  style={{
+                    padding: '0.7rem 0.8rem',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-glass)',
+                    background: 'rgba(255,255,255,0.03)',
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.78rem',
+                  }}
+                >
+                  No active work right now.
+                </div>
+              ) : (
+                liveWorkRows.map((row) => (
+                  <div
+                    key={row.id}
+                    style={{
+                      padding: '0.7rem 0.8rem',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-glass)',
+                      background: 'rgba(255,255,255,0.03)',
+                      display: 'grid',
+                      gap: '0.2rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-primary)', fontSize: '0.8rem' }}>
+                      <FiActivity size={12} color="var(--neon-cyan)" />
+                      <span>{row.label}</span>
+                    </div>
+                    {row.detail ? (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.4 }}>
+                        {row.detail}
+                      </div>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       )}

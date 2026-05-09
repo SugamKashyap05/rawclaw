@@ -383,6 +383,7 @@ export interface WorkerLease {
 
 export interface SubagentJob {
   id: string;
+  turn_id?: string | null;
   recordId: string;
   runId: string;
   sessionId: string;
@@ -412,6 +413,7 @@ export interface AnalystJob extends SubagentJob {
 }
 
 export interface AutomationQueueJob {
+  turn_id?: string | null;
   runId: string;
   jobId: string;
   bindingId: string;
@@ -425,6 +427,7 @@ export interface AutomationQueueJob {
 
 export interface SandboxJob {
   id: string;
+  turn_id?: string | null;
   sessionId?: string | null;
   runId?: string | null;
   toolName: string;

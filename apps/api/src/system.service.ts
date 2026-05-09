@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { execSync } from 'child_process';
 import { SystemStatusSnapshot } from '@rawclaw/shared';
 import { HttpService } from '@nestjs/axios';
@@ -12,6 +12,8 @@ import { PrismaService } from './prisma.service';
 
 @Injectable()
 export class SystemService {
+  private readonly logger = new Logger(SystemService.name);
+
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
@@ -23,24 +25,20 @@ export class SystemService {
   ) {}
 
   async getStatus(): Promise<SystemStatusSnapshot> {
-    const [serviceHealth, mcpHealth, recentRuns, runningAgents] = await Promise.all([
+    const [serviceHealth, mcpHealth, pendingTasks, runningAgents] = await Promise.all([
       this.getServiceHealth(),
-      this.toolsService.getMCPHealth(),
-      this.tasksService.listRuns(1, 50),
-      this.agentsService.countRunning(),
+      this.withFallback('mcp health', () => this.toolsService.getMCPHealth(), { connected: false, servers: [], connected_count: 0 }),
+      this.withFallback('active task count', () => this.tasksService.countActiveRuns(), 0),
+      this.withFallback('running agent count', () => this.agentsService.countRunning(), 0),
     ]);
-
-    const pendingTasks = recentRuns.filter((run) => ['queued', 'running'].includes(run.status)).length;
+    const git = this.getGitMetadata();
 
     return {
       services: serviceHealth,
       websocket: {
         connected: true,
       },
-      git: {
-        branch: this.safeGit('git branch --show-current') || 'unknown',
-        lastCommit: this.safeGit('git log -1 --pretty=%h %s') || null,
-      },
+      git,
       counts: {
         agents: runningAgents,
         mcpServers: mcpHealth.connected_count,
@@ -104,6 +102,22 @@ export class SystemService {
         .trim();
     } catch {
       return '';
+    }
+  }
+
+  private getGitMetadata(): SystemStatusSnapshot['git'] {
+    return {
+      branch: this.safeGit('git branch --show-current') || 'unknown',
+      lastCommit: this.safeGit('git log -1 --pretty=%h %s') || null,
+    };
+  }
+
+  private async withFallback<T>(label: string, load: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await load();
+    } catch (error: any) {
+      this.logger.warn(`Failed to load ${label}: ${error?.message || error || 'unknown error'}`);
+      return fallback;
     }
   }
 }

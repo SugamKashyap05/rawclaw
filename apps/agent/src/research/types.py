@@ -19,6 +19,17 @@ class ResearchPlan(BaseModel):
     focus: List[str] = Field(default_factory=list)
     domain_bias: List[str] = Field(default_factory=list)
     exact_structured_data_needed: bool = False
+    official_source_requested: bool = False
+
+
+ResearchEvidenceState = Literal["evidence_found", "evidence_thin", "extraction_failed", "no_results"]
+
+
+class SourceProfile(BaseModel):
+    domain: str
+    renderType: Literal["static", "js-app", "unknown"] = "unknown"
+    extractionReliability: Literal["high", "low", "unknown"] = "unknown"
+    preferredAccessMethod: Literal["direct", "search-for-article"] = "direct"
 
 
 class ResearchContext(BaseModel):
@@ -36,6 +47,7 @@ class ResearchContext(BaseModel):
     evidence_assessment: Dict[str, Any] = Field(default_factory=dict)
     answerability: Dict[str, Any] = Field(default_factory=dict)
     confidence_risk: Dict[str, Any] = Field(default_factory=dict)
+    evidence_state: Optional[ResearchEvidenceState] = None
 
 
 class ExtractionDecision(BaseModel):
@@ -47,6 +59,9 @@ class ExtractionDecision(BaseModel):
     should_attempt_extract: bool = False
     has_viable_search_results: bool = False
     ranked_results: List[Dict[str, Any]] = Field(default_factory=list)
+    candidate_profiles: List[SourceProfile] = Field(default_factory=list)
+    needs_query_broadening: bool = False
+    diversity_status: str = ""
 
 
 class PreEvidenceDecision(BaseModel):

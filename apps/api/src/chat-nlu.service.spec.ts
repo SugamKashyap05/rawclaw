@@ -68,6 +68,14 @@ describe('ChatNluService', () => {
     expect(frame.memoryScopes?.query).toBe('all');
   });
 
+  it('treats summarize memory phrasing as a memory query instead of conversation', async () => {
+    const frame = await frameFor(service, baseInput('Summarize memory'));
+
+    expect(frame.intent).toBe('memory_query');
+    expect(frame.recommendedLane).toBe('memory');
+    expect(frame.memoryScopes?.query).toBe('all');
+  });
+
   it('inherits research follow-up only without competing primary intent signals', async () => {
     const prior = await frameFor(service, baseInput('Search the web for current Redis news.'));
     const followUp = await frameFor(service, {
@@ -82,6 +90,13 @@ describe('ChatNluService', () => {
     expect(followUp.intent).toBe('research');
     expect(followUp.routingFallbackReason).toBe('research_followup');
     expect(competing.intent).toBe('memory_capture');
+  });
+
+  it('treats plain search-and-results phrasing as research instead of conversation', async () => {
+    const frame = await frameFor(service, baseInput('hello ji search for who won begal election 2026'));
+
+    expect(frame.intent).toBe('research');
+    expect(frame.recommendedLane).toBe('research');
   });
 
   it('matches MCP tools deterministically without using descriptions or capability tags', async () => {

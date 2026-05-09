@@ -20,7 +20,8 @@ import AppBuilder from './pages/AppBuilder';
 import ModelSelector from './components/ModelSelector';
 import { Sidebar } from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
-import { bootstrapWorkspace, getBootstrapStatus, initializeAuth } from './lib/auth';
+import { BootstrapWizard } from './components/bootstrap/BootstrapWizard';
+import { getBootstrapStatus, initializeAuth } from './lib/auth';
 import { useHealthStatus } from './hooks/useHealthStatus';
 
 function App() {
@@ -30,17 +31,14 @@ function App() {
   const [isAuth, setIsAuth] = useState<boolean>(false);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [needsSetup, setNeedsSetup] = useState<boolean>(false);
-  const [setupUser, setSetupUser] = useState<string>('');
-  const [setupMemory, setSetupMemory] = useState<string>('');
-  const [setupSaving, setSetupSaving] = useState<boolean>(false);
   const location = useLocation();
-  const { status: systemStatus, refresh: refreshHealth, isRefreshing: healthRefreshing } = useHealthStatus();
+  const { status: systemStatus, refresh: refreshHealth, isRefreshing: healthRefreshing, hasLoaded: healthLoaded } = useHealthStatus();
 
   const bootstrap = async () => {
     setAuthLoading(true);
     try {
-      const status = await getBootstrapStatus();
       const ok = await initializeAuth();
+      const status = await getBootstrapStatus();
       setIsAuth(ok);
       setNeedsSetup(status.needsSetup);
     } catch {
@@ -93,64 +91,7 @@ function App() {
   }
 
   if (needsSetup) {
-    return (
-      <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', padding: '2rem' }}>
-        <div className="glass-card" style={{ width: '100%', maxWidth: '760px' }}>
-          <h1 style={{ fontSize: '2rem', marginBottom: '0.4rem' }}>Initialize RawClaw</h1>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: 1.6 }}>
-            This runs only once, when your workspace has not been initialized yet. We will seed <span className="mono">USER.md</span> and optionally your starter memory so the system can boot into a real working state.
-          </p>
-          <div style={{ display: 'grid', gap: '0.9rem' }}>
-            <div>
-              <label className="mono" style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.72rem' }}>
-                USER.md
-              </label>
-              <textarea
-                value={setupUser}
-                onChange={(event) => setSetupUser(event.target.value)}
-                rows={8}
-                placeholder="Describe who you are, your working preferences, project context, and anything RawClaw should remember about you."
-                style={{ ...fieldStyle, resize: 'vertical' }}
-              />
-            </div>
-            <div>
-              <label className="mono" style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.72rem' }}>
-                MEMORY.md (optional)
-              </label>
-              <textarea
-                value={setupMemory}
-                onChange={(event) => setSetupMemory(event.target.value)}
-                rows={6}
-                placeholder="Optional starter memory, project facts, or operating constraints."
-                style={{ ...fieldStyle, resize: 'vertical' }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button
-                className="btn-primary"
-                disabled={setupSaving || !setupUser.trim()}
-                onClick={async () => {
-                  setSetupSaving(true);
-                  const ok = await bootstrapWorkspace({
-                    user: setupUser,
-                    memory: setupMemory || undefined,
-                  });
-                  setSetupSaving(false);
-                  if (ok) {
-                    setNeedsSetup(false);
-                    setIsAuth(true);
-                  } else {
-                    window.alert('Workspace initialization failed.');
-                  }
-                }}
-              >
-                {setupSaving ? 'Initializing...' : 'Initialize workspace'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <BootstrapWizard onComplete={bootstrap} />;
   }
 
   if (!isAuth) {
@@ -261,19 +202,10 @@ function App() {
           </Routes>
         </main>
 
-        <StatusBar status={systemStatus} onRefresh={refreshHealth} isRefreshing={healthRefreshing} />
+        <StatusBar status={systemStatus} onRefresh={refreshHealth} isRefreshing={healthRefreshing} isInitializing={!healthLoaded} />
       </div>
     </div>
   );
 }
-
-const fieldStyle = {
-  width: '100%',
-  padding: '0.8rem 0.9rem',
-  borderRadius: '12px',
-  border: '1px solid var(--border-glass)',
-  background: 'rgba(255,255,255,0.04)',
-  color: 'var(--text-primary)',
-};
 
 export default App;

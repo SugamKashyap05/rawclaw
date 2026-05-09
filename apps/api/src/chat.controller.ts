@@ -1,16 +1,19 @@
-import { Controller, Post, Body, Get, Param, Res, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Res, UseGuards, Req, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ChatService, SessionWithMessages } from './chat.service';
 import { ChatControlState, ChatNluOverride, ChatRequest, ModelInfo } from '@rawclaw/shared';
 import { firstValueFrom } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { ChatOrchestratorService } from './chat-orchestrator.service';
+import { randomUUID } from 'crypto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('chat')
 export class ChatController {
+  private readonly logger = new Logger(ChatController.name);
+
   constructor(
     private readonly httpService: HttpService,
     private readonly chatService: ChatService,
@@ -19,8 +22,33 @@ export class ChatController {
   ) {}
 
   @Post('send')
-  async send(@Body() request: ChatRequest, @Res() res: Response) {
-    return this.orchestratorService.processAndStreamChat(request, res);
+  async send(@Body() request: ChatRequest, @Res() res: Response, @Req() req: Request) {
+    try {
+      const correlationId = request.correlationId || request.correlation_id || `rc-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      request.correlationId = correlationId;
+      request.correlation_id = correlationId;
+      this.logger.debug(
+        `[REQUEST_RECEIVED] accept=${String(req.headers.accept || '')} ` +
+        `contentType=${String(req.headers['content-type'] || '')} ` +
+        `authorization=${req.headers.authorization ? 'present' : 'missing'} ` +
+        `bodyKeys=${Object.keys(request || {}).join(',')} ` +
+        `session_id=${request?.session_id || 'missing'} ` +
+        `messageCount=${Array.isArray(request?.messages) ? request.messages.length : 0} ` +
+        `correlationId=${correlationId}`,
+      );
+      return await this.orchestratorService.processAndStreamChat(request, res);
+    } catch (error) {
+      if (!res.headersSent) {
+        return res.status(500).json({
+          error: 'agent_error',
+          message: 'Something went wrong. Please try again.',
+          retryable: true,
+        });
+      }
+      if (!res.writableEnded) {
+        res.end();
+      }
+    }
   }
 
   @Get('sessions')
@@ -62,13 +90,26 @@ export class ChatController {
     },
     @Res() res: Response
   ) {
-    return this.orchestratorService.editAndResend(
-      body.sessionId, 
-      body.messageId, 
-      body.content, 
-      res,
-      { model: body.model, complexity: body.complexity, agentId: body.agentId, temperature: body.temperature, top_p: body.top_p }
-    );
+    try {
+      return await this.orchestratorService.editAndResend(
+        body.sessionId, 
+        body.messageId, 
+        body.content, 
+        res,
+        { model: body.model, complexity: body.complexity, agentId: body.agentId, temperature: body.temperature, top_p: body.top_p }
+      );
+    } catch (error) {
+      if (!res.headersSent) {
+        return res.status(500).json({
+          error: 'agent_error',
+          message: 'Something went wrong. Please try again.',
+          retryable: true,
+        });
+      }
+      if (!res.writableEnded) {
+        res.end();
+      }
+    }
   }
 
   @Post('regenerate')
@@ -85,12 +126,25 @@ export class ChatController {
     },
     @Res() res: Response
   ) {
-    return this.orchestratorService.regenerate(
-      body.sessionId, 
-      body.messageId, 
-      res,
-      { model: body.model, complexity: body.complexity, agentId: body.agentId, temperature: body.temperature, top_p: body.top_p, nluOverride: body.nluOverride }
-    );
+    try {
+      return await this.orchestratorService.regenerate(
+        body.sessionId, 
+        body.messageId, 
+        res,
+        { model: body.model, complexity: body.complexity, agentId: body.agentId, temperature: body.temperature, top_p: body.top_p, nluOverride: body.nluOverride }
+      );
+    } catch (error) {
+      if (!res.headersSent) {
+        return res.status(500).json({
+          error: 'agent_error',
+          message: 'Something went wrong. Please try again.',
+          retryable: true,
+        });
+      }
+      if (!res.writableEnded) {
+        res.end();
+      }
+    }
   }
 
   @Get('docs/:id')
@@ -113,8 +167,8 @@ export class ChatController {
       // Return a basic fallback if agent is down
       return { 
         models: [
-          { id: 'ollama/qwen2.5:1.5b', name: 'Qwen 2.5 1.5B (Fallback)', provider: 'ollama' },
-          { id: 'ollama/llama3.2:3b', name: 'Llama 3.2 (Fallback)', provider: 'ollama' }
+          { id: 'ollama/gemma4:31b-cloud', name: 'Gemma 4 31B Cloud (Fallback)', provider: 'ollama' },
+          { id: 'ollama/gemma4:e4b', name: 'Gemma 4 E4B (Fallback)', provider: 'ollama' }
         ]
       };
     }

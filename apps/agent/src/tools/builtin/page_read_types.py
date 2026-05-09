@@ -4,19 +4,22 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Literal, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 
 PAGE_READ_HTTP_DEFAULT_DURATION_MS = 10000
 PAGE_READ_HTTP_MIN_DURATION_MS = 5000
 PAGE_READ_HTTP_MAX_DURATION_MS = 30000
 DEFAULT_MIN_CONTENT_CHARS = 200
+# Default minimum body length for non-live-data content to count as usable-quality text.
+MIN_USEFUL_CONTENT_CHARS = DEFAULT_MIN_CONTENT_CHARS
 LIVE_DATA_MIN_CONTENT_CHARS = 50
 BROWSER_CAPABILITY_TRANSIENT_RETRIES = 1
 BROWSER_CAPABILITY_FUTURE_WAIT_TIMEOUT_S = 5.0
 BROWSER_SEMAPHORE_CAPACITY = 1
 PAGE_READ_BROWSER_MAX_QUEUE_DEPTH = 3
 PAGE_READ_FAILURE_SUMMARY_MAX_CHARS = 200
-PAGE_READ_FAILURE_MARKER_RESERVE_CHARS = 12
+PAGE_READ_FAILURE_MARKER_RESERVE_CHARS = len("[+99 more]")
 
 URL_FIELD_NAMES = [
     "url",
@@ -34,6 +37,23 @@ URL_FIELD_NAMES_LOWER = {name.lower(): name for name in URL_FIELD_NAMES}
 
 BackendResult = Literal["success", "garbage", "failed", "skipped"]
 EvidenceStatus = Literal["strong", "medium", "degraded", "failed"]
+# Wire-compatible values. Do not rename without a compatibility migration.
+FetchFailureKind = Literal[
+    "transport_failure",
+    "http_status_error",
+    "redirect_loop",
+    "timeout",
+    "proxy_required",
+    "connect_failure",
+    "dns_failure",
+    "tls_failure",
+    "socket_permission_denied",
+    "browser_fallback_failed",
+    "execution_failure",
+    "unsafe_url",
+    "extract_failure",
+    "unknown",
+]
 
 
 @dataclass
@@ -73,8 +93,16 @@ class PageReadResult:
     confidence: float = 0.0
     wordCount: int = 0
     pageKind: str = "unknown"
+    pageType: str = "general"
+    taskType: str = "page_read"
+    sourceMode: str = "user_named"
     jsRenderSuspected: bool = False
     minContentChars: int = DEFAULT_MIN_CONTENT_CHARS
+    fetchFailureKind: Optional[FetchFailureKind] = None
+    networkError: Optional[str] = None
+    httpStatus: Optional[int] = None
+    transportStrategy: Optional[str] = None
+    redirectedUrl: Optional[str] = None
     error: Optional[str] = None
     pageReadOrchestrated: bool = True
 
@@ -140,9 +168,41 @@ def normalize_behavior_schema(value: Any) -> Any:
 
 
 def schema_behavior_hash(schema: Dict[str, Any]) -> str:
+    # Structural hash only: const and enum are intentionally not normalized to equivalence.
     normalized = normalize_behavior_schema(schema or {})
     payload = json.dumps(normalized, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _normalize_url_for_compare(url: str) -> str:
+    value = str(url or "").strip()
+    if not value:
+        return ""
+    try:
+        parsed = urlsplit(value)
+    except Exception:
+        return value.rstrip("/")
+
+    path = (parsed.path or "").rstrip("/")
+    normalized = urlunsplit(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            path,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+    return normalized or value.rstrip("/")
+
+
+def normalize_redirected_url(requested: str, final: str) -> Optional[str]:
+    final_value = str(final or "").strip()
+    if not final_value:
+        return None
+    if _normalize_url_for_compare(requested) == _normalize_url_for_compare(final_value):
+        return None
+    return final_value
 
 
 def _schema_properties(schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -226,7 +286,6 @@ def has_weak_signal(output: Dict[str, Any]) -> bool:
         or float(output.get("confidence") or 0.0) < 0.6
         or int(output.get("wordCount") or 0) < 80
         or bool(output.get("jsRenderSuspected"))
-        or bool(output.get("browserEscalationSuppressed"))
     )
 
 
@@ -267,40 +326,37 @@ def summarize_failure_chain(
 
     kept = [first]
     remaining = [str(item) for item in chain[1:]]
+    separator = " -> "
     for idx, segment in enumerate(remaining):
-        omitted_after = len(remaining) - idx - 1
-        marker = f"[+{min(omitted_after, 99)} more]" if omitted_after else ""
-        candidate = " -> ".join(kept + [segment])
-        if marker:
-            candidate_with_marker = f"{candidate} {marker}"
-        else:
-            candidate_with_marker = candidate
-        if len(candidate_with_marker) <= max_chars:
+        marker_reserve = PAGE_READ_FAILURE_MARKER_RESERVE_CHARS if len(remaining) - idx - 1 > 0 else 0
+        candidate = separator.join(kept + [segment])
+        extra_space = 1 if marker_reserve else 0
+        if len(candidate) + extra_space + marker_reserve <= max_chars:
             kept.append(segment)
             continue
         omitted = len(remaining) - idx
         marker = f"[+{min(omitted, 99)} more]"
-        result = " -> ".join(kept)
+        result = separator.join(kept)
         if len(f"{result} {marker}") <= max_chars:
             return f"{result} {marker}"
         trimmed = result[: max_chars - len(marker) - 1].rstrip()
         return f"{trimmed} {marker}"
-    return " -> ".join(kept)
+    return separator.join(kept)
 
 
 def provenance_subset(output: Dict[str, Any]) -> Dict[str, Any]:
     keys = [
-        "backendUsed",
+        "pageType",
+        "taskType",
+        "sourceMode",
+        "fetchFailureKind",
+        "networkError",
+        "httpStatus",
+        "transportStrategy",
+        "redirectedUrl",
         "backendResult",
-        "backendAttempts",
-        "failureChain",
         "fallbackAttempted",
         "isFallback",
-        "landed_url",
-        "quality",
-        "tier",
-        "confidence",
-        "wordCount",
         "evidenceStatus",
     ]
     return {key: copy.deepcopy(output.get(key)) for key in keys if key in output}
@@ -326,4 +382,3 @@ def meaningful_slug_segments(path: str, limit: int = 2) -> List[str]:
         if len(meaningful) >= limit:
             break
     return list(reversed(meaningful))
-

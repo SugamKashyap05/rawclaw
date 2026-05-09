@@ -16,6 +16,7 @@ function makeMessage(overrides: Partial<any> = {}) {
     fallbacks: null,
     memoryRecall: null,
     agentId: null,
+    streamStatus: 'completed',
     errorType: null,
     errorMessage: null,
     attachments: null,
@@ -57,6 +58,7 @@ describe('ChatService', () => {
           fallbacks: data.fallbacks ?? null,
           memoryRecall: data.memoryRecall ?? null,
           agentId: data.agentId ?? null,
+          streamStatus: data.streamStatus ?? 'completed',
           errorType: data.errorType ?? null,
           errorMessage: data.errorMessage ?? null,
           attachments: data.attachments ?? null,
@@ -184,5 +186,68 @@ describe('ChatService', () => {
         }),
       },
     });
+  });
+
+  it('latches session pipeline mode on first resolution and keeps it stable', async () => {
+    prisma.session.findUnique.mockResolvedValueOnce({ metadataJson: null, title: null });
+
+    const firstMode = await service.resolveSessionPipelineMode('session-1', true);
+    expect(firstMode).toBe('transform_v1');
+    expect(prisma.session.upsert).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      update: {
+        metadataJson: JSON.stringify({
+          pipelineMode: 'transform_v1',
+        }),
+      },
+      create: {
+        id: 'session-1',
+        title: null,
+        metadataJson: JSON.stringify({
+          pipelineMode: 'transform_v1',
+        }),
+      },
+    });
+
+    prisma.session.findUnique.mockResolvedValueOnce({
+      metadataJson: JSON.stringify({ pipelineMode: 'legacy' }),
+    });
+    const secondMode = await service.resolveSessionPipelineMode('session-1', true);
+    expect(secondMode).toBe('legacy');
+  });
+
+  it('persists coworker activity frame and transform trace inside message provenance metadata', async () => {
+    const created = await service.createMessage('session-1', 'assistant', 'Grounded answer', {
+      coworkerActivityFrame: {
+        visibilityState: 'clean',
+        responseMode: 'grounded',
+        workStory: 'Checked 2 sources and used Election Commission of India for the answer.',
+        source: {
+          agentId: 'research-agent',
+          agentLabel: 'Research Agent',
+          modelId: 'openai/gpt-4o',
+          modelLabel: 'gpt-4o',
+          isLocal: false,
+        },
+      },
+      transformTrace: {
+        pipelineMode: 'transform_v1',
+        stageTimings: [{ stage: 'input_transform', owner: 'api', durationMs: 4 }],
+        firstEventLatencyMs: 12,
+      },
+    });
+
+    const mapped = (service as any).mapToChatMessage(created);
+    expect(mapped.coworkerActivityFrame).toEqual(
+      expect.objectContaining({
+        visibilityState: 'clean',
+        responseMode: 'grounded',
+      }),
+    );
+    expect(mapped.transformTrace).toEqual(
+      expect.objectContaining({
+        pipelineMode: 'transform_v1',
+      }),
+    );
   });
 });

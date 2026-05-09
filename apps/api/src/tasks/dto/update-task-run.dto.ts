@@ -2,8 +2,8 @@ import { IsString, IsOptional, IsArray, IsEnum } from 'class-validator';
 import { RunStep, ProvenanceTrace } from '@rawclaw/shared';
 
 export class UpdateTaskRunDto {
-  @IsEnum(['queued', 'running', 'done', 'failed', 'cancelled'])
-  status!: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  @IsEnum(['queued', 'running', 'cancelling', 'done', 'failed', 'cancelled'])
+  status!: 'queued' | 'running' | 'cancelling' | 'done' | 'failed' | 'cancelled';
 
   @IsArray()
   @IsOptional()

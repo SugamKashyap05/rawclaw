@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   ActiveAgentRuntimeState,
   ActiveSessionRuntimeState,
@@ -37,6 +37,8 @@ type TimelineFilters = {
 
 @Injectable()
 export class OperatorService {
+  private readonly logger = new Logger(OperatorService.name);
+
   constructor(
     private readonly agentsService: AgentsService,
     private readonly chatService: ChatService,
@@ -52,6 +54,38 @@ export class OperatorService {
 
   private normalizeLimit(limit?: number): number {
     return Math.max(10, Math.min(limit || 60, 200));
+  }
+
+  private defaultRoutePayload(): {
+    routes: SessionBinding[];
+    summary: {
+      activeSessions: number;
+      activeRoutes: number;
+      inflightRuns: number;
+      degradedRoutes: number;
+      activeSubagents: number;
+    };
+  } {
+    return {
+      routes: [],
+      summary: {
+        activeSessions: 0,
+        activeRoutes: 0,
+        inflightRuns: 0,
+        degradedRoutes: 0,
+        activeSubagents: 0,
+      },
+    };
+  }
+
+  private async safeLoad<T>(label: string, load: Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await load;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Operator snapshot degraded while loading ${label}: ${message}`);
+      return fallback;
+    }
   }
 
   private inferReviewState(message: any): OperatorProvenanceSummary['reviewState'] {
@@ -508,23 +542,23 @@ export class OperatorService {
   async getSnapshot(limit?: number): Promise<OperatorSnapshot> {
     const boundedLimit = this.normalizeLimit(limit);
     const [agents, routePayload, gatewayEvents, gatewayRuns, sessions, childRuns, automationRuns, taskRuns, appBuilderRuns] = await Promise.all([
-      this.agentsService.list(),
-      this.gatewayRoutingService.listBindingsWithSummary(),
-      this.gatewayEventsService.listRecent(Math.max(boundedLimit, 80)),
-      this.gatewayControlPlaneService.listRecentRuns(Math.max(boundedLimit, 80)),
-      this.chatService.listSessions(),
-      this.prisma.childRun.findMany({ orderBy: [{ createdAt: 'desc' }], take: 40 }),
-      this.prisma.gatewayAutomationRun.findMany({
+      this.safeLoad('agents', this.agentsService.list(), []),
+      this.safeLoad('gateway routes', this.gatewayRoutingService.listBindingsWithSummary(), this.defaultRoutePayload()),
+      this.safeLoad('gateway events', this.gatewayEventsService.listRecent(Math.max(boundedLimit, 80)), []),
+      this.safeLoad('gateway runs', this.gatewayControlPlaneService.listRecentRuns(Math.max(boundedLimit, 80)), []),
+      this.safeLoad('chat sessions', this.chatService.listSessions(), []),
+      this.safeLoad('child runs', this.prisma.childRun.findMany({ orderBy: [{ createdAt: 'desc' }], take: 40 }), []),
+      this.safeLoad('automation runs', this.prisma.gatewayAutomationRun.findMany({
         include: { job: true },
         orderBy: [{ createdAt: 'desc' }],
         take: 40,
-      }),
-      this.tasksService.listRecentRuns(),
-      this.prisma.appBuilderRun.findMany({
+      }), []),
+      this.safeLoad('task runs', this.tasksService.listRecentRuns(), []),
+      this.safeLoad('app builder runs', this.prisma.appBuilderRun.findMany({
         include: { project: true },
         orderBy: [{ createdAt: 'desc' }],
         take: 40,
-      }),
+      }), []),
     ]);
 
     const provenance = this.collectProvenanceSummaries(sessions);
@@ -637,13 +671,13 @@ export class OperatorService {
 
     try {
       await this.tasksService.getRunDetail(runId);
-      await this.tasksService.updateRun(runId, { status: 'cancelled' } as any);
+      const result = await this.tasksService.cancelRun(runId);
       return {
         success: true,
         action: 'cancel_run',
         targetId: runId,
         runId,
-        message: `Marked task run ${runId} as cancelled.`,
+        message: result.message,
       };
     } catch {
       // fall through

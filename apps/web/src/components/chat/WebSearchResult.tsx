@@ -1,4 +1,6 @@
 import { ToolResult } from '@rawclaw/shared';
+import { ToolActivityCard } from './ToolActivityCard';
+import { resolveToolResultStatus } from './toolResultNarratives';
 
 interface SearchEntry {
   title?: string;
@@ -6,18 +8,27 @@ interface SearchEntry {
   snippet?: string;
 }
 
-export function WebSearchResult({ result }: { result: ToolResult }) {
+export function WebSearchResult({ result, framed = true }: { result: ToolResult; framed?: boolean }) {
   const payload = asObject(result.output);
   const query = asString(payload.query) || asString(result.input?.query) || 'Unknown query';
   const results = Array.isArray(payload.results) ? payload.results.map(asObject) : [];
   const error = result.error || (payload.error as string);
+  const resultQuality = asString(payload.result_quality);
+  const qualityAssessment = asString(payload.quality_assessment);
+  const status = resolveToolResultStatus(result);
 
-  return (
-    <div className="glass-card" style={{ padding: '1rem' }}>
-      <div className="mono" style={{ color: 'var(--neon-cyan)', fontSize: '0.74rem', marginBottom: '0.6rem' }}>
-        WEB SEARCH
-      </div>
+  const content = (
+    <>
       <div style={{ marginBottom: '0.85rem', color: 'var(--text-secondary)' }}>Query: {query}</div>
+      {!error && (resultQuality || qualityAssessment) ? (
+        <div style={{
+          marginBottom: '0.85rem',
+          color: resultQuality === 'strong' ? 'var(--neon-cyan)' : '#f59e0b',
+          fontSize: '0.85rem',
+        }}>
+          {resultQuality ? `Quality: ${resultQuality}. ` : ''}{qualityAssessment || ''}
+        </div>
+      ) : null}
       <div style={{ display: 'grid', gap: '0.75rem' }}>
         {error ? (
           <div style={{
@@ -64,7 +75,17 @@ export function WebSearchResult({ result }: { result: ToolResult }) {
           })
         )}
       </div>
-    </div>
+    </>
+  );
+
+  if (!framed) {
+    return content;
+  }
+
+  return (
+    <ToolActivityCard sourceLabel="Web Search" status={status} durationMs={result.duration_ms}>
+      {content}
+    </ToolActivityCard>
   );
 }
 

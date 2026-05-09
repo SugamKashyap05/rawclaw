@@ -19,7 +19,7 @@ from redis.exceptions import ResponseError
 from .config import WorkerConfig
 
 logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
+    level=getattr(logging, str(os.getenv("LOG_LEVEL", "INFO") or "INFO").upper(), logging.INFO),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logger = logging.getLogger("rawclaw.swarm_worker")
@@ -176,6 +176,11 @@ class SwarmWorker:
                     handled = await self._drain_builder_queue() or handled
                 if not handled:
                     await asyncio.sleep(0.35)
+        except Exception:
+            logger.exception("worker_loop_exception")
+            # Re-raise intentionally — let the process supervisor restart us cleanly
+            # rather than running in a degraded state.
+            raise
         finally:
             self._stop_event.set()
             heartbeat_task.cancel()
@@ -293,6 +298,8 @@ class SwarmWorker:
         await self._run_tracked_job(
             job_id=job_id,
             run_id=str(job.get("runId") or ""),
+            turn_id=str(job.get("turn_id") or "no-turn-id"),
+            job_type=str(job.get("role") or "subagent"),
             start_path=f"/gateway/internal/swarm/subagent-jobs/{job_id}/start",
             heartbeat_path=f"/gateway/internal/swarm/subagent-jobs/{job_id}/heartbeat",
             complete_path=f"/gateway/internal/swarm/subagent-jobs/{job_id}/complete",
@@ -322,6 +329,8 @@ class SwarmWorker:
         await self._run_tracked_job(
             job_id=run_id,
             run_id=run_id,
+            turn_id=str(job.get("turn_id") or "no-turn-id"),
+            job_type="automation",
             start_path=f"/gateway/internal/swarm/automation-runs/{run_id}/start",
             heartbeat_path=f"/gateway/internal/swarm/automation-runs/{run_id}/heartbeat",
             complete_path=f"/gateway/internal/swarm/automation-runs/{run_id}/complete",
@@ -348,6 +357,10 @@ class SwarmWorker:
             await self.redis.xack(SANDBOX_QUEUE_STREAM, SANDBOX_QUEUE_GROUP, stream_id)
             return True
 
+        turn_id = str(job.get("turn_id") or "no-turn-id")
+        log_ctx = {"turn_id": turn_id, "job_type": str(job.get("toolName") or "sandbox")}
+        logger.info("worker_job_started turn_id=%s job_type=%s job_id=%s", turn_id, log_ctx["job_type"], job_id)
+
         await self.api.post(
             f"/gateway/internal/swarm/sandbox-jobs/{job_id}/start",
             {"workerId": self.config.worker_id},
@@ -361,8 +374,16 @@ class SwarmWorker:
             ),
         )
         try:
+            job_started_at = time.time()
             result = await self._execute_sandbox_job(job)
             if result.get("error"):
+                logger.error(
+                    "worker_job_failed turn_id=%s job_type=%s job_id=%s error=%s",
+                    turn_id,
+                    log_ctx["job_type"],
+                    job_id,
+                    result.get("error") or "Sandbox job failed",
+                )
                 await self.api.post(
                     f"/gateway/internal/swarm/sandbox-jobs/{job_id}/fail",
                     {
@@ -372,6 +393,13 @@ class SwarmWorker:
                     },
                 )
             else:
+                logger.info(
+                    "worker_job_completed turn_id=%s job_type=%s job_id=%s duration_ms=%s",
+                    turn_id,
+                    log_ctx["job_type"],
+                    job_id,
+                    round((time.time() - job_started_at) * 1000, 2),
+                )
                 await self.api.post(
                     f"/gateway/internal/swarm/sandbox-jobs/{job_id}/complete",
                     {
@@ -380,6 +408,13 @@ class SwarmWorker:
                     },
                 )
         except Exception as error:
+            logger.error(
+                "worker_job_failed turn_id=%s job_type=%s job_id=%s error=%s",
+                turn_id,
+                log_ctx["job_type"],
+                job_id,
+                error,
+            )
             await self.api.post(
                 f"/gateway/internal/swarm/sandbox-jobs/{job_id}/fail",
                 {
@@ -412,6 +447,10 @@ class SwarmWorker:
             await self.redis.xack(BUILDER_QUEUE_STREAM, BUILDER_QUEUE_GROUP, stream_id)
             return True
 
+        turn_id = str(job.get("turn_id") or "no-turn-id")
+        log_ctx = {"turn_id": turn_id, "job_type": str(job.get("phase") or "builder")}
+        logger.info("worker_job_started turn_id=%s job_type=%s job_id=%s", turn_id, log_ctx["job_type"], job_id)
+
         await self.api.post(
             f"/gateway/internal/swarm/builder-jobs/{job_id}/start",
             {"workerId": self.config.worker_id},
@@ -425,6 +464,7 @@ class SwarmWorker:
             ),
         )
         try:
+            job_started_at = time.time()
             response = await self.api.post(
                 f"/app-builder/internal/jobs/{job_id}/execute",
                 {"workerId": self.config.worker_id},
@@ -443,7 +483,21 @@ class SwarmWorker:
                     "output": output,
                 },
             )
+            logger.info(
+                "worker_job_completed turn_id=%s job_type=%s job_id=%s duration_ms=%s",
+                turn_id,
+                log_ctx["job_type"],
+                job_id,
+                round((time.time() - job_started_at) * 1000, 2),
+            )
         except Exception as error:
+            logger.error(
+                "worker_job_failed turn_id=%s job_type=%s job_id=%s error=%s",
+                turn_id,
+                log_ctx["job_type"],
+                job_id,
+                error,
+            )
             await self.api.post(
                 f"/gateway/internal/swarm/builder-jobs/{job_id}/fail",
                 {
@@ -484,6 +538,8 @@ class SwarmWorker:
         *,
         job_id: str,
         run_id: str,
+        turn_id: str,
+        job_type: str,
         start_path: str,
         heartbeat_path: str,
         complete_path: str,
@@ -493,12 +549,19 @@ class SwarmWorker:
         group: str,
         stream_id: str,
     ) -> None:
+        logger.info("worker_job_started turn_id=%s job_type=%s job_id=%s", turn_id, job_type, job_id)
+        request_payload = {
+            **request_payload,
+            "turn_id": turn_id,
+            "session_id": str(request_payload.get("session_id") or ""),
+        }
         await self.api.post(start_path, {"workerId": self.config.worker_id})
         self._current_job_id = job_id
         self._current_run_id = run_id or None
         self._lease_expires_at = self._lease_expiry()
         heartbeat_task = asyncio.create_task(self._job_heartbeat_loop(heartbeat_path))
         try:
+            job_started_at = time.time()
             result = await self._execute_chat_request(request_payload)
             await self.api.post(
                 complete_path,
@@ -510,7 +573,21 @@ class SwarmWorker:
                     "provenanceTrace": result["provenanceTrace"],
                 },
             )
+            logger.info(
+                "worker_job_completed turn_id=%s job_type=%s job_id=%s duration_ms=%s",
+                turn_id,
+                job_type,
+                job_id,
+                round((time.time() - job_started_at) * 1000, 2),
+            )
         except Exception as error:
+            logger.error(
+                "worker_job_failed turn_id=%s job_type=%s job_id=%s error=%s",
+                turn_id,
+                job_type,
+                job_id,
+                error,
+            )
             await self.api.post(
                 fail_path,
                 {
@@ -530,8 +607,18 @@ class SwarmWorker:
 
     async def _execute_chat_request(self, request_payload: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.config.agent_url}/execute"
+        turn_id = str(request_payload.get("turn_id") or "no-turn-id")
+        session_id = str(request_payload.get("session_id") or "unknown")
         async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream("POST", url, json=request_payload) as response:
+            async with client.stream(
+                "POST",
+                url,
+                json=request_payload,
+                headers={
+                    "X-Turn-ID": turn_id,
+                    "X-Session-ID": session_id,
+                },
+            ) as response:
                 response.raise_for_status()
                 content = ""
                 sources: list[str] = []
@@ -661,9 +748,13 @@ class SwarmWorker:
 
 
 def main() -> None:
-    config = WorkerConfig()
-    worker = SwarmWorker(config)
-    asyncio.run(worker.run())
+    logger.info("swarm_worker_started", extra={"pid": os.getpid()})
+    try:
+        config = WorkerConfig()
+        worker = SwarmWorker(config)
+        asyncio.run(worker.run())
+    finally:
+        logger.info("swarm_worker_stopped", extra={"pid": os.getpid()})
 
 
 if __name__ == "__main__":

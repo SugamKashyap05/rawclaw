@@ -733,8 +733,13 @@ export class GatewayControlPlaneService {
   }
 
   async enqueueSubagentJob(job: Omit<SubagentJob, 'id' | 'status' | 'createdAt'>): Promise<SubagentJob> {
+    const requestedTurnId =
+      job.turn_id
+      || (job.requestPayload && typeof job.requestPayload === 'object' ? String((job.requestPayload as Record<string, unknown>).turn_id || '') : '')
+      || randomUUID();
     const normalized: SubagentJob = {
       ...job,
+      turn_id: requestedTurnId,
       id: randomUUID(),
       status: 'queued',
       createdAt: new Date().toISOString(),
@@ -747,6 +752,7 @@ export class GatewayControlPlaneService {
         recordId: normalized.recordId,
         runId: normalized.runId,
         sessionId: normalized.sessionId,
+        turnId: normalized.turn_id || '',
         prompt: normalized.prompt,
         role: normalized.role,
       },
@@ -766,6 +772,7 @@ export class GatewayControlPlaneService {
         jobId: normalized.id,
         role: normalized.role,
         mode: normalized.mode,
+        turnId: normalized.turn_id,
       },
     });
     return normalized;
@@ -820,8 +827,13 @@ export class GatewayControlPlaneService {
   }
 
   async enqueueAutomationJob(payload: Omit<AutomationQueueJob, 'status' | 'createdAt'>): Promise<void> {
+    const requestedTurnId =
+      payload.turn_id
+      || (payload.requestPayload && typeof payload.requestPayload === 'object' ? String((payload.requestPayload as Record<string, unknown>).turn_id || '') : '')
+      || randomUUID();
     const normalized: AutomationQueueJob = {
       ...payload,
+      turn_id: requestedTurnId,
       status: 'queued',
       createdAt: new Date().toISOString(),
     };
@@ -833,6 +845,7 @@ export class GatewayControlPlaneService {
         jobId: payload.jobId,
         bindingId: payload.bindingId,
         sessionId: payload.sessionId,
+        turnId: normalized.turn_id || '',
       },
       MAX_RECENT_QUEUE_JOBS,
     );
@@ -846,6 +859,7 @@ export class GatewayControlPlaneService {
       summary: `Automation job queued for run ${payload.runId}`,
       payload: {
         jobId: payload.jobId,
+        turnId: normalized.turn_id,
       },
     });
   }
@@ -896,8 +910,10 @@ export class GatewayControlPlaneService {
   }
 
   async enqueueSandboxJob(job: Omit<SandboxJob, 'id' | 'status' | 'createdAt' | 'startedAt' | 'finishedAt'>): Promise<SandboxJob> {
+    const requestedTurnId = job.turn_id || randomUUID();
     const normalized: SandboxJob = {
       ...job,
+      turn_id: requestedTurnId,
       id: randomUUID(),
       status: 'queued',
       createdAt: new Date().toISOString(),
@@ -913,6 +929,7 @@ export class GatewayControlPlaneService {
         mode: normalized.mode,
         runId: normalized.runId || '',
         sessionId: normalized.sessionId || '',
+        turnId: normalized.turn_id || '',
       },
       MAX_RECENT_QUEUE_JOBS,
     );
@@ -925,14 +942,20 @@ export class GatewayControlPlaneService {
       payload: {
         jobId: normalized.id,
         mode: normalized.mode,
+        turnId: normalized.turn_id,
       },
     });
     return normalized;
   }
 
   async enqueueBuilderJob(job: Omit<AppBuilderQueueJob, 'id' | 'status' | 'createdAt'> & { gatewayRunId?: string | null }): Promise<AppBuilderQueueJob> {
+    const requestedTurnId =
+      job.turn_id
+      || (job.requestPayload && typeof job.requestPayload === 'object' ? String((job.requestPayload as Record<string, unknown>).turn_id || '') : '')
+      || randomUUID();
     const normalized: AppBuilderQueueJob = {
       ...job,
+      turn_id: requestedTurnId,
       id: randomUUID(),
       status: 'queued',
       createdAt: new Date().toISOString(),
@@ -945,6 +968,7 @@ export class GatewayControlPlaneService {
         runId: normalized.runId,
         projectId: normalized.projectId,
         phase: normalized.phase,
+        turnId: normalized.turn_id || '',
       },
       MAX_RECENT_QUEUE_JOBS,
     );
@@ -957,6 +981,7 @@ export class GatewayControlPlaneService {
         jobId: normalized.id,
         projectId: normalized.projectId,
         phase: normalized.phase,
+        turnId: normalized.turn_id,
       },
     });
     return normalized;

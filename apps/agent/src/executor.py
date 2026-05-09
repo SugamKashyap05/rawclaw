@@ -10,13 +10,17 @@ Handles:
 import asyncio
 import json
 import logging
+import os
 import time
 import copy
+import uuid
 from datetime import datetime
+from html import unescape
 import re
 from urllib.parse import urlparse, unquote
 from typing import Any, Dict, List, Optional, AsyncGenerator, Tuple
 
+import httpx
 
 from src.contracts.tool import ToolCall, ToolResult
 from src.contracts.chat import ChatRequest, ChatMessage
@@ -51,12 +55,28 @@ from src.research import (
     SelfLearningLoop,
     StrategistDecision,
 )
+from src.research.types import ResearchEvidenceState, SourceProfile
 from src.config import settings
 from src.gateway.types import GatewayRequestContext
 
 logger = logging.getLogger("rawclaw.executor")
+
+
+def _read_positive_int_env(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None or not raw_value.strip():
+        return default
+    try:
+        parsed = int(raw_value)
+        return parsed if parsed > 0 else default
+    except ValueError:
+        logger.warning("Invalid %s=%r; using default %s.", name, raw_value, default)
+        return default
+
+
 MAX_AGENT_TURNS = 10 # Hard limit on tool-calling turns
-MAX_SEQUENTIAL_THINKING_TURNS = 3
+MAX_RESEARCH_TOOL_TURNS = 4
+MAX_SEQUENTIAL_THINKING_TURNS = _read_positive_int_env("MAX_SEQUENTIAL_THINKING_TURNS", 10)
 MAX_TOOLS_PER_REQUEST = 16
 MAX_MODEL_PAYLOAD_CHARS = 180_000
 MAX_MODEL_MESSAGE_CHARS = 90_000
@@ -82,7 +102,17 @@ LIVE_DATA_KEYWORDS = [
     "match", "win", "wins", "loss", "losses", "rank", "position", "nrr",
     "ipl", "cricket", "football", "nba", "premier league",
 ]
+DATE_RANGE_KEYWORDS = [
+    "today", "yesterday", "tomorrow", "this week", "last week", "week of",
+    "current week", "recent", "latest",
+]
+NUMERIC_QUESTION_KEYWORDS = [
+    "how many", "number of", "count", "played", "matches played", "total",
+]
 AUTHORITATIVE_DOMAINS = {
+    "results.eci.gov.in": 1.0,
+    "eci.gov.in": 1.0,
+    "ceowestbengal.nic.in": 0.95,
     "iplt20.com": 1.0,
     "bcci.tv": 1.0,
     "espncricinfo.com": 0.95,
@@ -96,6 +126,23 @@ LOW_QUALITY_DOMAINS = {
     "wikipedia.org": 0.2,
     "en.m.wikipedia.org": 0.2,
     "duckduckgo.com": 0.1,
+}
+SEEDED_SOURCE_PROFILES = {
+    "results.eci.gov.in": {
+        "renderType": "js-app",
+        "extractionReliability": "low",
+        "preferredAccessMethod": "search-for-article",
+    },
+    "eci.gov.in": {
+        "renderType": "js-app",
+        "extractionReliability": "low",
+        "preferredAccessMethod": "search-for-article",
+    },
+    "ceowestbengal.nic.in": {
+        "renderType": "js-app",
+        "extractionReliability": "low",
+        "preferredAccessMethod": "search-for-article",
+    },
 }
 DIRECT_ROUTES = [
     {
@@ -113,6 +160,12 @@ DIRECT_ROUTES = [
     },
 ]
 
+RESEARCH_TOOL_NAME_MARKERS = ("search", "extract", "fetch", "browser", "navigate")
+RESEARCH_BUDGET_EXHAUSTED_MESSAGE = (
+    "I used the available search budget but couldn't verify a final answer. "
+    "Narrow the query or give me a specific URL."
+)
+
 
 class Executor:
     """
@@ -122,11 +175,15 @@ class Executor:
     def __init__(self) -> None:
         self.model_router = ModelRouter()
         self.confirmation_gate = ConfirmationGate()
+        self._rawclaw_api_url = os.getenv("RAWCLAW_API_URL", os.getenv("API_URL", "http://localhost:3000")).rstrip("/")
+        self._rawclaw_auth_secret = os.getenv("AUTH_SECRET", "")
+        self._rawclaw_api_token: Optional[str] = None
         self._adaptive_store = AdaptiveResearchStore()
         self._adaptive_fetch_layer = AdaptiveFetchLayer(self._adaptive_store)
         self._parallel_executor = ParallelExecutor()
         self._self_learning_loop = SelfLearningLoop(self._adaptive_store, self._parallel_executor)
         self._swarm = InProcessSwarmCoordinator()
+        self._task_cancel_events: Dict[str, asyncio.Event] = {}
         self.research = InternalResearchCoordinator(
             planner=ResearchPlannerStage(
                 build_research_plan=self._build_research_plan,
@@ -160,6 +217,76 @@ class Executor:
                 is_provider_outage_status=self._is_provider_outage_status,
             ),
         )
+
+    def cancel_task_run(self, run_id: str) -> None:
+        cancel_event = self._task_cancel_events.get(run_id)
+        if cancel_event is None:
+            cancel_event = asyncio.Event()
+            self._task_cancel_events[run_id] = cancel_event
+        cancel_event.set()
+
+    def _get_task_cancel_event(self, run_id: str) -> asyncio.Event:
+        cancel_event = self._task_cancel_events.get(run_id)
+        if cancel_event is None:
+            cancel_event = asyncio.Event()
+            self._task_cancel_events[run_id] = cancel_event
+        return cancel_event
+
+    def _raise_if_task_cancelled(self, run_id: str) -> None:
+        cancel_event = self._task_cancel_events.get(run_id)
+        if cancel_event and cancel_event.is_set():
+            raise asyncio.CancelledError("Task cancelled by user request")
+
+    async def _get_api_auth_headers(self) -> Dict[str, str]:
+        if self._rawclaw_api_token:
+            return {"Authorization": f"Bearer {self._rawclaw_api_token}"}
+
+        if not self._rawclaw_auth_secret:
+            return {}
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.post(
+                    f"{self._rawclaw_api_url}/api/auth/token",
+                    json={"secret": self._rawclaw_auth_secret},
+                )
+                response.raise_for_status()
+                payload = response.json()
+                token = payload.get("access_token")
+                if isinstance(token, str) and token:
+                    self._rawclaw_api_token = token
+                    return {"Authorization": f"Bearer {token}"}
+        except Exception as exc:
+            logger.warning(f"Failed to obtain API auth token for task heartbeat: {exc}")
+
+        return {}
+
+    async def _post_task_heartbeat(self, run_id: str) -> None:
+        try:
+            headers = await self._get_api_auth_headers()
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.post(
+                    f"{self._rawclaw_api_url}/api/tasks/runs/{run_id}/heartbeat",
+                    headers=headers,
+                    json={},
+                )
+                response.raise_for_status()
+        except Exception as exc:
+            logger.warning(f"Task heartbeat failed for {run_id}: {exc}")
+
+    async def _task_heartbeat_loop(self, run_id: str, stop_event: asyncio.Event) -> None:
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=60)
+                return
+            except asyncio.TimeoutError:
+                await self._post_task_heartbeat(run_id)
+
+    def _tool_schema_name(self, schema: Dict[str, Any]) -> str:
+        function = schema.get("function")
+        if isinstance(function, dict):
+            return str(function.get("name") or "")
+        return str(schema.get("name") or "")
 
     def _set_internal_research_stage_metadata(self, trace: ProvenanceTrace, stage_name: str, payload: Any) -> None:
         stage_bucket = trace.metadata.setdefault("internalResearchStages", {})
@@ -429,6 +556,146 @@ class Executor:
     def _normalized_permission_mode(self) -> str:
         return str(self._active_chat_controls().get("permissionMode") or "workspace_default").strip().lower()
 
+    def _active_prompt_provenance(self) -> Dict[str, Any]:
+        provenance = getattr(self, "_active_request_prompt_provenance", None)
+        if isinstance(provenance, dict):
+            return provenance
+        return {}
+
+    def _active_execution_intent(self) -> Dict[str, Any]:
+        execution_intent = getattr(self, "_active_request_execution_intent", None)
+        if isinstance(execution_intent, dict):
+            return execution_intent
+        return {}
+
+    def _requested_assistant_lane(self) -> str:
+        execution_lane = str(self._active_execution_intent().get("lane") or "").strip().lower()
+        if execution_lane:
+            return execution_lane
+        return str(self._active_prompt_provenance().get("assistantLane") or "").strip().lower()
+
+    def _active_retrieval_policy(self) -> Dict[str, str]:
+        policy = self._active_execution_intent().get("retrievalPolicy") or {}
+        if isinstance(policy, dict):
+            web = str(policy.get("web") or "allowed").strip().lower()
+            memory = str(policy.get("memory") or "allowed").strip().lower()
+            return {
+                "web": web if web in {"forbidden", "allowed", "required"} else "allowed",
+                "memory": memory if memory in {"forbidden", "allowed", "required"} else "allowed",
+            }
+        return {"web": "allowed", "memory": "allowed"}
+
+    def _is_external_retrieval_tool_name(self, tool_name: str) -> bool:
+        lowered = str(tool_name or "").strip().lower()
+        return lowered in {
+            "skill_grounded-web-summary",
+            "web_search",
+            "duckduckgo_search",
+            "smart_search",
+            "iask-search",
+            "web-search",
+            "google:search",
+            "web_extract",
+            "web_fetch",
+            "fetch_url",
+            "browser_fetch",
+            "browser_open",
+            "browser_navigate",
+        }
+
+    def _is_memory_summary_request(self, query: str) -> bool:
+        lowered = (query or "").lower()
+        return any(
+            marker in lowered
+            for marker in [
+                "summarize memory",
+                "summarise memory",
+                "memory summary",
+                "summarize what you remember",
+                "summarise what you remember",
+                "summarize our memory",
+                "summarise our memory",
+            ]
+        )
+
+    def _has_explicit_external_research_signal(self, query: str) -> bool:
+        lowered = (query or "").lower()
+        if self._is_memory_summary_request(query):
+            return False
+        if re.search(r"https?://", query or "", flags=re.IGNORECASE):
+            return True
+        return any(
+            marker in lowered
+            for marker in [
+                "search the web",
+                "search web",
+                "search for",
+                "fetch",
+                "browse",
+                "latest",
+                "current",
+                "news",
+                "who won",
+                "winner",
+                "winners",
+                "results",
+                "result for",
+                "results for",
+                "standings",
+                "points table",
+                "seat tally",
+                "election result",
+                "election results",
+                "how many seats",
+                "how much seats",
+            ]
+        )
+
+    def _should_block_external_retrieval_for_turn(self, query: str) -> bool:
+        policy = self._active_retrieval_policy()
+        if policy["web"] == "forbidden":
+            return True
+        if policy["web"] in {"allowed", "required"} and self._active_execution_intent():
+            return False
+        lane = self._requested_assistant_lane()
+        if lane == "memory" or self._is_memory_summary_request(query):
+            return True
+        if self._has_explicit_external_research_signal(query):
+            return False
+        if self._is_simple_greeting_query(query):
+            return True
+        return lane == "conversation"
+
+    def _should_block_memory_recall_for_turn(self) -> bool:
+        policy = self._active_retrieval_policy()
+        if policy["memory"] == "forbidden":
+            return True
+        if policy["memory"] in {"allowed", "required"} and self._active_execution_intent():
+            return False
+        return False
+
+    def _is_research_tool_name(self, tool_name: str) -> bool:
+        lowered = str(tool_name or "").strip().lower()
+        return any(marker in lowered for marker in RESEARCH_TOOL_NAME_MARKERS)
+
+    def _strict_synthesis_rules(self, quality_note: str = "", *, tools_disabled: bool = False) -> str:
+        extra_rule = (
+            "\n8. No more tool calls are allowed for this answer. Synthesize directly from the gathered evidence already collected."
+            if tools_disabled
+            else ""
+        )
+        return (
+            "STRICT SYNTHESIS RULES - FOLLOW EXACTLY:\n"
+            "1. ANSWER ONLY FROM TOOL RESULTS - ignore all other knowledge\n"
+            "2. If results are incomplete/placeholder, say: 'I couldn't verify X from the search results'\n"
+            "3. NEVER say 'X has not happened' or 'does not exist' based on incomplete results\n"
+            "4. If no actual data found, say: 'The search didn't return verified current data'\n"
+            "5. DO NOT use phrases like 'as of the current date' or reference time\n"
+            "6. If you see placeholder content, describe it as 'appears to be placeholder content'\n"
+            "7. Example for incomplete sports data: 'The search returned placeholder pages rather than actual standings'\n"
+            f"{quality_note}{extra_rule}"
+        )
+
     def _classify_web_task(self, query: str, allow_guided_fallback: bool = True) -> str:
         lowered = (query or "").lower()
         has_url = bool(re.search(r"https?://", query or "", flags=re.IGNORECASE))
@@ -474,6 +741,16 @@ class Executor:
             "recent",
             "developments",
             "research",
+            "search for",
+            "who won",
+            "winner",
+            "winners",
+            "results",
+            "seat tally",
+            "election result",
+            "election results",
+            "how much seats",
+            "how many seats",
             "why these sources",
             "sources used",
             "research notes",
@@ -521,6 +798,137 @@ class Executor:
         ):
             return "hybrid"
         return "system_chosen"
+
+    def _user_explicitly_requests_official_source(self, query: str) -> bool:
+        lowered = (query or "").lower()
+        return any(
+            token in lowered
+            for token in [
+                "official eci",
+                "official election commission",
+                "official results page",
+                "official result page",
+                "eci website",
+                "eci site",
+                "election commission of india",
+                "results.eci.gov.in",
+                "ceowestbengal.nic.in",
+                "official page",
+                "official site",
+                "official portal",
+                "official website",
+            ]
+        )
+
+    def _registered_domain_from_url(self, url: str) -> str:
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+        return hostname[4:] if hostname.startswith("www.") else hostname
+
+    def _source_profile_for_url(self, url: str, query: str, quality_tags: Optional[List[str]] = None) -> SourceProfile:
+        domain = self._registered_domain_from_url(url)
+        seed = SEEDED_SOURCE_PROFILES.get(domain, {})
+        adaptive = self._adaptive_store.get_domain_profile(domain or url)
+
+        extraction_reliability = str(seed.get("extractionReliability") or "unknown")
+        if extraction_reliability == "unknown":
+            if adaptive.failure_count >= 3 and adaptive.success_count == 0:
+                extraction_reliability = "low"
+            elif adaptive.success_count > max(1, adaptive.failure_count):
+                extraction_reliability = "high"
+
+        preferred_access_method = str(seed.get("preferredAccessMethod") or "direct")
+        normalized_tags = [str(tag).strip().lower() for tag in (quality_tags or []) if str(tag).strip()]
+        if (
+            preferred_access_method == "direct"
+            and extraction_reliability == "low"
+            and ("official_page" in normalized_tags or self._user_explicitly_requests_official_source(query))
+        ):
+            preferred_access_method = "search-for-article"
+
+        render_type = str(seed.get("renderType") or "unknown")
+        return SourceProfile(
+            domain=domain or url,
+            renderType=render_type if render_type in {"static", "js-app", "unknown"} else "unknown",
+            extractionReliability=(
+                extraction_reliability
+                if extraction_reliability in {"high", "low", "unknown"}
+                else "unknown"
+            ),
+            preferredAccessMethod=(
+                preferred_access_method
+                if preferred_access_method in {"direct", "search-for-article"}
+                else "direct"
+            ),
+        )
+
+    def _build_broadened_search_query(self, query: str, failed_domain: str = "") -> str:
+        plan = self._build_research_plan(query)
+        broadened = self._build_search_query(query, apply_domain_bias=False)
+        broadened = re.sub(r"\bsite:[^\s]+\b", " ", broadened, flags=re.IGNORECASE)
+
+        if not self._user_explicitly_requests_official_source(query):
+            broadened = re.sub(r"\bofficial\b", " ", broadened, flags=re.IGNORECASE)
+            broadened = re.sub(r"\b(?:eci|election commission of india)\b", " ", broadened, flags=re.IGNORECASE)
+
+        if failed_domain:
+            broadened = re.sub(re.escape(failed_domain), " ", broadened, flags=re.IGNORECASE)
+
+        if (
+            str(plan.get("category") or "") == "election_results"
+            and "news" not in broadened.lower()
+        ):
+            broadened = f"{broadened} news".strip()
+
+        broadened = re.sub(r"\s+", " ", broadened).strip()
+        return broadened or self._build_search_query(query, apply_domain_bias=False) or query
+
+    def _has_research_routing_signal(self, query: str) -> bool:
+        lowered = (query or "").lower()
+        return any(token in lowered for token in [
+            "search the web",
+            "search web",
+            "search for",
+            "latest",
+            "current",
+            "news",
+            "web research",
+            "research the latest",
+            "standings",
+            "points-table",
+            "points table",
+            "openai api updates",
+            "spacex",
+            "ipl 2026",
+            "who won",
+            "winner",
+            "winners",
+            "results",
+            "seat tally",
+            "election result",
+            "election results",
+            "how much seats",
+            "how many seats",
+        ])
+
+    def _looks_like_factual_results_query(self, query: str) -> bool:
+        lowered = (query or "").lower()
+        return any(token in lowered for token in [
+            "who won",
+            "winner",
+            "winners",
+            "result",
+            "results",
+            "seat tally",
+            "seats won",
+            "how much seats",
+            "how many seats",
+            "margin",
+            "margins",
+            "standings",
+            "points table",
+            "score",
+        ])
 
     def _strip_agent_addressing(self, query: str) -> str:
         stripped = (query or "").strip()
@@ -597,6 +1005,23 @@ class Executor:
             return task_type
         return "ambiguous"
 
+    def _is_simple_greeting_query(self, query: str) -> bool:
+        lowered = (query or "").lower().strip().rstrip("!?.")
+        if not lowered:
+            return False
+
+        greeting_patterns = [
+            "hello", "hi", "hey", "howdy", "greetings", "good morning", "good evening",
+            "good afternoon", "sup", "yo", "what's up", "how are you", "can you hear me",
+            "are you there", "thanks", "thank you", "bye", "goodbye",
+        ]
+        is_greeting = any(lowered == greeting or lowered.startswith(greeting + " ") for greeting in greeting_patterns)
+        if not is_greeting:
+            return False
+        if len(lowered.split()) > 5:
+            return False
+        return not self._has_explicit_external_research_signal(lowered)
+
     def _build_self_capability_answer(self, query: str) -> str:
         lowered = self._strip_agent_addressing(query).lower()
         bullets = [
@@ -633,6 +1058,28 @@ class Executor:
             "toolUseMode": self._normalized_tool_use_mode(),
             "permissionMode": self._normalized_permission_mode(),
         }
+
+    def _query_needs_numeric_current_evidence(self, query: str) -> bool:
+        lowered = (query or "").lower()
+        return (
+            any(token in lowered for token in NUMERIC_QUESTION_KEYWORDS)
+            and any(token in lowered for token in LIVE_DATA_KEYWORDS + DATE_RANGE_KEYWORDS)
+        )
+
+    def _text_has_date_signal(self, text: str) -> bool:
+        lowered = (text or "").lower()
+        if re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b", lowered):
+            return True
+        if re.search(r"\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\b", lowered):
+            return True
+        if re.search(r"\b20\d{2}[-/]\d{1,2}[-/]\d{1,2}\b", lowered):
+            return True
+        if re.search(r"\b20\d{2}\b", lowered):
+            return True
+        return any(token in lowered for token in DATE_RANGE_KEYWORDS)
+
+    def _text_has_number_signal(self, text: str) -> bool:
+        return bool(re.search(r"\b\d+(?:\.\d+)?\b", text or ""))
 
     def _extract_evidence_gate(self, query: str, fetch_result: Optional[ToolResult]) -> Dict[str, Any]:
         quality = self._extract_quality_summary(fetch_result)
@@ -698,6 +1145,25 @@ class Executor:
         user_named_source = source_mode == "user_named"
         hybrid_source = source_mode == "hybrid"
         blocked_or_sparse = page_type in {"blocked", "sparse"} or quality["paywallSignal"] or quality["jsRenderSuspected"] and word_count < 120
+        if self._query_needs_numeric_current_evidence(query):
+            evidence_text = " ".join([
+                str(output.get("title") or ""),
+                str(output.get("content") or ""),
+                json.dumps(structured_data, default=str),
+            ])
+            has_date_signal = self._text_has_date_signal(evidence_text)
+            has_number_signal = self._text_has_number_signal(evidence_text)
+            if word_count < 150 and not (has_date_signal and has_number_signal and explicit_structured_fields):
+                return {
+                    "mode": "ABSTAIN",
+                    "reason": "the page did not expose enough dated numeric evidence for the requested current count",
+                    "tier": "thin" if tier in {"clean", "partial"} else tier,
+                    "confidence": min(confidence, 0.49),
+                    "missingFields": missing_fields,
+                    "pageType": page_type,
+                    "taskType": task_type,
+                    "sourceMode": source_mode,
+                }
 
         if task_type == "page_read":
             if blocked_or_sparse:
@@ -887,6 +1353,101 @@ class Executor:
             parts.append(f"source={tool_result.source_url[:200]}")
         return "; ".join(parts)
 
+    def _store_turn_recall_memory(
+        self,
+        chroma_memory: Optional[Any],
+        session_id: str,
+        request_messages: List[Any],
+        *,
+        assistant_content: Optional[str] = None,
+        tool_summaries: Optional[List[Dict[str, str]]] = None,
+    ) -> None:
+        if not chroma_memory or not session_id:
+            return
+
+        latest_user_content = ""
+        for message in reversed(request_messages or []):
+            role = getattr(message, "role", None)
+            content = str(getattr(message, "content", "") or "").strip()
+            if role == "user" and content:
+                latest_user_content = content
+                break
+
+        if latest_user_content:
+            chroma_memory.add_message(session_id, "user", latest_user_content)
+
+        for tool_summary in tool_summaries or []:
+            summary = str((tool_summary or {}).get("summary") or "").strip()
+            if not summary:
+                continue
+            metadata = {"memory_type": "tool_summary"}
+            tool_name = str((tool_summary or {}).get("tool_name") or "").strip()
+            if tool_name:
+                metadata["tool_name"] = tool_name
+            chroma_memory.add_message(session_id, "tool", summary, metadata=metadata)
+
+        assistant_text = str(assistant_content or "").strip()
+        if assistant_text:
+            chroma_memory.add_message(session_id, "assistant", assistant_text)
+
+    def _conversational_literal_memory_hits(
+        self,
+        chroma_memory: Optional[Any],
+        query: str,
+        session_id: str,
+        *,
+        limit: int = 3,
+        turn_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        if not chroma_memory or not hasattr(chroma_memory, "search_literal"):
+            return []
+
+        specs: List[Dict[str, Any]] = []
+        if session_id:
+            specs.append({"collection": "session", "source": f"session:{session_id}"})
+            specs.append({"collection": "sessions", "session_id": session_id})
+        for collection in ("operator", "mission", "default"):
+            specs.append({"collection": collection})
+
+        seen_ids: set[str] = set()
+        hits: List[Dict[str, Any]] = []
+        queried_collections = [str(spec.get("collection") or "unknown") for spec in specs]
+        for spec in specs:
+            results = chroma_memory.search_literal(
+                query,
+                session_id=spec.get("session_id"),
+                source=spec.get("source"),
+                collection=spec.get("collection"),
+                n_results=limit,
+                turn_id=turn_id,
+            )
+            for item in results:
+                item_id = str(item.get("id", ""))
+                if item_id and item_id in seen_ids:
+                    continue
+                if item_id:
+                    seen_ids.add(item_id)
+                hits.append(item)
+                if len(hits) >= limit:
+                    logger.info(
+                        "memory_literal_preflight turn_id=%s collections_queried=%s entries_returned=%s session_id=%s query=%r",
+                        turn_id or "no-turn-id",
+                        queried_collections,
+                        len(hits),
+                        session_id,
+                        query[:160],
+                    )
+                    return hits
+        logger.info(
+            "memory_literal_preflight turn_id=%s collections_queried=%s entries_returned=%s session_id=%s query=%r",
+            turn_id or "no-turn-id",
+            queried_collections,
+            len(hits),
+            session_id,
+            query[:160],
+        )
+        return hits
+
     def _compact_messages_for_context(self, messages: List[Dict[str, Any]], max_total_chars: int = MAX_MODEL_MESSAGE_CHARS) -> List[Dict[str, Any]]:
         compacted: List[Dict[str, Any]] = []
         total_chars = 0
@@ -1065,12 +1626,18 @@ class Executor:
             lines.append(f"- {name}: {description}")
         return "\n".join(lines)
 
+    def _resolve_requested_tools_schema(self, request_tools: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        if request_tools is None:
+            return TOOL_REGISTRY.get_schemas()
+        return request_tools
+
     def _select_relevant_tools_for_request(self, query: str, tools_schema: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not tools_schema:
             return tools_schema
 
         lowered = (query or "").lower()
         intent_type = self._classify_pre_web_intent(query)
+        block_external_retrieval = self._should_block_external_retrieval_for_turn(query)
         preferred_web_mode = self._normalized_preferred_web_mode()
         tool_use_mode = self._normalized_tool_use_mode()
         selected_tool_names = {
@@ -1078,6 +1645,9 @@ class Executor:
             for name in (self._active_chat_controls().get("selectedTools") or [])
             if str(name).strip()
         }
+        if tool_use_mode == "auto" and not selected_tool_names and self._is_simple_greeting_query(query):
+            logger.info("[TOOL_TRACE] Simple greeting detected during tool selection; skipping automatic tool bundle.")
+            return []
         candidate_tools = tools_schema
         if selected_tool_names and tool_use_mode in {"limited", "manual"}:
             candidate_tools = [
@@ -1086,6 +1656,13 @@ class Executor:
             ]
             if not candidate_tools:
                 candidate_tools = tools_schema
+        if block_external_retrieval:
+            candidate_tools = [
+                tool for tool in candidate_tools
+                if not self._is_external_retrieval_tool_name(str((tool.get("function", {}) if isinstance(tool, dict) else {}).get("name") or ""))
+            ]
+            if not candidate_tools:
+                return []
         scored: List[tuple[int, Dict[str, Any]]] = []
         for tool in candidate_tools:
             func = tool.get("function", {}) if isinstance(tool, dict) else {}
@@ -1115,12 +1692,14 @@ class Executor:
                 score += 100
             if name == "sequential_thinking" and any(token in lowered for token in ["compare", "memo", "brief", "workflow"]):
                 score += 10
-            if name == "read_file" and any(token in lowered for token in ["read ", "file", "workspace", "repository"]):
+            if name == "read_file" and not re.search(r"https?://", lowered, flags=re.IGNORECASE) and any(token in lowered for token in ["read ", "file", "workspace", "repository"]):
                 score += 15
             if name == "list_dir" and any(token in lowered for token in ["workspace", "repository", "repo", "directory", "files"]):
                 score += 12
             if name == "get_datetime" and any(token in lowered for token in ["current date", "current time", "date and time", "local time"]):
                 score += 12
+            if re.search(r"https?://", lowered, flags=re.IGNORECASE) and name in {"web_extract", "web_fetch", "fetch_url"}:
+                score += 220
             if name and name.lower() in lowered:
                 score += 50
             if any(token in description for token in ["search", "fetch", "extract", "summary", "repository", "research"]) and any(token in lowered for token in ["search", "fetch", "extract", "summary", "repository", "research", "latest", "current"]):
@@ -1131,13 +1710,17 @@ class Executor:
         scored.sort(key=lambda item: item[0], reverse=True)
         selected: List[Dict[str, Any]] = []
         for score, tool in scored:
-            if score <= 0 and len(selected) >= 6:
+            if score <= 0:
                 continue
             selected.append(tool)
             if len(selected) >= MAX_TOOLS_PER_REQUEST:
                 break
 
-        return selected or candidate_tools[:MAX_TOOLS_PER_REQUEST]
+        if selected:
+            return selected
+        if selected_tool_names and tool_use_mode in {"limited", "manual"}:
+            return candidate_tools[:MAX_TOOLS_PER_REQUEST]
+        return []
 
     async def execute(
         self,
@@ -1155,6 +1738,8 @@ class Executor:
         trace = ProvenanceTrace()
         start_time = time.time()
         self._active_request_prompt_templates = request.promptTemplates or {}
+        self._active_request_prompt_provenance = request.promptProvenance or {}
+        self._active_request_execution_intent = getattr(request, "executionIntent", None) or {}
         self._active_request_chat_controls = {
             "planMode": bool(request.planMode),
             "preferredWebMode": str(request.preferredWebMode or "auto"),
@@ -1164,6 +1749,9 @@ class Executor:
             "selectedTools": list(request.selectedTools or []),
         }
         trace.metadata["chatControls"] = dict(self._active_request_chat_controls)
+        trace.metadata["assistantLane"] = str((request.promptProvenance or {}).get("assistantLane") or "")
+        trace.metadata["memoryRecallOccurred"] = False
+        trace.metadata["retrievalPolicy"] = dict(self._active_retrieval_policy())
 
         if gateway_context:
             trace.metadata["agentId"] = gateway_context.agent_profile.profile.id
@@ -1179,8 +1767,18 @@ class Executor:
             (message.content for message in reversed(request.messages) if getattr(message, "role", "") == "user" and getattr(message, "content", "").strip()),
             "",
         )
+        correlation_id = (
+            getattr(request, "correlation_id", None)
+            or getattr(request, "correlationId", None)
+            or ""
+        )
+        if correlation_id:
+            trace.metadata["correlationId"] = correlation_id
+        turn_id = getattr(request, "turn_id", None) or str(uuid.uuid4())
+        request.turn_id = turn_id
+        trace.metadata["turnId"] = turn_id
 
-        requested_tools_schema = request.tools if request.tools else TOOL_REGISTRY.get_schemas()
+        requested_tools_schema = self._resolve_requested_tools_schema(request.tools)
         tools_schema = self._select_relevant_tools_for_request(latest_user_query, requested_tools_schema)
 
         # Determine provider and thinking support early for tool filtering
@@ -1201,10 +1799,19 @@ class Executor:
         sources: List[str] = []
 
         session_id = gateway_context.session_record.session_id if gateway_context else request.session_id
+        log_ctx = {"turn_id": turn_id, "session_id": session_id}
 
         memory_recall_occurred = False
 
-        logger.info(f"[TOOL_TRACE] Executor received request: session={session_id}, model={request.model}, complexity={request.complexity}, tools_in_request={len(request.tools) if request.tools else 0}, registry_tools={len(tools_schema)}")
+        logger.info(
+            "executor_turn_started turn_id=%s session_id=%s model=%s complexity=%s tools_in_request=%s registry_tools=%s",
+            turn_id,
+            session_id,
+            request.model,
+            request.complexity,
+            len(request.tools) if request.tools else 0,
+            len(tools_schema),
+        )
 
         try:
             # 1. IMMEDIATE YIELD: Ensure the client knows we've started
@@ -1228,12 +1835,10 @@ class Executor:
             self._swarm.start_trace(session_id, latest_user_query)
 
             # 1.1 Intent Discovery & Decision Level
-            greeting_patterns = ["hello", "hi", "hey", "howdy", "greetings", "good morning", "good evening", "good afternoon", "sup", "yo", "what's up", "how are you", "can you hear me", "are you there", "thanks", "thank you", "bye", "goodbye"]
-            task_keywords = ["search", "run", "do", "find", "use", "tool", "browse", "fetch", "get", "create", "write", "analyze", "explain", "how", "what", "why", "where", "when", "who", "list", "show", "help me", "tell me about", "current", "time", "date", "spacex"]
             query_lower = latest_user_query.lower().strip().rstrip("!?.")
-            
-            is_greeting = any(query_lower == g or query_lower.startswith(g + " ") for g in greeting_patterns)
-            has_task_kw = any(kw in query_lower for kw in task_keywords)
+            is_simple_greeting = self._is_simple_greeting_query(latest_user_query)
+            block_external_retrieval = self._should_block_external_retrieval_for_turn(latest_user_query)
+            has_task_kw = any(kw in query_lower for kw in ["search", "run", "find", "use", "tool", "browse", "fetch", "get", "create", "write", "analyze", "explain", "list", "show", "help me", "tell me about", "current", "time", "date", "spacex"])
             is_web_research_query = any(kw in query_lower for kw in ["search the web", "latest", "current", "news", "open ", "http", "https", "points table", "standings", "fetch"])
             runtime_web_context = self._web_runtime_context(
                 latest_user_query,
@@ -1242,11 +1847,12 @@ class Executor:
             
             # Use trace metadata to record intent
             trace.metadata["has_task_kw"] = has_task_kw
-            trace.metadata["is_simple_query"] = (is_greeting and not has_task_kw) and len(latest_user_query.split()) <= 5
+            trace.metadata["is_simple_query"] = is_simple_greeting
+            trace.metadata["retrievalBlockedForConversation"] = block_external_retrieval
             self._stamp_web_trace_metadata(trace, runtime_web_context=runtime_web_context)
 
             # Preliminary check for greeting short-circuit
-            if is_greeting and len(latest_user_query.split()) <= 2:
+            if is_simple_greeting:
                 logger.info(f"[ORCHESTRATOR] Simple greeting detected: '{query_lower}' - skipping heavy context building.")
                 trace.add_plan_step("Decision Level: Skipping heavy retrieval for simple greeting.")
                 self._record_strategist(
@@ -1267,7 +1873,14 @@ class Executor:
                     status="skipped_local_context",
                     evidence_summary={"reason": "greeting_short_circuit"},
                 )
-                greeting_answer = "Hello! I'm RawClaw, your advanced AI agent for coding and research. How can I help you today?"
+                if query_lower.startswith("how are you"):
+                    greeting_answer = "I am doing well, thank you for asking! I am ready to help with any tasks or questions you have."
+                elif query_lower in {"thanks", "thank you"}:
+                    greeting_answer = "You're welcome! I'm ready when you are."
+                elif query_lower in {"bye", "goodbye"}:
+                    greeting_answer = "Goodbye! I'm here whenever you need me."
+                else:
+                    greeting_answer = "Hello! I'm RawClaw, your advanced AI agent for coding and research. How can I help you today?"
                 self._record_analyst(
                     session_id,
                     trace,
@@ -1451,30 +2064,23 @@ class Executor:
 
             # 2. CONTEXT RETRIEVAL
             is_simple_query = trace.metadata["is_simple_query"]
-            if knowledge_brain and latest_user_query and not is_simple_query:
+            block_memory_recall = self._should_block_memory_recall_for_turn()
+            if knowledge_brain and latest_user_query and not is_simple_query and not block_memory_recall:
                 # Deterministic preflight for exact memory-style lookups. This
                 # makes high-signal identifiers like PROJECT_VANGUARD available
                 # even when semantic retrieval is weak.
                 direct_memory_context = ""
                 if chroma_memory and hasattr(chroma_memory, "search_literal"):
-                    literal_hits = chroma_memory.search_literal(
+                    literal_hits = self._conversational_literal_memory_hits(
+                        chroma_memory,
                         latest_user_query,
-                        collection="default",
-                        n_results=3,
+                        session_id,
+                        limit=3,
+                        turn_id=turn_id,
                     )
-                    if not literal_hits:
-                        literal_hits = chroma_memory.search_literal(
-                            latest_user_query,
-                            session_id=session_id,
-                            n_results=3,
-                        )
-                    if not literal_hits:
-                        literal_hits = chroma_memory.search_literal(
-                            latest_user_query,
-                            n_results=3,
-                        )
                     if literal_hits:
                         memory_recall_occurred = True
+                        trace.metadata["memoryRecallOccurred"] = True
                         direct_memory_context = "\n".join(
                             f"- [memory] {item.get('content', item.get('preview', ''))}"
                             for item in literal_hits
@@ -1551,9 +2157,10 @@ class Executor:
                             return
 
                 # build_context now has its own internal try-except
-                retrieved_context = knowledge_brain.build_context(latest_user_query, session_id=session_id)
+                retrieved_context = knowledge_brain.build_context(latest_user_query, session_id=session_id, turn_id=turn_id)
                 if retrieved_context:
                     memory_recall_occurred = True
+                    trace.metadata["memoryRecallOccurred"] = True
                     messages.insert(
                         1, # Insert after system prompt
                         {
@@ -1567,9 +2174,10 @@ class Executor:
                             ),
                         },
                     )
+                    trace.metadata["memoryRecallOccurred"] = True
 
             # 2.1 TOOL DISCOVERY
-            if mcp_discovery and latest_user_query and not is_simple_query:
+            if mcp_discovery and latest_user_query and not is_simple_query and not block_external_retrieval:
                 discovery_hints = await mcp_discovery.discover_relevant_tools(latest_user_query)
                 if discovery_hints:
                     hint_text = "\n".join([f"- {h['name']} ({h['server']}): {h['description']}" for h in discovery_hints])
@@ -1602,6 +2210,10 @@ class Executor:
             forced_tool = self._maybe_force_tool_call(latest_user_query)
             forced_reasoning_answer = self._maybe_force_reasoning_answer(latest_user_query)
             forced_skill_tool = self._maybe_force_skill_tool_call(latest_user_query, tools_schema)
+            if forced_tool and block_external_retrieval and self._is_external_retrieval_tool_name(forced_tool.tool_name):
+                forced_tool = None
+            if forced_skill_tool and block_external_retrieval and self._is_external_retrieval_tool_name(forced_skill_tool.tool_name):
+                forced_skill_tool = None
             if forced_reasoning_answer:
                 intent_type = self._classify_pre_web_intent(latest_user_query)
                 trace.metadata["intentType"] = intent_type
@@ -1783,33 +2395,18 @@ class Executor:
                         async for chunk in repo_result:
                             yield chunk
                         return
-                if forced_skill_tool.tool_name == "skill_grounded-web-summary" and self._should_use_guided_web_research(latest_user_query):
-                    if self._query_requires_fetch(latest_user_query):
-                        trace.add_plan_step("Guided web workflow selected: grounded skill + search + fetch.")
-                        guided_result = await self._execute_search_then_fetch_path(
-                            request=request,
-                            session_id=session_id,
-                            latest_user_query=latest_user_query,
-                            trace=trace,
-                            start_time=start_time,
-                            knowledge_brain=knowledge_brain,
-                            chroma_memory=chroma_memory,
-                            context_messages=messages,
-                        )
-                    else:
-                        trace.add_plan_step("Guided web workflow selected: grounded skill + search.")
-                        guided_search_query = self._build_search_query(latest_user_query)
-                        guided_result = await self._execute_forced_tool_path(
-                            request=request,
-                            session_id=session_id,
-                            tool_call=ToolCall(tool_name="web_search", input={"query": guided_search_query}),
-                            latest_user_query=latest_user_query,
-                            trace=trace,
-                            start_time=start_time,
-                            knowledge_brain=knowledge_brain,
-                            chroma_memory=chroma_memory,
-                            context_messages=messages,
-                        )
+                if forced_skill_tool.tool_name == "skill_grounded-web-summary":
+                    trace.add_plan_step("Guided web workflow selected: grounded skill + planner + search + extraction.")
+                    guided_result = await self._execute_search_then_fetch_path(
+                        request=request,
+                        session_id=session_id,
+                        latest_user_query=latest_user_query,
+                        trace=trace,
+                        start_time=start_time,
+                        knowledge_brain=knowledge_brain,
+                        chroma_memory=chroma_memory,
+                        context_messages=messages,
+                    )
                     if guided_result:
                         async for chunk in guided_result:
                             yield chunk
@@ -1877,7 +2474,7 @@ class Executor:
                 )
 
             # 3. STREAM FROM MODEL
-            logger.info(f"Starting model completion for {request.model}...")
+                logger.info("model_completion_started turn_id=%s session_id=%s model=%s", turn_id, session_id, request.model)
 
             # Wrap the generator to ensure it's an async iterator
             async def wrap_generator(g):
@@ -1891,8 +2488,10 @@ class Executor:
                     yield g
 
             turn_count = 0
+            research_tool_turns = 0
             sequential_thinking_turns = 0
             continue_reasoning = True
+            force_final_research_synthesis = False
             defer_content_until_review = True
             MAX_EXECUTION_SECONDS = 120  # Hard deadline for the entire execution loop
             execution_deadline = time.time() + MAX_EXECUTION_SECONDS
@@ -1919,8 +2518,15 @@ class Executor:
                 continue_reasoning = False
                 turn_had_tool_call = False
                 turn_content = ""
-
-                model_messages, model_tools = self._prepare_model_inputs(messages, tools_schema if tools_schema else None)
+                forced_synthesis_turn = force_final_research_synthesis and len(tool_calls_made) > 0
+                if forced_synthesis_turn:
+                    force_final_research_synthesis = False
+                    model_messages, model_tools = self._prepare_model_inputs(
+                        messages + [{"role": "system", "content": self._strict_synthesis_rules(tools_disabled=True)}],
+                        None,
+                    )
+                else:
+                    model_messages, model_tools = self._prepare_model_inputs(messages, tools_schema if tools_schema else None)
                 logger.info(
                     "[CONTEXT_BUDGET] Sending model payload estimate=%s chars (messages=%s, tools=%s).",
                     self._estimate_model_payload_chars(model_messages, model_tools),
@@ -1954,6 +2560,14 @@ class Executor:
                         tool_call_data = delta.get("tool_call", {})
                         tool_name = tool_call_data.get("name", "")
                         tool_input = tool_call_data.get("arguments", {})
+                        if forced_synthesis_turn:
+                            logger.warning(
+                                "Session %s attempted tool %s during forced synthesis turn; ending with reasoning limit.",
+                                session_id,
+                                tool_name,
+                            )
+                            continue_reasoning = False
+                            break
                         
                         # Apply fuzzy mapping to handle hallucinations (e.g. search -> web_search)
                         mapped_name = self._fuzzy_map_tool_name(tool_name)
@@ -1963,10 +2577,21 @@ class Executor:
                             sequential_thinking_turns = 0
                             turn_count += 1
 
-                        if sequential_thinking_turns > MAX_SEQUENTIAL_THINKING_TURNS:
+                        if (
+                            mapped_name == "sequential_thinking"
+                            and sequential_thinking_turns == MAX_SEQUENTIAL_THINKING_TURNS - 1
+                        ):
                             logger.warning(
-                                f"Session {session_id} exceeded MAX_SEQUENTIAL_THINKING_TURNS "
-                                f"({MAX_SEQUENTIAL_THINKING_TURNS}). Stopping."
+                                "[THINKING_CAP] Approaching limit: turn %s/%s",
+                                sequential_thinking_turns,
+                                MAX_SEQUENTIAL_THINKING_TURNS,
+                            )
+
+                        if sequential_thinking_turns >= MAX_SEQUENTIAL_THINKING_TURNS:
+                            logger.warning(
+                                "[THINKING_CAP_HIT] turns=%d query=%r",
+                                sequential_thinking_turns,
+                                latest_user_query[:80],
                             )
                             yield json.dumps({
                                 "type": "error",
@@ -1976,10 +2601,17 @@ class Executor:
                                     "reached. Move to search/fetch or answer directly."
                                 )
                             }) + "\n"
+                            turn_had_tool_call = False
                             continue_reasoning = False
                             break
                         
-                        logger.info(f"[TOOL_TRACE] Executor received tool_call: {tool_name} (mapped to: {mapped_name}) with input {tool_input}")
+                        logger.info(
+                            "tool_call_received turn_id=%s session_id=%s tool_name=%s mapped_name=%s",
+                            turn_id,
+                            session_id,
+                            tool_name,
+                            mapped_name,
+                        )
                         tool_call = ToolCall(
                             tool_name=mapped_name,
                             input=tool_input,
@@ -2024,14 +2656,23 @@ class Executor:
                             tool_call,
                             trace,
                             knowledge_brain=knowledge_brain,
+                            turn_id=turn_id,
                         )
-                        logger.info(f"[TOOL_TRACE] Tool {tool_name} executed: success={tool_result.error is None}")
+                        logger.info(
+                            "tool_call_completed turn_id=%s session_id=%s tool_name=%s success=%s",
+                            turn_id,
+                            session_id,
+                            tool_name,
+                            tool_result.error is None,
+                        )
 
                         # Record tool result
                         trace.add_tool_result(tool_result, int(tool_result.duration_ms))
 
                         # Track for response
                         tool_calls_made.append(tool_call)
+                        if self._is_research_tool_name(tool_call.tool_name):
+                            research_tool_turns += 1
                         if tool_result.source_url:
                             sources.append(tool_result.source_url)
 
@@ -2073,17 +2714,7 @@ class Executor:
                         
                         messages.append({
                             "role": "system", 
-                            "content": (
-                                "STRICT SYNTHESIS RULES - FOLLOW EXACTLY:\n"
-                                "1. ANSWER ONLY FROM TOOL RESULTS - ignore all other knowledge\n"
-                                "2. If results are incomplete/placeholder, say: 'I couldn't verify X from the search results'\n"
-                                "3. NEVER say 'X has not happened' or 'does not exist' based on incomplete results\n"
-                                "4. If no actual data found, say: 'The search didn't return verified current data'\n"
-                                "5. DO NOT use phrases like 'as of the current date' or reference time\n"
-                                "6. If you see placeholder content, describe it as 'appears to be placeholder content'\n"
-                                "7. Example for incomplete sports data: 'The search returned placeholder pages rather than actual standings'\n"
-                                f"{quality_note}"
-                            )
+                            "content": self._strict_synthesis_rules(quality_note)
                         });
 
                         # Store tool result in memory
@@ -2091,9 +2722,19 @@ class Executor:
                             chroma_memory.add_message(
                                 session_id,
                                 "tool",
-                                json.dumps(tool_result.model_dump()),
-                                metadata={"tool_name": tool_call.tool_name},
+                                self._summarize_tool_result_for_context(tool_call.tool_name, tool_result),
+                                metadata={
+                                    "tool_name": tool_call.tool_name,
+                                    "memory_type": "tool_summary",
+                                },
                             )
+                        if research_tool_turns >= MAX_RESEARCH_TOOL_TURNS and tool_calls_made:
+                            logger.info(
+                                "Session %s reached research tool budget (%s). Forcing final synthesis turn.",
+                                session_id,
+                                MAX_RESEARCH_TOOL_TURNS,
+                            )
+                            force_final_research_synthesis = True
                         continue_reasoning = True
 
                     elif isinstance(delta, str):
@@ -2104,6 +2745,13 @@ class Executor:
                         # Models sometimes output raw JSON like {"name": "web_search", ...} without tags
                         raw_tool_call = self._try_parse_raw_tool_call(cleaned)
                         if raw_tool_call:
+                            if forced_synthesis_turn:
+                                logger.warning(
+                                    "Session %s emitted raw tool JSON during forced synthesis turn; ending with reasoning limit.",
+                                    session_id,
+                                )
+                                continue_reasoning = False
+                                break
                             # Intercept as proper tool call instead of leaking JSON
                             mapped_name = self._fuzzy_map_tool_name(raw_tool_call.get('name', ''))
                             logger.info(f"[TOOL_TRACE] Intercepted raw JSON tool call: {raw_tool_call.get('name')} (mapped to: {mapped_name})")
@@ -2113,10 +2761,21 @@ class Executor:
                                 sequential_thinking_turns = 0
                                 turn_count += 1
 
-                            if sequential_thinking_turns > MAX_SEQUENTIAL_THINKING_TURNS:
+                            if (
+                                mapped_name == "sequential_thinking"
+                                and sequential_thinking_turns == MAX_SEQUENTIAL_THINKING_TURNS - 1
+                            ):
                                 logger.warning(
-                                    f"Session {session_id} exceeded MAX_SEQUENTIAL_THINKING_TURNS "
-                                    f"({MAX_SEQUENTIAL_THINKING_TURNS}) via raw tool call. Stopping."
+                                    "[THINKING_CAP] Approaching limit: turn %s/%s",
+                                    sequential_thinking_turns,
+                                    MAX_SEQUENTIAL_THINKING_TURNS,
+                                )
+
+                            if sequential_thinking_turns >= MAX_SEQUENTIAL_THINKING_TURNS:
+                                logger.warning(
+                                    "[THINKING_CAP_HIT] turns=%d query=%r",
+                                    sequential_thinking_turns,
+                                    latest_user_query[:80],
                                 )
                                 yield json.dumps({
                                     "type": "error",
@@ -2155,6 +2814,8 @@ class Executor:
                             
                             trace.add_tool_result(tool_result, int(tool_result.duration_ms))
                             tool_calls_made.append(tool_call)
+                            if self._is_research_tool_name(tool_call.tool_name):
+                                research_tool_turns += 1
                             if tool_result.source_url:
                                 sources.append(tool_result.source_url)
                             
@@ -2178,9 +2839,16 @@ class Executor:
                             # Add synthesis system prompt
                             messages.append({
                                 "role": "system",
-                                "content": "STRICT SYNTHESIS RULES:\n1. ANSWER ONLY FROM TOOL RESULTS\n2. Say 'I couldn't verify' if results are incomplete\n3. NEVER claim events 'have not happened' based on incomplete data\n4. Use epistemic language for weak evidence"
+                                "content": self._strict_synthesis_rules()
                             })
                             
+                            if research_tool_turns >= MAX_RESEARCH_TOOL_TURNS and tool_calls_made:
+                                logger.info(
+                                    "Session %s reached research tool budget (%s) via raw tool call. Forcing final synthesis turn.",
+                                    session_id,
+                                    MAX_RESEARCH_TOOL_TURNS,
+                                )
+                                force_final_research_synthesis = True
                             continue_reasoning = True
                             continue
                         
@@ -2199,6 +2867,13 @@ class Executor:
                         content = delta.get("content", "")
                         raw_tool_call = self._try_parse_raw_tool_call(content)
                         if raw_tool_call:
+                            if forced_synthesis_turn:
+                                logger.warning(
+                                    "Session %s emitted content tool JSON during forced synthesis turn; ending with reasoning limit.",
+                                    session_id,
+                                )
+                                continue_reasoning = False
+                                break
                             mapped_name = self._fuzzy_map_tool_name(raw_tool_call.get("name", ""))
                             tool_call = ToolCall(
                                 tool_name=mapped_name,
@@ -2209,10 +2884,20 @@ class Executor:
                             else:
                                 sequential_thinking_turns = 0
                                 turn_count += 1
-                            if sequential_thinking_turns > MAX_SEQUENTIAL_THINKING_TURNS:
+                            if (
+                                mapped_name == "sequential_thinking"
+                                and sequential_thinking_turns == MAX_SEQUENTIAL_THINKING_TURNS - 1
+                            ):
                                 logger.warning(
-                                    f"Session {session_id} exceeded MAX_SEQUENTIAL_THINKING_TURNS "
-                                    f"({MAX_SEQUENTIAL_THINKING_TURNS}) via content tool call. Stopping."
+                                    "[THINKING_CAP] Approaching limit: turn %s/%s",
+                                    sequential_thinking_turns,
+                                    MAX_SEQUENTIAL_THINKING_TURNS,
+                                )
+                            if sequential_thinking_turns >= MAX_SEQUENTIAL_THINKING_TURNS:
+                                logger.warning(
+                                    "[THINKING_CAP_HIT] turns=%d query=%r",
+                                    sequential_thinking_turns,
+                                    latest_user_query[:80],
                                 )
                                 yield json.dumps({
                                     "type": "error",
@@ -2241,6 +2926,8 @@ class Executor:
                             )
                             trace.add_tool_result(tool_result, int(tool_result.duration_ms))
                             tool_calls_made.append(tool_call)
+                            if self._is_research_tool_name(tool_call.tool_name):
+                                research_tool_turns += 1
                             if tool_result.source_url:
                                 sources.append(tool_result.source_url)
                             yield json.dumps({
@@ -2258,8 +2945,15 @@ class Executor:
                             })
                             messages.append({
                                 "role": "system",
-                                "content": "STRICT SYNTHESIS RULES:\n1. ANSWER ONLY FROM TOOL RESULTS\n2. Say 'I couldn't verify' if results are incomplete\n3. NEVER claim events 'have not happened' based on incomplete data\n4. Use epistemic language for weak evidence"
+                                "content": self._strict_synthesis_rules()
                             })
+                            if research_tool_turns >= MAX_RESEARCH_TOOL_TURNS and tool_calls_made:
+                                logger.info(
+                                    "Session %s reached research tool budget (%s) via content tool call. Forcing final synthesis turn.",
+                                    session_id,
+                                    MAX_RESEARCH_TOOL_TURNS,
+                                )
+                                force_final_research_synthesis = True
                             continue_reasoning = True
                             continue
 
@@ -2280,6 +2974,16 @@ class Executor:
                     elif isinstance(delta, dict) and delta.get("type") == "metadata":
                         md = delta.get("metadata", {})
                         md["memoryRecall"] = memory_recall_occurred
+                        duration_ms = md.get("durationMs")
+                        if isinstance(duration_ms, (int, float)):
+                            md["transformStageTimings"] = [
+                                {
+                                    "stage": "model_execution",
+                                    "owner": "agent",
+                                    "durationMs": int(duration_ms),
+                                    "fallbackReason": None,
+                                }
+                            ]
                         yield json.dumps({
                             "type": "metadata",
                             "metadata": md
@@ -2294,6 +2998,17 @@ class Executor:
                         continue_reasoning = False
                         break
 
+                if forced_synthesis_turn and not turn_content.strip():
+                    logger.warning(
+                        "Session %s exhausted research budget without a final synthesis answer.",
+                        session_id,
+                    )
+                    yield json.dumps({
+                        "type": "error",
+                        "error": "turn_limit_reached",
+                        "message": RESEARCH_BUDGET_EXHAUSTED_MESSAGE,
+                    }) + "\n"
+                    break
                 # If this turn produced a final assistant answer, stop looping.
                 if turn_content.strip():
                     continue_reasoning = False
@@ -2358,13 +3073,12 @@ class Executor:
 
             # Store messages in ChromaDB memory
             if chroma_memory and session_id:
-                for msg in request.messages:
-                    if hasattr(msg, 'role') and msg.role == 'user':
-                        chroma_memory.add_message(session_id, "user", msg.content)
-                    elif hasattr(msg, 'role'):
-                        chroma_memory.add_message(session_id, msg.role, msg.content)
-                if accumulated_content:
-                    chroma_memory.add_message(session_id, "assistant", accumulated_content)
+                self._store_turn_recall_memory(
+                    chroma_memory,
+                    session_id,
+                    request.messages,
+                    assistant_content=accumulated_content,
+                )
 
             # Yield provenance trace
             yield json.dumps({
@@ -2380,11 +3094,13 @@ class Executor:
                 }) + "\n"
 
             # Final DONE signal
+            logger.info("executor_turn_completed turn_id=%s session_id=%s duration_ms=%s", turn_id, session_id, duration_ms)
             yield json.dumps({
                 "type": "done",
             }) + "\n"
 
         except Exception as e:
+            logger.error("executor_turn_failed turn_id=%s session_id=%s error=%s", turn_id, session_id, e)
             logger.error(f"Executor error: {e}")
             trace.add_error_step(str(e))
             yield json.dumps({
@@ -2401,6 +3117,8 @@ class Executor:
             }) + "\n"
         finally:
             self._active_request_prompt_templates = {}
+            self._active_request_prompt_provenance = {}
+            self._active_request_execution_intent = {}
 
     def _fuzzy_map_tool_name(self, name: str) -> str:
         """Maps hallucinations or slightly incorrect tool names to real ones."""
@@ -2489,6 +3207,65 @@ class Executor:
             pass
         return None
 
+    def _enforce_conversation_truthfulness(
+        self,
+        answer: str,
+        latest_user_query: str,
+        request: ChatRequest,
+        trace: ProvenanceTrace,
+    ) -> str:
+        candidate = str(answer or "").strip()
+        if not candidate:
+            return candidate
+
+        assistant_lane = str((request.promptProvenance or {}).get("assistantLane") or trace.metadata.get("assistantLane") or "").strip().lower()
+        if assistant_lane not in {"", "conversation"}:
+            return candidate
+
+        if bool(trace.metadata.get("memoryRecallOccurred")):
+            return candidate
+
+        cleaned = self._remove_unsupported_memory_claim_blocks(candidate)
+        if cleaned.strip():
+            return cleaned.strip()
+
+        if self._is_simple_greeting_query(latest_user_query):
+            lowered = (latest_user_query or "").lower().strip().rstrip("!?.")
+            if lowered.startswith("how are you"):
+                return "I am doing well, thank you for asking! I am ready to help with any tasks or questions you have."
+            if lowered in {"thanks", "thank you"}:
+                return "You're welcome! I'm ready when you are."
+            if lowered in {"bye", "goodbye"}:
+                return "Goodbye! I'm here whenever you need me."
+            return "Hello! I'm RawClaw, your advanced AI agent for coding and research. How can I help you today?"
+
+        return "I do not have a stored record for that in this conversation."
+
+    def _remove_unsupported_memory_claim_blocks(self, answer: str) -> str:
+        if not answer:
+            return ""
+
+        claim_pattern = re.compile(r"\b(?:according to|from|in|mentioned in)\s+(?:my|the)\s+(?:records|memory)\b", re.IGNORECASE)
+        bullet_pattern = re.compile(r"^\s*(?:[-*]|\d+\.)\s+")
+        lines = answer.splitlines()
+        cleaned_lines: List[str] = []
+        skip_block = False
+
+        for line in lines:
+            stripped = line.strip()
+            if skip_block and bullet_pattern.match(stripped):
+                skip_block = False
+            if skip_block:
+                continue
+            if claim_pattern.search(stripped):
+                skip_block = bool(bullet_pattern.match(stripped))
+                continue
+            cleaned_lines.append(line)
+
+        cleaned = "\n".join(cleaned_lines)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+        return cleaned
+
     def _maybe_answer_from_direct_memory(
         self,
         query: str,
@@ -2560,12 +3337,17 @@ class Executor:
         if lowered.startswith("read the contents of "):
             match = re.search(r"read the contents of\s+([^\s,]+)", query, flags=re.IGNORECASE)
             if match:
-                return ToolCall(tool_name="read_file", input={"path": match.group(1).strip()})
+                candidate = match.group(1).strip().rstrip(").,!?")
+                if re.match(r"^https?://", candidate, flags=re.IGNORECASE):
+                    return ToolCall(tool_name="web_extract", input=self._build_direct_url_extract_input(query, candidate))
+                return ToolCall(tool_name="read_file", input={"path": candidate})
 
         if lowered.startswith("read "):
             match = re.search(r"read\s+([^\s,]+)", query, flags=re.IGNORECASE)
             if match:
                 candidate_path = match.group(1).strip().rstrip(").,!?")
+                if re.match(r"^https?://", candidate_path, flags=re.IGNORECASE):
+                    return ToolCall(tool_name="web_extract", input=self._build_direct_url_extract_input(query, candidate_path))
                 if candidate_path and "." in candidate_path:
                     return ToolCall(tool_name="read_file", input={"path": candidate_path})
 
@@ -2653,9 +3435,10 @@ class Executor:
     def _should_use_page_read_orchestrator(self, tool_call: ToolCall) -> bool:
         if tool_call.tool_name != "web_extract" or not isinstance(tool_call.input, dict):
             return False
+        task_type = str(tool_call.input.get("taskType") or "").strip()
         return (
             str(tool_call.input.get("sourceMode") or "").strip() == "user_named"
-            and str(tool_call.input.get("taskType") or "").strip() == "page_read"
+            and task_type in {"page_read", "factual_extract"}
             and bool(tool_call.input.get("url"))
         )
 
@@ -2673,6 +3456,14 @@ class Executor:
         )
 
     def _build_search_query_from_failed_url_extract(self, url: str, query: str) -> str:
+        source_profile = self._source_profile_for_url(url, query)
+        plan = self._build_research_plan(query)
+        if (
+            str(plan.get("category") or "") == "election_results"
+            or source_profile.preferredAccessMethod == "search-for-article"
+        ):
+            return self._build_broadened_search_query(query, self._registered_domain_from_url(url))
+
         parsed = urlparse(url)
         hostname = (parsed.hostname or "").lower()
         domain = hostname[4:] if hostname.startswith("www.") else hostname
@@ -2721,7 +3512,10 @@ class Executor:
 
         if (
             "skill_grounded-web-summary" in available_tools
-            and any(token in lowered for token in ["web", "search", "fetch", "latest", "official page", "summary", "summarize"])
+            and (
+                self._has_research_routing_signal(query)
+                or any(token in lowered for token in ["official page", "summary", "summarize"])
+            )
         ):
             return ToolCall(tool_name="skill_grounded-web-summary", input={"task": query})
 
@@ -2799,27 +3593,13 @@ class Executor:
     def _should_use_guided_web_research(self, query: str) -> bool:
         if self._classify_pre_web_intent(query) in {"self_capability", "clarification_needed"}:
             return False
-        lowered = (query or "").lower()
         if self._looks_like_sports_standings_query(query):
             return True
-        return any(token in lowered for token in [
-            "search the web",
-            "latest",
-            "current",
-            "news",
-            "web research",
-            "research the latest",
-            "standings",
-            "points-table",
-            "points table",
-            "openai api updates",
-            "spacex",
-            "ipl 2026",
-        ])
+        return self._has_research_routing_signal(query)
 
     def _query_requires_fetch(self, query: str) -> bool:
         lowered = (query or "").lower()
-        if self._looks_like_sports_standings_query(query):
+        if self._looks_like_sports_standings_query(query) or self._looks_like_factual_results_query(query):
             return True
         if any(token in lowered for token in [
             "fetch",
@@ -2858,24 +3638,43 @@ class Executor:
         lowered = (query or "").lower()
         standings_terms = ["standings", "points table", "points", "rankings", "nrr", "top four", "table", "wins", "losses", "position"]
         sports_terms = ["ipl", "cricket", "match", "team", "playoffs", "season", "csk", "chennai super kings"]
+        sports_result_terms = ["fixture", "fixtures", "schedule", "result", "results", "score", "scores", "match", "matches", "played"]
         breaking_terms = ["breaking", "latest", "news", "today", "current", "recent"]
         update_terms = ["update", "updates", "changelog", "release", "announcement", "launch", "rollout", "debut"]
         technical_terms = ["api", "sdk", "docs", "documentation", "developer", "spec", "technical", "model", "library", "integration"]
         market_terms = ["compare", "comparison", "competitor", "competitive", "market", "pricing", "versus", "vs"]
+        election_terms = ["election", "elections", "assembly poll", "assembly polls", "vidhan sabha"]
+        election_result_terms = ["who won", "winner", "won", "result", "results", "seat tally", "seats won", "how many seats", "how much seats"]
 
         is_sports_standings = self._looks_like_sports_standings_query(query) or (
             any(term in lowered for term in standings_terms) and any(term in lowered for term in sports_terms)
+        )
+        is_sports_results = (
+            not is_sports_standings
+            and any(term in lowered for term in sports_terms)
+            and (
+                any(term in lowered for term in sports_result_terms)
+                or any(term in lowered for term in DATE_RANGE_KEYWORDS)
+                or self._query_needs_numeric_current_evidence(query)
+            )
         )
         is_market_compare = any(term in lowered for term in market_terms)
         is_technical = any(term in lowered for term in technical_terms)
         is_product_updates = any(term in lowered for term in update_terms) and any(
             term in lowered for term in ["openai", "api", "product", "company", "spacex", "starship", "platform", "developer"]
         )
+        is_election_results = any(term in lowered for term in election_terms) and any(
+            term in lowered for term in election_result_terms
+        )
         is_breaking_news = any(term in lowered for term in breaking_terms)
 
         category = "general_fact_finding"
-        if is_sports_standings:
+        if is_election_results:
+            category = "election_results"
+        elif is_sports_standings:
             category = "sports_standings"
+        elif is_sports_results:
+            category = "sports_results"
         elif is_market_compare:
             category = "market_competitive_research"
         elif is_technical:
@@ -2887,8 +3686,8 @@ class Executor:
 
         sections = self._detect_requested_sections(query)
         comparison_needed = is_market_compare or any(term in lowered for term in ["compare", "comparing", "versus", "vs ", "two current"])
-        exact_structured_data_needed = is_sports_standings or any(
-            term in lowered for term in ["points table", "standings", "rankings", "stats", "numbers", "exact", "leaderboard"]
+        exact_structured_data_needed = is_election_results or is_sports_standings or is_sports_results or any(
+            term in lowered for term in ["points table", "standings", "rankings", "stats", "numbers", "exact", "leaderboard", "seat tally"]
         )
 
         task_type = "general_fact_finding"
@@ -2898,8 +3697,12 @@ class Executor:
             task_type = "comparison_memo" if comparison_needed else "research_notes_final"
         elif "findings" in sections and "why these sources" in sections:
             task_type = "comparison_memo" if comparison_needed else "technical_update_digest"
+        elif category == "election_results":
+            task_type = "election_results_brief"
         elif category == "sports_standings":
             task_type = "standings_brief"
+        elif category == "sports_results":
+            task_type = "sports_results_brief"
         elif comparison_needed:
             task_type = "comparison_memo"
         elif category == "technical_research":
@@ -2911,7 +3714,7 @@ class Executor:
             "category": category,
             "task_type": task_type,
             "comparison_needed": comparison_needed,
-            "recency_matters": category in {"sports_standings", "breaking_news", "product_company_updates", "technical_research"} or any(
+            "recency_matters": category in {"election_results", "sports_standings", "sports_results", "breaking_news", "product_company_updates", "technical_research"} or any(
                 term in lowered for term in ["latest", "current", "today", "recent", "new"]
             ),
             "exact_structured_data_needed": exact_structured_data_needed,
@@ -2921,6 +3724,7 @@ class Executor:
         classification = self._classify_research_task(query)
         category = classification["category"]
         lowered = (query or "").lower()
+        official_source_requested = self._user_explicitly_requests_official_source(query)
         plan = {
             **classification,
             "source_preferences": ["relevant web search results"],
@@ -2928,9 +3732,23 @@ class Executor:
             "focus": ["claims", "entities", "dates", "numbers", "uncertainties"],
             "domain_bias": [],
             "expected_fields": [],
+            "official_source_requested": official_source_requested,
         }
 
-        if category == "sports_standings":
+        if category == "election_results":
+            plan["source_preferences"] = [
+                "reputable news reports with seat tallies",
+                "official Election Commission result pages",
+                "state election office pages",
+            ]
+            plan["fetch_required"] = True
+            plan["focus"] = ["claims", "entities", "dates", "numbers", "results", "uncertainties"]
+            plan["expected_fields"] = ["winner", "party", "seat_tally", "date_time"]
+            if official_source_requested:
+                plan["domain_bias"] = ["results.eci.gov.in", "eci.gov.in", "ceowestbengal.nic.in"]
+            if official_source_requested and ("bengal" in lowered or "begal" in lowered):
+                plan["target_urls"] = ["https://results.eci.gov.in/"]
+        elif category == "sports_standings":
             plan["source_preferences"] = [
                 "official league table pages",
                 "reputable sports coverage",
@@ -2940,6 +3758,16 @@ class Executor:
             plan["focus"] = ["claims", "entities", "rankings", "numbers", "changes_over_time", "uncertainties"]
             plan["domain_bias"] = ["iplt20.com", "espncricinfo.com", "cricbuzz.com", "sportstar.thehindu.com"]
             plan["expected_fields"] = ["team", "position", "points", "nrr", "ranking_movement"]
+        elif category == "sports_results":
+            plan["source_preferences"] = [
+                "official match results or fixtures pages",
+                "reputable scorecards",
+                "sports schedule pages with match dates and outcomes",
+            ]
+            plan["fetch_required"] = True
+            plan["focus"] = ["claims", "entities", "dates", "numbers", "results", "uncertainties"]
+            plan["domain_bias"] = ["iplt20.com", "espncricinfo.com", "cricbuzz.com", "sportstar.thehindu.com"]
+            plan["expected_fields"] = ["match_count", "date_range", "match_dates", "results"]
         elif category == "breaking_news":
             plan["source_preferences"] = ["recent reporting", "official statements", "high-signal summaries"]
             plan["fetch_required"] = True
@@ -3022,6 +3850,40 @@ class Executor:
             return "relevant_but_unusable_fetch"
         return "fetch_extract_clean"
 
+    def _is_js_portal_extraction_failure(self, query: str, fetch_result: Optional[ToolResult]) -> bool:
+        if not fetch_result:
+            return False
+        output = fetch_result.output if isinstance(fetch_result.output, dict) else {}
+        source_url = str(fetch_result.source_url or output.get("url") or "").strip()
+        profile = self._source_profile_for_url(source_url, query) if source_url else None
+        fetch_failure_kind = str(output.get("fetchFailureKind") or "").strip().lower()
+        return bool(
+            output.get("jsRenderSuspected")
+            or fetch_failure_kind in {"js_render_required", "javascript_required", "extract_failure"}
+            or (
+                profile is not None
+                and profile.renderType == "js-app"
+                and profile.preferredAccessMethod == "search-for-article"
+            )
+        )
+
+    def _determine_research_evidence_state(
+        self,
+        query: str,
+        evidence: List[Dict[str, str]],
+        fetch_result: Optional[ToolResult],
+        search_status: str,
+        fetch_status: str,
+    ) -> ResearchEvidenceState:
+        source_lines = self._build_source_lines(evidence, limit=2)
+        if fetch_status in {"fetch_failed", "relevant_but_unusable_fetch", "interaction_required"}:
+            if self._is_js_portal_extraction_failure(query, fetch_result):
+                return "extraction_failed"
+            return "evidence_thin" if source_lines else "extraction_failed"
+        if source_lines and search_status not in {"missing", "planner_target_only", "direct_route_only"}:
+            return "evidence_found" if fetch_status in {"ok", "fetch_extract_clean"} else "evidence_thin"
+        return "no_results"
+
     def _current_reference_year(self, query: str) -> int:
         explicit_years = re.findall(r"\b(20\d{2})\b", query or "")
         if explicit_years:
@@ -3084,6 +3946,19 @@ class Executor:
             ):
                 text = f"{text} wins losses".strip()
                 text_lower = text.lower()
+        elif plan.get("category") == "sports_results":
+            if "ipl" in user_lower and "ipl" not in text_lower:
+                text = f"IPL {text}".strip()
+                text_lower = text.lower()
+            if not any(token in text_lower for token in ["results", "fixtures", "schedule", "scorecard", "matches played"]):
+                text = f"{text} results fixtures schedule matches played".strip()
+                text_lower = text.lower()
+            if self._query_needs_numeric_current_evidence(user_message) and not any(token in text_lower for token in ["match count", "number of matches", "how many matches"]):
+                text = f"{text} match count".strip()
+                text_lower = text.lower()
+            if any(token in user_lower for token in DATE_RANGE_KEYWORDS) and not any(token in text_lower for token in DATE_RANGE_KEYWORDS):
+                text = f"{text} this week".strip()
+                text_lower = text.lower()
 
         if is_live_query and not year_present:
             text = f"{text} {current_year}".strip()
@@ -3123,13 +3998,16 @@ class Executor:
             patterns = route.get("patterns") or []
             if any(re.search(pattern, lowered) for pattern in patterns):
                 matched = dict(route)
-                current_year = self._current_reference_year(user_message)
-                matched["searchQuery"] = self._enhance_search_query(
-                    "IPL Chennai Super Kings points table",
-                    user_message,
-                    current_year,
-                    {"category": "sports_standings", "recency_matters": True},
-                )
+                if route.get("searchQuery"):
+                    matched["searchQuery"] = str(route.get("searchQuery") or "")
+                else:
+                    current_year = self._current_reference_year(user_message)
+                    matched["searchQuery"] = self._enhance_search_query(
+                        "IPL Chennai Super Kings points table",
+                        user_message,
+                        current_year,
+                        {"category": "sports_standings", "recency_matters": True},
+                    )
                 return matched
         return None
 
@@ -3220,6 +4098,9 @@ class Executor:
 
         cleanup_patterns = [
             r"^search the web for\s+",
+            r"^(?:hello|hi|hey)\s+(?:ji\s+)?(?:please\s+)?search\s+for\s+",
+            r"^(?:hello|hi|hey)\s+(?:ji\s+)?(?:please\s+)?search\s+",
+            r"^(?:please\s+)?search\s+for\s+",
             r"^research the latest\s+",
             r"^research current\s+",
             r"^search the web,\s*",
@@ -3281,6 +4162,19 @@ class Executor:
         text = re.sub(r"\s+", " ", text).strip(" .:-")
 
         lowered_compact = text.lower()
+        text = re.sub(r"\bbegal\b", "Bengal", text, flags=re.IGNORECASE)
+        lowered_compact = text.lower()
+        if plan["category"] == "election_results":
+            year = self._current_reference_year(raw)
+            if "west bengal" not in lowered_compact and "bengal" in lowered_compact:
+                text = re.sub(r"\bbengal\b", "West Bengal", text, count=1, flags=re.IGNORECASE)
+                lowered_compact = text.lower()
+            if not any(token in lowered_compact for token in ["winner", "won", "results", "seat tally"]):
+                text = f"{text} results winner seat tally".strip()
+                lowered_compact = text.lower()
+            if not re.search(r"\b20\d{2}\b", lowered_compact):
+                text = f"{text} {year}".strip()
+                lowered_compact = text.lower()
         if any(token in lowered_compact for token in ["chennai super kings", "csk"]) and any(
             token in raw.lower() for token in ["points-table", "points table", "standings", "rankings", "nrr"]
         ):
@@ -3348,7 +4242,25 @@ class Executor:
         output = search_result.output if isinstance(search_result.output, dict) else {}
         results = output.get("results", []) if isinstance(output, dict) else []
         ranked = self._rank_search_results(query, results)
-        if ranked and ranked[0].get("score", 0) > 0:
+        plan = self._build_research_plan(query)
+        needs_structured_current = bool(plan.get("exact_structured_data_needed")) or self._query_needs_numeric_current_evidence(query)
+        if ranked and ranked[0].get("score", 0) > (8 if needs_structured_current else 0):
+            if needs_structured_current:
+                top_item = ranked[0].get("item") if isinstance(ranked[0], dict) else {}
+                top_haystack = " ".join([
+                    str((top_item or {}).get("title", "")),
+                    str((top_item or {}).get("snippet", "")),
+                    str((top_item or {}).get("full_content", ""))[:400],
+                    str(ranked[0].get("url", "")),
+                ]).lower()
+                if not (
+                    self._text_has_date_signal(top_haystack)
+                    and (
+                        self._text_has_number_signal(top_haystack)
+                        or any(term in top_haystack for term in ["score", "result", "won", "beat", "defeated", "fixtures", "schedule"])
+                    )
+                ):
+                    return False
             return True
         keywords = self._query_keywords(query)
         for item in results:
@@ -3359,6 +4271,11 @@ class Executor:
                 str(item.get("snippet", "")),
                 str(item.get("full_content", ""))[:400],
             ]).lower()
+            if needs_structured_current and not (
+                self._text_has_date_signal(haystack)
+                and (self._text_has_number_signal(haystack) or any(term in haystack for term in ["score", "result", "won", "beat", "defeated"]))
+            ):
+                continue
             if self._content_relevance_score(haystack, keywords) > 0:
                 return True
         return False
@@ -3371,9 +4288,12 @@ class Executor:
         query_lower = (query or "").lower()
         plan = self._build_research_plan(query)
         category = plan["category"]
-        is_cricket_query = category == "sports_standings"
+        explicit_official_source = bool(plan.get("official_source_requested"))
+        is_cricket_query = category in {"sports_standings", "sports_results"}
         is_openai_query = "openai" in query_lower and "api" in query_lower
+        is_election_query = category == "election_results" or any(token in query_lower for token in ["election", "seat tally", "who won", "winner"])
         is_points_table_query = any(token in query_lower for token in ["points table", "points-table", "standings", "rankings", "nrr"])
+        is_sports_results_query = category == "sports_results"
         ranked: List[Dict[str, Any]] = []
         for idx, item in enumerate(results or []):
             if not isinstance(item, dict):
@@ -3381,6 +4301,12 @@ class Executor:
             candidate = str(item.get("url", "")).strip()
             if not candidate or urlparse(candidate).scheme not in ("http", "https"):
                 continue
+
+            source_profile = self._source_profile_for_url(
+                candidate,
+                query,
+                quality_tags=item.get("quality_tags") if isinstance(item.get("quality_tags"), list) else [],
+            )
 
             haystack = " ".join([
                 str(item.get("title", "")),
@@ -3396,6 +4322,12 @@ class Executor:
                 score += 4
             if plan["exact_structured_data_needed"] and any(marker in haystack for marker in ["standings", "points table", "rankings", "table", "leaderboard", "nrr"]):
                 score += 6
+            if is_sports_results_query and any(marker in haystack for marker in ["results", "fixtures", "schedule", "scorecard", "match centre", "match center", "won by", "beat", "defeated"]):
+                score += 10
+            if is_sports_results_query and self._text_has_date_signal(haystack):
+                score += 5
+            if is_sports_results_query and self._text_has_number_signal(haystack):
+                score += 3
             if any(domain in candidate.lower() for domain in ["openai.com", "spacex.com", "iplt20.com"]):
                 score += 6
             if "openai api" in query.lower() and any(domain in candidate.lower() for domain in ["openai.com", "platform.openai.com"]):
@@ -3410,6 +4342,22 @@ class Executor:
                 score += 5
             if category == "breaking_news" and any(marker in haystack for marker in ["breaking", "live", "latest", "reported", "announced"]):
                 score += 4
+            if is_election_query and any(marker in haystack for marker in ["election", "assembly", "result", "results", "winner", "won", "seat tally", "seats"]):
+                score += 8
+            if is_election_query and explicit_official_source and any(domain in candidate.lower() for domain in ["results.eci.gov.in", "eci.gov.in", "ceowestbengal.nic.in"]):
+                score += 6
+            if (
+                is_election_query
+                and not explicit_official_source
+                and source_profile.preferredAccessMethod == "search-for-article"
+            ):
+                score -= 14
+            if (
+                not explicit_official_source
+                and source_profile.renderType == "js-app"
+                and source_profile.extractionReliability == "low"
+            ):
+                score -= 8
             if is_points_table_query and any(marker in haystack for marker in ["points table", "standings", "rankings", "nrr", "net run rate"]):
                 score += 10
             if is_points_table_query and any(marker in haystack for marker in [
@@ -3421,6 +4369,13 @@ class Executor:
                 "team page",
             ]) and not any(marker in haystack for marker in ["points table", "standings", "rankings"]):
                 score -= 10
+            if is_sports_results_query and any(marker in haystack for marker in [
+                "home page",
+                "official website",
+                "latest videos",
+                "news photos videos",
+            ]) and not any(marker in haystack for marker in ["results", "fixtures", "schedule", "scorecard", "won by", "beat"]):
+                score -= 12
             if is_cricket_query and any(marker in haystack for marker in [
                 "openai api",
                 "web search | openai api",
@@ -3443,7 +4398,7 @@ class Executor:
             if any(bad in haystack for bad in ["github", "docs", "reference", "help center"]) and not any(domain in candidate.lower() for domain in ["openai.com", "spacex.com", "iplt20.com"]):
                 score -= 3
             score -= idx
-            ranked.append({"url": candidate, "score": score, "item": item})
+            ranked.append({"url": candidate, "score": score, "item": item, "sourceProfile": source_profile.model_dump()})
         ranked.sort(key=lambda entry: entry["score"], reverse=True)
         return ranked
 
@@ -3587,7 +4542,9 @@ class Executor:
         return self._inject_requested_entities("\n".join(fallback[:bullet_target]), query)
 
     def _normalize_snippet(self, text: str, limit: int = 220) -> str:
-        normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+        normalized = unescape(str(text or ""))
+        normalized = re.sub(r"<[^>]+>", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
         return normalized[:limit].rstrip()
 
     def _normalize_evidence_key(self, text: str) -> str:
@@ -3603,7 +4560,29 @@ class Executor:
         cleaned = re.sub(r"^(currently|in the latest update|latest update:)\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\s+", " ", cleaned).strip(" -:;,.")
         if len(cleaned) > limit:
-            cleaned = cleaned[:limit].rsplit(" ", 1)[0].rstrip(" ,.;:") + "..."
+            sentences = [
+                sentence.strip(" -:;,.")
+                for sentence in re.split(r"(?<=[.!?])\s+", cleaned)
+                if sentence.strip(" -:;,.")
+            ]
+            sentence_candidate = next(
+                (
+                    sentence
+                    for sentence in sentences
+                    if len(sentence) >= max(36, limit // 3)
+                    and len(sentence) <= limit + 40
+                ),
+                "",
+            )
+            if sentence_candidate:
+                cleaned = sentence_candidate
+            else:
+                punctuation_cut = max(cleaned.rfind(marker, 0, limit) for marker in ".!?;:")
+                if punctuation_cut >= int(limit * 0.6):
+                    cleaned = cleaned[: punctuation_cut + 1].rstrip(" ,.;:")
+                else:
+                    trimmed = cleaned[:limit].rsplit(" ", 1)[0].rstrip(" ,.;:")
+                    cleaned = (trimmed or cleaned[:limit].rstrip(" ,.;:")) + "."
         return cleaned
 
     def _is_low_value_claim(self, query: str, text: str) -> bool:
@@ -3810,6 +4789,11 @@ class Executor:
                 score += 2
             if score <= 0:
                 return
+            source_priority = 1
+            if evidence_kind == "structured_record":
+                source_priority = 3
+            elif source_type in {"extract", "fetch"}:
+                source_priority = 2 if fetch_quality == "fetch_extract_clean" else 1
             records.append({
                 "claim": claim,
                 "source_title": source_title,
@@ -3817,6 +4801,7 @@ class Executor:
                 "source_type": source_type,
                 "evidence_kind": evidence_kind or ("search_snippet" if source_type == "search" else "extracted_page"),
                 "score": score,
+                "source_priority": source_priority,
                 "entities": self._extract_entities_from_text(claim),
                 "dates": self._extract_dates_from_text(claim),
                 "numbers": self._extract_numeric_markers(claim),
@@ -3916,6 +4901,11 @@ class Executor:
                 "key": key,
                 "best_claim": record.get("claim", ""),
                 "best_score": record.get("score", 0),
+                "best_rank": (
+                    int(record.get("score", 0)),
+                    int(record.get("source_priority", 0)),
+                    len(str(record.get("claim", "") or "")),
+                ),
                 "claims": [],
                 "sources": set(),
                 "entities": set(),
@@ -3933,8 +4923,14 @@ class Executor:
             cluster["rankings"].update(record.get("rankings") or [])
             cluster["changes"].update(record.get("changes") or [])
             cluster["uncertainties"].update(record.get("uncertainties") or [])
-            if record.get("score", 0) > cluster["best_score"]:
+            candidate_rank = (
+                int(record.get("score", 0)),
+                int(record.get("source_priority", 0)),
+                len(str(record.get("claim", "") or "")),
+            )
+            if candidate_rank > tuple(cluster.get("best_rank") or (0, 0, 0)):
                 cluster["best_score"] = record.get("score", 0)
+                cluster["best_rank"] = candidate_rank
                 cluster["best_claim"] = record.get("claim", "")
 
         finalized: List[Dict[str, Any]] = []
@@ -3954,6 +4950,22 @@ class Executor:
         if claim and claim[0].islower():
             claim = claim[0].upper() + claim[1:]
         return claim or "The available evidence was limited."
+
+    def _grounded_bullets_to_prose(self, bullets: List[str]) -> str:
+        sentences: List[str] = []
+        for bullet in bullets:
+            line = self._normalize_snippet(str(bullet or ""), 600).strip()
+            line = re.sub(r"^\-\s*", "", line).strip()
+            if not line:
+                continue
+            if line.endswith("..."):
+                line = line[:-3].rstrip(" ,.;:") + "."
+            elif not re.search(r"[.!?]$", line):
+                line = line.rstrip(" ,.;:") + "."
+            if line and line[0].islower():
+                line = line[0].upper() + line[1:]
+            sentences.append(line)
+        return " ".join(sentences).strip()
 
     def _evaluate_answerability(
         self,
@@ -4082,6 +5094,24 @@ class Executor:
             else:
                 result["abstain"] = True
                 result["reasons"].append("The standings evidence did not expose enough team/points/NRR/ranking detail to support a true race verdict.")
+        elif category == "sports_results":
+            result_count_present = bool(structured_data.get("match_count")) or _present(usable_records, lambda record: bool(record.get("numbers")))
+            result_date_present = bool(structured_data.get("date_range")) or bool(structured_data.get("match_dates")) or date_present
+            result_outcome_present = bool(structured_data.get("results")) or _present(
+                usable_records,
+                lambda record: any(marker in str(record.get("claim") or "").lower() for marker in ["won", "beat", "defeated", "result", "score", "played"]),
+            )
+            if extraction_gate["mode"] == "ABSTAIN":
+                result["abstain"] = True
+                result["reasons"].append("The extracted pages did not expose dated match-result evidence for the requested count.")
+            elif result_count_present and result_date_present and result_outcome_present and extract_backed_records:
+                result["sufficient"] = True
+            elif result_date_present and (result_count_present or result_outcome_present) and usable_records:
+                result["partial"] = True
+                result["reasons"].append("The evidence supports a partial match-results summary, but not a fully verified count.")
+            else:
+                result["abstain"] = True
+                result["reasons"].append("The sports results evidence did not expose a verifiable date range and match count.")
         elif category == "breaking_news":
             if not fetch_result and (date_present or movement_present) and usable_records:
                 result["partial"] = True
@@ -4321,6 +5351,21 @@ class Executor:
             return 4
         return default
 
+    def _query_requests_bullets(self, query: str) -> bool:
+        lowered = (query or "").lower()
+        if re.search(r"\b(?:no|not|without)\s+bullets?\b", lowered):
+            return False
+        return bool(re.search(r"\b(?:\d+\s+)?bullets?\b", lowered))
+
+    def _query_requests_markdown(self, query: str) -> bool:
+        lowered = (query or "").lower()
+        if re.search(r"\b(?:no|not|without)\s+markdown\b", lowered):
+            return False
+        return "## " in lowered or bool(re.search(r"\bmarkdown\b", lowered))
+
+    def _query_requests_structured_answer(self, query: str) -> bool:
+        return bool(self._detect_requested_sections(query)) or self._query_requests_bullets(query)
+
     def _content_relevance_score(self, text: str, keywords: List[str]) -> int:
         haystack = (text or "").lower()
         score = 0
@@ -4378,6 +5423,120 @@ class Executor:
             elif title:
                 lines.append(f"- {title}")
         return lines
+
+    def _direct_check_sources_for_plan(self, plan: Dict[str, Any]) -> List[str]:
+        category = str(plan.get("category") or "").strip()
+        if category == "election_results":
+            return [
+                "- A dated news report with a seat tally from a source like NDTV, The Hindu, or Times of India.",
+                "- The official Election Commission page if you want to inspect the dashboard directly.",
+            ]
+        if category in {"sports_standings", "sports_results"}:
+            return [
+                "- IPL official match centre or points table: https://www.iplt20.com/matches",
+                "- ESPN Cricinfo IPL fixtures/results: https://www.espncricinfo.com/series/indian-premier-league-2026-1649374/match-schedule-fixtures-and-results",
+                "- Cricbuzz IPL schedule/results: https://www.cricbuzz.com/cricket-series",
+            ]
+        if category in {"technical_research", "product_company_updates"}:
+            return ["- Official changelog or release notes for the product/vendor named in the question."]
+        if category == "breaking_news":
+            return ["- A live news page or official statement for the named event."]
+        return ["- A more specific source URL for the exact data you want verified."]
+
+    def _build_graceful_research_failure(
+        self,
+        query: str,
+        evidence: List[Dict[str, str]],
+        fetch_result: Optional[ToolResult],
+        plan: Dict[str, Any],
+        search_status: str,
+        fetch_status: str,
+        evidence_state: ResearchEvidenceState,
+        reasons: Optional[List[str]] = None,
+    ) -> str:
+        searched_for = self._build_search_query(query, apply_domain_bias=False)
+        found_lines = self._build_source_lines(evidence, limit=2)
+        fetch_line = self._fetch_source_line(fetch_result)
+        if fetch_line and fetch_line not in found_lines:
+            found_lines.insert(0, fetch_line)
+        blocker = next((str(reason).strip() for reason in (reasons or []) if str(reason).strip()), "")
+        if not blocker and evidence_state != "extraction_failed":
+            blocker = "the gathered pages did not expose enough dated, specific evidence to answer reliably"
+        lines = [f"- I searched for: `{searched_for}`."]
+
+        if evidence_state == "extraction_failed":
+            js_portal_failure = self._is_js_portal_extraction_failure(query, fetch_result)
+            lines.append(
+                "- I reached the official results page, but I could not read its content reliably."
+                if js_portal_failure
+                else "- I reached a relevant page, but I could not read its content reliably."
+            )
+            if js_portal_failure:
+                lines.append("- It appears to require JavaScript or returned no usable article text for extraction.")
+            if found_lines:
+                lines.append("- Alternative source signals:")
+                lines.extend(found_lines[:3])
+            lines.append("- Best next check:")
+            lines.append("- I can try alternative news sources instead.")
+            lines.extend(self._direct_check_sources_for_plan(plan)[:1])
+            return "\n".join(lines)
+
+        if evidence_state == "no_results":
+            lines.append("- My search did not return pages with specific enough evidence to answer this question reliably.")
+        else:
+            lines.append(f"- What I found was not enough: {blocker}.")
+            if found_lines:
+                lines.append("- Strongest source signals:")
+                lines.extend(found_lines[:3])
+
+        lines.append("- Best next check:")
+        lines.extend(self._direct_check_sources_for_plan(plan)[:2])
+        return "\n".join(lines)
+
+    def _build_guardian_fallback_answer(
+        self,
+        query: str,
+        review_context: Dict[str, str],
+        feedback: str,
+        research_failure_context: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        context = research_failure_context or {}
+        evidence = context.get("search_evidence") if isinstance(context.get("search_evidence"), list) else []
+        fetch_result = context.get("fetch_result") if isinstance(context.get("fetch_result"), ToolResult) else None
+        plan = context.get("plan") if isinstance(context.get("plan"), dict) else {}
+        search_status = str(context.get("search_status") or "")
+        fetch_status = str(context.get("fetch_status") or "")
+        reasons = [str(item).strip() for item in (context.get("assessment_reasons") or []) if str(item).strip()]
+        evidence_state = context.get("evidence_state")
+        if evidence_state not in {"evidence_found", "evidence_thin", "extraction_failed", "no_results"}:
+            evidence_state = self._determine_research_evidence_state(
+                query,
+                evidence,
+                fetch_result,
+                search_status,
+                fetch_status,
+            )
+
+        has_research_context = bool(evidence or fetch_result or reasons)
+        if has_research_context and not (self._is_provider_outage_status(search_status) and not evidence and fetch_result is None):
+            return self._build_graceful_research_failure(
+                query=query,
+                evidence=evidence,
+                fetch_result=fetch_result,
+                plan=plan or self._build_research_plan(query),
+                search_status=search_status,
+                fetch_status=fetch_status,
+                evidence_state=evidence_state,
+                reasons=reasons,
+            )
+
+        return self._build_rejected_final_answer(
+            query,
+            review_context,
+            feedback,
+            search_status=search_status,
+            fetch_status=fetch_status,
+        )
 
     def _ensure_minimum_bullets(self, bullets: List[str], count: int, fallback_line: str) -> List[str]:
         normalized = [bullet for bullet in bullets if bullet and bullet.strip()]
@@ -4459,6 +5618,20 @@ class Executor:
         structured_data = output.get("structuredData") if isinstance(output.get("structuredData"), dict) else {}
         items = self._page_item_list(output, content, limit=5)
         sections = structured_data.get("sections") if isinstance(structured_data.get("sections"), list) else []
+
+        if output.get("isFallback"):
+            snippet = re.sub(r"\s+", " ", content).strip()[:700]
+            failure_chain = " -> ".join(str(item) for item in (output.get("failureChain") or []) if str(item))
+            reason = f" Attempts: {failure_chain}." if failure_chain else ""
+            if title:
+                return (
+                    "I could not read the requested page directly, so this is a fallback summary rather than a direct page reading."
+                    f"{reason} Search fallback `{title}` says: {snippet}"
+                )
+            return (
+                "I could not read the requested page directly, so this is a fallback summary rather than a direct page reading."
+                f"{reason} Search fallback evidence says: {snippet}"
+            )
 
         if evidence_gate["mode"] == "ABSTAIN":
             return f"I could not read this page well enough to describe it reliably because {evidence_gate.get('reason') or 'the page content was too weak or incomplete'}."
@@ -4855,6 +6028,20 @@ class Executor:
         no_viable_evidence = not evidence
         fetch_failed = fetch_status == "fetch_failed"
         fetch_irrelevant = fetch_status == "fetch_irrelevant"
+        answerability_mode = str((answerability_override or {}).get("mode") or "").strip().lower()
+        assessment_reasons = [
+            str(item) for item in ((assessment_override or {}).get("reasons") or [])
+            if str(item).strip()
+        ]
+        # TODO: Promote evidence_state into the answerability result so rendering does not
+        # need to re-derive formatter state from search/fetch status on this path.
+        evidence_state = self._determine_research_evidence_state(
+            query,
+            evidence,
+            fetch_result,
+            search_status,
+            fetch_status,
+        )
 
         if search_provider_failed and no_viable_evidence:
             if "## research notes" in lowered and "## draft" in lowered and "## final" in lowered:
@@ -4999,6 +6186,18 @@ class Executor:
             why_sources = self._why_source_bullets(query, evidence, fetch_result if relevant_fetch else None)
             return self._section_block("Findings", findings[:max(3, bullet_target)]) + "\n\n" + self._section_block("Why These Sources", why_sources[:2])
 
+        if answerability_mode == "abstain":
+            return self._build_graceful_research_failure(
+                query=query,
+                evidence=evidence,
+                fetch_result=fetch_result,
+                plan=plan,
+                search_status=search_status,
+                fetch_status=fetch_status,
+                evidence_state=evidence_state,
+                reasons=assessment_reasons,
+            )
+
         bullet_count = bullet_target
         bullets = bullets_from_evidence(max(bullet_count, 3))
         bullets = self._ensure_minimum_bullets(
@@ -5008,7 +6207,11 @@ class Executor:
         )
         if "uncertainty" in lowered and len(bullets) < bullet_count + 1:
             bullets.append("- **Uncertainty:** The available evidence may be partial, so some details could not be fully verified.")
-        return "\n".join(bullets) if bullets else "- I could not verify a reliable answer from the gathered evidence."
+        wants_markdown = self._query_requires_markdown_sections(query) or "markdown" in lowered or "bullet" in lowered
+        if wants_markdown:
+            return "\n".join(bullets) if bullets else "- I could not verify a reliable answer from the gathered evidence."
+        prose = self._grounded_bullets_to_prose(bullets)
+        return prose or "I could not verify a reliable answer from the gathered evidence."
 
     def _maybe_force_reasoning_answer(self, query: str) -> Optional[str]:
         lowered = (query or "").lower().strip()
@@ -5116,7 +6319,7 @@ class Executor:
 
     def _query_requires_markdown_sections(self, query: str) -> bool:
         lowered = (query or "").lower()
-        return "## findings" in lowered or "## research notes" in lowered or "markdown" in lowered
+        return "## findings" in lowered or "## research notes" in lowered or self._query_requests_markdown(query)
 
     def _looks_markdownish(self, text: str) -> bool:
         stripped = (text or "").strip()
@@ -5189,6 +6392,9 @@ class Executor:
         lowered = (query or "").lower()
         sections = self._detect_requested_sections(query)
         bullet_target = self._target_bullet_count(query, 3)
+
+        if not self._query_requests_structured_answer(query):
+            return self._inject_requested_entities(normalized, query).strip()
 
         if "## research notes" in lowered and "## draft" in lowered and "## final" in lowered:
             if "## research notes" not in normalized.lower():
@@ -5284,6 +6490,8 @@ class Executor:
                 return {"approved": False, "feedback": "Keep the Findings and Why These Sources sections, with at least 3 finding bullets and 2 source-rationale bullets."}
         else:
             bullet_count = self._target_bullet_count(latest_user_query, 3) if "bullet" in query_lower else 0
+            if not self._query_requests_bullets(latest_user_query):
+                bullet_count = 0
             if bullet_count:
                 bullets = [line for line in text.splitlines() if line.strip().startswith("- ")]
                 if len(bullets) < bullet_count:
@@ -5374,7 +6582,20 @@ class Executor:
 
             if self._should_use_page_read_orchestrator(tool_call):
                 context = self._page_read_context_from_tool_call(tool_call, latest_user_query)
-                tool_result = await PageReadOrchestrator().read(context, tool_call.input if isinstance(tool_call.input, dict) else {})
+
+                async def _orchestrator_execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> ToolResult:
+                    nested_call = ToolCall(tool_name=tool_name, input=tool_input)
+                    return await self._execute_tool_with_confirmation(
+                        session_id,
+                        nested_call,
+                        trace,
+                        knowledge_brain=knowledge_brain,
+                    )
+
+                tool_result = await PageReadOrchestrator(execute_tool=_orchestrator_execute_tool).read(
+                    context,
+                    tool_call.input if isinstance(tool_call.input, dict) else {},
+                )
             else:
                 tool_result = await self._execute_tool_with_confirmation(
                     session_id,
@@ -5579,10 +6800,18 @@ class Executor:
             yield json.dumps({"type": "done"}) + "\n"
 
             if chroma_memory and session_id:
-                for msg in request.messages:
-                    if hasattr(msg, "role"):
-                        chroma_memory.add_message(session_id, msg.role, msg.content)
-                chroma_memory.add_message(session_id, "assistant", final_answer)
+                self._store_turn_recall_memory(
+                    chroma_memory,
+                    session_id,
+                    request.messages,
+                    assistant_content=final_answer,
+                    tool_summaries=[
+                        {
+                            "tool_name": tool_call.tool_name,
+                            "summary": self._summarize_tool_result_for_context(tool_call.tool_name, tool_result),
+                        }
+                    ],
+                )
 
         return _generator()
 
@@ -5735,10 +6964,19 @@ class Executor:
             yield json.dumps({"type": "done"}) + "\n"
 
             if chroma_memory and session_id:
-                for msg in request.messages:
-                    if hasattr(msg, "role"):
-                        chroma_memory.add_message(session_id, msg.role, msg.content)
-                chroma_memory.add_message(session_id, "assistant", final_answer)
+                self._store_turn_recall_memory(
+                    chroma_memory,
+                    session_id,
+                    request.messages,
+                    assistant_content=final_answer,
+                    tool_summaries=[
+                        {
+                            "tool_name": call.tool_name,
+                            "summary": self._summarize_tool_result_for_context(call.tool_name, result),
+                        }
+                        for call, result in tool_calls
+                    ],
+                )
 
         return _generator()
 
@@ -5883,7 +7121,12 @@ class Executor:
                         ]
                     },
                 )
-                if extraction_decision.should_attempt_extract:
+                if extraction_decision.needs_query_broadening:
+                    fetch_status_phase = "search_requery_required"
+                    trace.add_plan_step(
+                        "Candidate pages collapsed to a single low-reliability domain, so the planner requested a broader search before extraction."
+                    )
+                elif extraction_decision.should_attempt_extract:
                     for attempt_plan in attempt_plans:
                         candidate_url = attempt_plan.url
                         if not candidate_url:
@@ -5921,6 +7164,19 @@ class Executor:
 
                         fetch_quality = self._classify_fetch_quality(latest_user_query, attempted_fetch)
                         attempted_output = attempted_fetch.output if isinstance(attempted_fetch.output, dict) else {}
+                        attempted_extraction_summary = self._extract_quality_summary(attempted_fetch)
+                        attempted_evidence_gate = self._extract_evidence_gate(latest_user_query, attempted_fetch)
+                        logger.debug(
+                            "research_extract_diagnostic url=%s content_length_chars=%s passed_quality_gate=%s "
+                            "quality_gate_mode=%s quality_gate_reason=%s tier=%s word_count=%s",
+                            str(attempted_fetch.source_url or attempted_output.get("url") or candidate_url),
+                            len(str(attempted_output.get("content") or "")),
+                            attempted_evidence_gate.get("mode") != "ABSTAIN",
+                            str(attempted_evidence_gate.get("mode") or ""),
+                            str(attempted_evidence_gate.get("reason") or ""),
+                            str(attempted_extraction_summary.get("tier") or ""),
+                            int(attempted_extraction_summary.get("wordCount") or 0),
+                        )
                         if attempted_fetch.error:
                             self._adaptive_fetch_layer.record_extract_failure(
                                 url=candidate_url,
@@ -6044,6 +7300,38 @@ class Executor:
             for event in extraction_events:
                 yield event
 
+            if extraction_decision.needs_query_broadening:
+                broadened_query = self._build_broadened_search_query(
+                    latest_user_query,
+                    extraction_decision.candidate_profiles[0].domain if extraction_decision.candidate_profiles else "",
+                )
+                if broadened_query and broadened_query != selected_search_query:
+                    trace.add_plan_step(
+                        f"Initial extraction candidates were too concentrated on one low-reliability domain, so the planner broadened search to `{broadened_query}`."
+                    )
+                    search_events, broadened_search_result = await execute_search_attempt(broadened_query)
+                    for event in search_events:
+                        yield event
+                    if broadened_search_result is not None:
+                        selected_search_query = broadened_query
+                        search_result = broadened_search_result
+                        search_status = self._search_result_status(search_result)
+                        search_result, pre_evidence_decision = self.research.pre_evidence_filter.run(
+                            selected_search_query,
+                            research_plan,
+                            search_result,
+                        )
+                        research_context.pre_evidence = pre_evidence_decision.model_dump()
+                        self._set_internal_research_stage_metadata(trace, "pre-evidence-filter", pre_evidence_decision)
+                        extraction_decision, fetch_result, fetch_status, extraction_summary, evidence_gate, extraction_events = await execute_extraction_phase(
+                            search_result,
+                            selected_search_query,
+                            search_status,
+                            "Broadened",
+                        )
+                        for event in extraction_events:
+                            yield event
+
             if used_direct_route_only and (fetch_result is None or evidence_gate["mode"] == "ABSTAIN"):
                 trace.add_plan_step(
                     "Direct-route extraction did not yield usable evidence, so the agent fell back to web search for corroborating sources."
@@ -6164,6 +7452,23 @@ class Executor:
                     if confidence_risk.synthesis and str(confidence_risk.synthesis.get("answer") or "").strip()
                     else self._synthesize_tool_answer(latest_user_query, "web_extract", fetch_result)
                 )
+                direct_evidence_state = self._determine_research_evidence_state(
+                    latest_user_query,
+                    self._dedupe_evidence(self._extract_search_evidence(search_result, query=latest_user_query), limit=4),
+                    fetch_result,
+                    search_status,
+                    fetch_status,
+                )
+                research_context.evidence_state = direct_evidence_state
+                direct_research_failure_context = {
+                    "plan": research_plan.model_dump(),
+                    "search_status": search_status,
+                    "fetch_status": fetch_status,
+                    "search_evidence": self._dedupe_evidence(self._extract_search_evidence(search_result, query=latest_user_query), limit=4),
+                    "fetch_result": fetch_result,
+                    "assessment_reasons": [str(evidence_gate.get("reason") or "").strip()] if evidence_gate.get("reason") else [],
+                    "evidence_state": direct_evidence_state,
+                }
                 final_answer, review_events, _guardian = await self._guardian_gate_answer(
                     initial_answer=direct_answer,
                     request=request,
@@ -6184,6 +7489,7 @@ class Executor:
                     session_id=session_id,
                     analyst_mode=confidence_risk.mode,
                     analyst_reason=confidence_risk.reason,
+                    research_failure_context=direct_research_failure_context,
                 )
                 for review_event in review_events:
                     yield json.dumps(review_event) + "\n"
@@ -6267,6 +7573,22 @@ class Executor:
             )
             self._set_internal_research_stage_metadata(trace, "final-writer", draft)
             trace.add_plan_step(f"Final writer produced a {draft.confidence} draft with {len(draft.citations_or_sources)} source line(s).")
+            research_failure_context = {
+                "plan": research_plan.model_dump(),
+                "search_status": search_status,
+                "fetch_status": fetch_status,
+                "search_evidence": self._dedupe_evidence(self._extract_search_evidence(search_result, query=latest_user_query), limit=4),
+                "fetch_result": fetch_result,
+                "assessment_reasons": [str(item) for item in (evidence_assessment.reasons or []) if str(item).strip()],
+                "evidence_state": self._determine_research_evidence_state(
+                    latest_user_query,
+                    self._dedupe_evidence(self._extract_search_evidence(search_result, query=latest_user_query), limit=4),
+                    fetch_result,
+                    search_status,
+                    fetch_status,
+                ),
+            }
+            research_context.evidence_state = research_failure_context["evidence_state"]
 
             final_answer, review_events, _guardian = await self._guardian_gate_answer(
                 initial_answer=draft.markdown,
@@ -6291,6 +7613,7 @@ class Executor:
                 session_id=session_id,
                 analyst_mode=confidence_risk.mode,
                 analyst_reason=confidence_risk.reason,
+                research_failure_context=research_failure_context,
             )
             for review_event in review_events:
                 yield json.dumps(review_event) + "\n"
@@ -6306,10 +7629,26 @@ class Executor:
             )
 
             if chroma_memory and session_id:
-                for msg in request.messages:
-                    if hasattr(msg, "role"):
-                        chroma_memory.add_message(session_id, msg.role, msg.content)
-                chroma_memory.add_message(session_id, "assistant", final_answer)
+                search_tool_summaries = [
+                    {
+                        "tool_name": search_tool_name,
+                        "summary": self._summarize_tool_result_for_context(search_tool_name, search_result),
+                    }
+                ]
+                if fetch_result:
+                    search_tool_summaries.append(
+                        {
+                            "tool_name": "web_extract",
+                            "summary": self._summarize_tool_result_for_context("web_extract", fetch_result),
+                        }
+                    )
+                self._store_turn_recall_memory(
+                    chroma_memory,
+                    session_id,
+                    request.messages,
+                    assistant_content=final_answer,
+                    tool_summaries=search_tool_summaries,
+                )
 
         return _generator()
 
@@ -6367,9 +7706,11 @@ class Executor:
         session_id: str,
         analyst_mode: str,
         analyst_reason: str = "",
+        research_failure_context: Optional[Dict[str, Any]] = None,
     ) -> tuple[str, List[Dict[str, Any]], GuardianVerdict]:
         review_context = self._extract_review_context(messages)
         reviewer_name = request.output_reviewer_id or "local_guardian"
+        turn_id = getattr(request, "turn_id", None) or "no-turn-id"
 
         try:
             preserve_plain_question = (
@@ -6380,6 +7721,12 @@ class Executor:
                 str(initial_answer or "").strip()
                 if preserve_plain_question
                 else self._normalize_web_answer_for_request(initial_answer, latest_user_query)
+            )
+            candidate = self._enforce_conversation_truthfulness(
+                candidate,
+                latest_user_query,
+                request,
+                trace,
             )
             local_review = self._local_review_output(
                 candidate,
@@ -6393,6 +7740,12 @@ class Executor:
                     if preserve_plain_question
                     else self._normalize_web_answer_for_request(revised_seed, latest_user_query)
                 )
+                revised = self._enforce_conversation_truthfulness(
+                    revised,
+                    latest_user_query,
+                    request,
+                    trace,
+                )
                 if revised.strip() != candidate.strip():
                     candidate = revised
                     local_review = self._local_review_output(
@@ -6402,10 +7755,11 @@ class Executor:
                     )
 
             if not local_review.get("approved"):
-                safe_refusal = self._build_rejected_final_answer(
+                safe_refusal = self._build_guardian_fallback_answer(
                     latest_user_query,
                     review_context,
                     str(local_review.get("feedback") or "Guardian rejected the draft because it was not grounded enough."),
+                    research_failure_context,
                 )
                 verdict = self._record_guardian(
                     session_id,
@@ -6418,6 +7772,7 @@ class Executor:
                     reviewer=reviewer_name,
                     answer_preview=safe_refusal,
                 )
+                logger.info("guardian_outcome turn_id=%s session_id=%s reviewer=%s approved=%s", turn_id, session_id, reviewer_name, False)
                 return safe_refusal, [], verdict
 
             review_events: List[Dict[str, Any]] = []
@@ -6431,6 +7786,7 @@ class Executor:
                     trace=trace,
                     messages=messages,
                     latest_user_query=latest_user_query,
+                    research_failure_context=research_failure_context,
                 )
                 last_review_event = review_events[-1] if review_events else {}
                 if last_review_event:
@@ -6438,10 +7794,18 @@ class Executor:
                     external_feedback = str(last_review_event.get("feedback") or "")
                 if not final_answer.strip():
                     externally_approved = False
-                    final_answer = self._build_rejected_final_answer(
+                    final_answer = self._build_guardian_fallback_answer(
                         latest_user_query,
                         review_context,
                         external_feedback or "Guardian reviewer returned an empty revision.",
+                        research_failure_context,
+                    )
+                else:
+                    final_answer = self._enforce_conversation_truthfulness(
+                        final_answer,
+                        latest_user_query,
+                        request,
+                        trace,
                     )
 
             final_mode = analyst_mode if externally_approved else "refused_answer"
@@ -6456,6 +7820,7 @@ class Executor:
                 reviewer=reviewer_name,
                 answer_preview=final_answer,
             )
+            logger.info("guardian_outcome turn_id=%s session_id=%s reviewer=%s approved=%s", turn_id, session_id, reviewer_name, externally_approved)
             return final_answer, review_events, verdict
         except Exception as exc:
             logger.error(f"Guardian gate failed closed: {exc}", exc_info=True)
@@ -6474,6 +7839,7 @@ class Executor:
                 reviewer=reviewer_name,
                 answer_preview=safe_refusal,
             )
+            logger.info("guardian_outcome turn_id=%s session_id=%s reviewer=%s approved=%s", turn_id, session_id, reviewer_name, False)
             return safe_refusal, [], verdict
 
     async def _generate_revision_from_feedback(
@@ -6539,6 +7905,7 @@ class Executor:
         trace: ProvenanceTrace,
         messages: List[Dict[str, Any]],
         latest_user_query: str,
+        research_failure_context: Optional[Dict[str, Any]] = None,
     ) -> tuple[str, List[Dict[str, Any]]]:
         if not request.output_reviewer_id or not initial_answer.strip():
             return initial_answer, []
@@ -6547,8 +7914,8 @@ class Executor:
         events: List[Dict[str, Any]] = []
         review_context = self._extract_review_context(messages)
         max_attempts = 2
-        use_local_review = any(token in (latest_user_query or "").lower() for token in [
-            "search the web", "latest", "current", "fetch", "points-table", "points table", "standings", "openai api", "starship", "ipl"
+        use_local_review = self._should_use_guided_web_research(latest_user_query) or any(token in (latest_user_query or "").lower() for token in [
+            "fetch", "points-table", "points table", "standings", "openai api", "starship", "ipl"
         ])
 
         for attempt in range(1, max_attempts + 1):
@@ -6615,7 +7982,12 @@ class Executor:
 
         final_feedback = events[-1]["feedback"] if events else ""
         if final_feedback:
-            return self._build_rejected_final_answer(latest_user_query, review_context, final_feedback), events
+            return self._build_guardian_fallback_answer(
+                latest_user_query,
+                review_context,
+                final_feedback,
+                research_failure_context,
+            ), events
         return answer, events
 
     def _synthesize_tool_answer(self, query: str, tool_name: str, tool_result: ToolResult) -> str:
@@ -6809,6 +8181,9 @@ class Executor:
         Execute a discrete task run (non-streaming for the caller).
         """
         trace = ProvenanceTrace()
+        cancel_event = self._get_task_cancel_event(request.run_id)
+        heartbeat_stop = asyncio.Event()
+        heartbeat_task = asyncio.create_task(self._task_heartbeat_loop(request.run_id, heartbeat_stop))
         start_time = time.time()
         
         system_prompt = (
@@ -6825,14 +8200,26 @@ class Executor:
             {"role": "user", "content": "Start execution now."}
         ]
         
-        tools_schema = TOOL_REGISTRY.get_schemas()
+        allowed_tool_names = {
+            str(tool_name).strip()
+            for tool_name in (request.definition.toolIds or [])
+            if str(tool_name).strip()
+        }
+        tools_schema = [
+            schema for schema in TOOL_REGISTRY.get_schemas()
+            if not allowed_tool_names or self._tool_schema_name(schema) in allowed_tool_names
+        ]
         accumulated_content = ""
         max_turns = 10
         
         try:
             trace.add_plan_step(f"Starting task execution: {request.definition.name}")
+            self._raise_if_task_cancelled(request.run_id)
+            await self._post_task_heartbeat(request.run_id)
             
             for turn in range(max_turns):
+                self._raise_if_task_cancelled(request.run_id)
+                await self._post_task_heartbeat(request.run_id)
                 logger.info(f"Task {request.run_id} turn {turn}")
                 turn_has_tool_call = False
                 
@@ -6840,6 +8227,7 @@ class Executor:
                     messages,
                     tools=tools_schema if tools_schema else None,
                 ):
+                    self._raise_if_task_cancelled(request.run_id)
                     if isinstance(delta, dict) and delta.get("type") == "tool_call":
                         turn_has_tool_call = True
                         tool_call_data = delta.get("tool_call", {})
@@ -6849,21 +8237,25 @@ class Executor:
                         )
                         
                         trace.add_tool_call(tool_call.tool_name, tool_call.input)
+                        await self._post_task_heartbeat(request.run_id)
                         
                         tool_result = await self._execute_tool_with_confirmation(
                             f"task_{request.run_id}",
                             tool_call,
                             trace,
                             knowledge_brain=None,
+                            allowed_tools=allowed_tool_names or None,
                         )
                         
                         trace.add_tool_result(tool_result, int(tool_result.duration_ms))
+                        await self._post_task_heartbeat(request.run_id)
                         
                         messages.append({
                             "role": "tool",
                             "content": json.dumps(tool_result.model_dump()),
                             "name": tool_call.tool_name,
                         })
+                        self._raise_if_task_cancelled(request.run_id)
                         
                     elif isinstance(delta, str):
                         accumulated_content += delta
@@ -6882,6 +8274,15 @@ class Executor:
                 provenance=trace.to_dict(),
             )
 
+        except asyncio.CancelledError:
+            logger.info(f"Task execution cancelled: {request.run_id}")
+            trace.add_error_step("Task cancelled by user request")
+            return TaskExecutionResult(
+                run_id=request.run_id,
+                status="cancelled",
+                provenance=trace.to_dict(),
+            )
+
         except Exception as e:
             logger.error(f"Task execution error: {e}")
             trace.add_error_step(str(e))
@@ -6891,6 +8292,16 @@ class Executor:
                 error_message=str(e),
                 provenance=trace.to_dict(),
             )
+        finally:
+            heartbeat_stop.set()
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            if cancel_event.is_set():
+                logger.info(f"Clearing cancellation flag for task {request.run_id}")
+            self._task_cancel_events.pop(request.run_id, None)
 
     async def _execute_tool_with_confirmation(
         self,
@@ -6898,6 +8309,8 @@ class Executor:
         tool_call: ToolCall,
         trace: ProvenanceTrace,
         knowledge_brain: Optional[Any] = None,
+        allowed_tools: Optional[set[str]] = None,
+        turn_id: Optional[str] = None,
     ) -> ToolResult:
         """
         Execute a tool, handling confirmation gate if needed.
@@ -6907,6 +8320,15 @@ class Executor:
         tool_input = tool_call.input
 
         try:
+            if allowed_tools is not None and tool_name not in allowed_tools:
+                return ToolResult(
+                    tool_name=tool_name,
+                    input=tool_input,
+                    error="Tool not permitted for this task.",
+                    duration_ms=round((time.time() - start) * 1000, 2),
+                    sandboxed=False,
+                )
+
             tool = TOOL_REGISTRY.get(tool_name)
             permission_mode = self._normalized_permission_mode()
             tool_use_mode = self._normalized_tool_use_mode()
@@ -6918,12 +8340,12 @@ class Executor:
                     session_id,
                     tool_name,
                     tool_input,
-                    lambda: TOOL_REGISTRY.execute_tool(tool_name, tool_input, knowledge_brain=knowledge_brain),
+                    lambda: TOOL_REGISTRY.execute_tool(tool_name, tool_input, knowledge_brain=knowledge_brain, turn_id=turn_id),
                 )
                 return result
 
             # Execute directly
-            return await TOOL_REGISTRY.execute_tool(tool_name, tool_input, knowledge_brain=knowledge_brain)
+            return await TOOL_REGISTRY.execute_tool(tool_name, tool_input, knowledge_brain=knowledge_brain, turn_id=turn_id)
 
         except ToolNotFoundError:
             return ToolResult(

@@ -107,20 +107,41 @@ export default function Provenance() {
     setLoading(true);
     setError(null);
     try {
-      const [sessionRes, proposalRes, runRes] = await Promise.all([
+      const [sessionRes, proposalRes, runRes] = await Promise.allSettled([
         api.get<SessionRecord[]>('/chat/sessions'),
         api.get<ImprovementProposal[]>('/self-improvement/proposals'),
         api.get<TaskRun[]>('/tasks/runs/recent'),
       ]);
-      const nextSessions = sessionRes.data || [];
+
+      const nextSessions = sessionRes.status === 'fulfilled' ? (sessionRes.value.data || []) : [];
+      const nextProposals = proposalRes.status === 'fulfilled' ? (proposalRes.value.data || []) : [];
+      const nextRuns = runRes.status === 'fulfilled' ? (runRes.value.data || []) : [];
+
       setSessions(nextSessions);
-      setProposals(proposalRes.data || []);
-      setRuns(runRes.data || []);
+      setProposals(nextProposals);
+      setRuns(nextRuns);
 
       if (!selectedSessionId && nextSessions.length) {
         const first = nextSessions[0];
         setSelectedSessionId(first.id);
         setSelectedTurnId(latestAssistant(first)?.id || null);
+      }
+
+      const failedSources = [
+        sessionRes.status === 'rejected' ? 'sessions' : null,
+        proposalRes.status === 'rejected' ? 'proposals' : null,
+        runRes.status === 'rejected' ? 'runs' : null,
+      ].filter(Boolean);
+
+      if (failedSources.length === 3) {
+        setError('Unable to load operator control room data right now.');
+      } else if (failedSources.length > 0) {
+        console.warn('Control room partially degraded', {
+          sessions: sessionRes.status,
+          proposals: proposalRes.status,
+          runs: runRes.status,
+        });
+        setError('Some operator control room data is unavailable right now.');
       }
     } catch (loadError) {
       console.error('Failed to load control room data', loadError);

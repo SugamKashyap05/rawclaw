@@ -6,14 +6,22 @@ import { DocsService } from './docs.service';
 import { AgentsService } from './agents.service';
 import { ModelsService } from './models.service';
 import {
+  AssistantConfidenceState,
   ChatControlState,
   ChatRequest,
   ChatMessage,
   AssistantLane,
+  ConversationSafetySignal,
   GatewayRoutingContext,
   ChatNluAvailableTool,
   ChatNluFrame,
   ChatContextBudget,
+  ChatStreamChunk,
+  ChatStreamChunkType,
+  SessionPipelineMode,
+  TransformStageTiming,
+  RetrievalPolicy,
+  makeTurnTrace,
 } from '@rawclaw/shared';
 import type { Response } from 'express';
 import { firstValueFrom } from 'rxjs';
@@ -32,6 +40,11 @@ import { randomUUID } from 'crypto';
 import { GatewayRoutingService } from './gateway-routing.service';
 import { GatewayControlPlaneService } from './gateway-control-plane.service';
 import { ChatNluService } from './chat-nlu.service';
+import { ChatTransformerService } from './chat-transformer.service';
+import { EmissionTransformerService } from './emission-transformer.service';
+import { IntakeTransformerService } from './intake-transformer.service';
+import { PersistenceTransformerService } from './persistence-transformer.service';
+import { ContextTransformerService } from './context-transformer.service';
 
 type NonStreamingChatResult = {
   content: string;
@@ -46,6 +59,79 @@ type NonStreamingChatResult = {
     details?: unknown;
   } | null;
 };
+
+const RESEARCH_ROUTING_MARKERS = [
+  'web',
+  'search',
+  'search for',
+  'fetch',
+  'latest',
+  'current',
+  'news',
+  'summary',
+  'summarize',
+  'standings',
+  'points table',
+  'memo',
+  'brief',
+  'who won',
+  'winner',
+  'winners',
+  'results',
+  'seat tally',
+  'election result',
+  'election results',
+  'how much seats',
+  'how many seats',
+];
+
+const SIMPLE_CONVERSATION_MARKERS = [
+  'hello',
+  'hi',
+  'hii',
+  'hey',
+  'howdy',
+  'greetings',
+  'good morning',
+  'good evening',
+  'good afternoon',
+  'sup',
+  'yo',
+  "what's up",
+  'how are you',
+  'can you hear me',
+  'are you there',
+  'thanks',
+  'thank you',
+  'bye',
+  'goodbye',
+];
+
+const MEMORY_QUERY_MARKERS = [
+  'summarize memory',
+  'summarise memory',
+  'memory summary',
+  'summarize what you remember',
+  'summarise what you remember',
+  'summarize our memory',
+  'summarise our memory',
+];
+
+const EXTERNAL_RETRIEVAL_TOOL_NAMES = new Set([
+  'skill_grounded-web-summary',
+  'web_search',
+  'duckduckgo_search',
+  'smart_search',
+  'iask-search',
+  'web-search',
+  'google:search',
+  'web_extract',
+  'web_fetch',
+  'fetch_url',
+  'browser_fetch',
+  'browser_open',
+  'browser_navigate',
+]);
 
 class MemoryResponseCollector {
   public writableEnded = false;
@@ -118,6 +204,11 @@ export class ChatOrchestratorService {
     private readonly gatewayRoutingService: GatewayRoutingService,
     private readonly gatewayControlPlane: GatewayControlPlaneService,
     private readonly chatNluService: ChatNluService,
+    private readonly chatTransformerService: ChatTransformerService,
+    private readonly emissionTransformerService: EmissionTransformerService,
+    private readonly intakeTransformerService: IntakeTransformerService,
+    private readonly persistenceTransformerService: PersistenceTransformerService,
+    private readonly contextTransformerService: ContextTransformerService,
   ) {}
 
   private readonly MAX_TOTAL_PROMPT_CHARS = 180000;
@@ -454,7 +545,7 @@ export class ChatOrchestratorService {
 
     if (
       skills.some((skill) => skill.name === 'grounded-web-summary') &&
-      ['web', 'search', 'fetch', 'latest', 'summar', 'ground', 'official page'].some((needle) => lower.includes(needle))
+      this.hasResearchRoutingSignal(lower)
     ) {
       chosen.add('grounded-web-summary');
     }
@@ -486,6 +577,7 @@ export class ChatOrchestratorService {
     chatControls?: ChatControlState,
     selectedAgent?: { skills?: string[] } | null,
     nluFrame?: ChatNluFrame | null,
+    retrievalPolicy: RetrievalPolicy = { web: 'allowed', memory: 'allowed' },
   ): any[] | undefined {
     if (!toolsSchema?.length) {
       return toolsSchema;
@@ -506,10 +598,13 @@ export class ChatOrchestratorService {
         .map((entity) => entity.value),
     );
     const applyNluBoosts = Boolean(nluFrame && nluFrame.intent !== 'conversation');
+    const hasResearchSignal = this.hasResearchRoutingSignal(lower, nluFrame);
+    const blockExternalRetrieval = retrievalPolicy.web === 'forbidden';
 
-    const candidateTools = limitedToExplicitTools
+    const candidateTools = (limitedToExplicitTools
       ? toolsSchema.filter((tool) => explicitTools.has(String(tool?.function?.name || '')))
-      : toolsSchema;
+      : toolsSchema)
+      .filter((tool) => !blockExternalRetrieval || !this.isExternalRetrievalToolName(String(tool?.function?.name || '')));
 
     const scored = candidateTools
       .filter((tool) => tool?.function?.name)
@@ -526,10 +621,10 @@ export class ChatOrchestratorService {
 
         if (selectedSkillTools.has(name)) score += 100;
         if (explicitTools.has(name)) score += 160;
-        if (name === 'skill_grounded-web-summary' && ['web', 'search', 'fetch', 'latest', 'current', 'news', 'summary', 'summarize', 'standings', 'points table', 'memo', 'brief'].some((q) => lower.includes(q))) score += 95;
+        if (name === 'skill_grounded-web-summary' && hasResearchSignal) score += 95;
         if (name === 'skill_repo-explainer' && ['repo', 'repository', 'codebase', 'workspace', 'module', 'walkthrough', 'structure'].some((q) => lower.includes(q))) score += 95;
-        if (isSearch && ['search', 'latest', 'current', 'news', 'updates', 'web', 'research', 'standings', 'points table', 'openai', 'spacex', 'ipl'].some((q) => lower.includes(q))) score += 80;
-        if (isFetch && ['fetch', 'open', 'url', 'browse', 'page', 'official', 'source', 'compare', 'memo', 'brief'].some((q) => lower.includes(q))) score += 70;
+        if (isSearch && (hasResearchSignal || ['updates', 'research', 'openai', 'spacex', 'ipl'].some((q) => lower.includes(q)))) score += 80;
+        if (isFetch && (hasResearchSignal || ['open', 'url', 'browse', 'page', 'official', 'source', 'compare'].some((q) => lower.includes(q)))) score += 70;
         if (preferredWebMode === 'search' && isSearch) score += 180;
         if (preferredWebMode === 'read_page' && isFetch) score += 180;
         if (preferredWebMode === 'browser' && ['browser_fetch', 'browser_open', 'browser_navigate'].includes(name)) score += 220;
@@ -559,7 +654,7 @@ export class ChatOrchestratorService {
 
     const chosen = new Set<string>();
     for (const entry of scored) {
-      if (entry.score <= 0 && chosen.size >= 6) {
+      if (entry.score <= 0) {
         continue;
       }
       chosen.add(entry.name);
@@ -569,22 +664,165 @@ export class ChatOrchestratorService {
     }
 
     if (!chosen.size) {
-      return candidateTools.slice(0, this.MAX_TOOLS_PER_REQUEST);
+      if (limitedToExplicitTools) {
+        return candidateTools.slice(0, this.MAX_TOOLS_PER_REQUEST);
+      }
+      return [];
     }
 
     return candidateTools.filter((tool) => chosen.has(tool?.function?.name)).slice(0, this.MAX_TOOLS_PER_REQUEST);
   }
 
-  private tryExtractTaskDescription(text: string): { name: string; description: string; schedule?: string } | null {
+  private hasResearchRoutingSignal(lower: string, nluFrame?: ChatNluFrame | null): boolean {
+    if (this.isMemorySummaryRequest(lower) || nluFrame?.intent === 'memory_query') {
+      return false;
+    }
+    return RESEARCH_ROUTING_MARKERS.some((needle) => lower.includes(needle));
+  }
+
+  private shouldBlockExternalRetrievalForTurn(requestText: string, nluFrame?: ChatNluFrame | null): boolean {
+    const lower = (requestText || '').toLowerCase().trim();
+    if (!lower) {
+      return false;
+    }
+
+    if (this.isMemorySummaryRequest(lower) || nluFrame?.intent === 'memory_query') {
+      return true;
+    }
+
+    if (/https?:\/\//i.test(requestText)) {
+      return false;
+    }
+
+    if (this.hasResearchRoutingSignal(lower, nluFrame)) {
+      return false;
+    }
+
+    if (this.isSimpleConversationTurn(lower)) {
+      return true;
+    }
+
+    return (
+      nluFrame?.intent === 'conversation'
+      || (nluFrame?.recommendedLane === 'conversation' && nluFrame?.confidenceState === 'direct')
+    );
+  }
+
+  private isSimpleConversationTurn(lower: string): boolean {
+    const compact = lower.trim().replace(/[!?.]+$/g, '');
+    if (!compact) {
+      return false;
+    }
+    const isGreeting = SIMPLE_CONVERSATION_MARKERS.some((marker) => compact === marker || compact.startsWith(`${marker} `));
+    if (!isGreeting) {
+      return false;
+    }
+    if (/https?:\/\//i.test(compact)) {
+      return false;
+    }
+    return !this.hasResearchRoutingSignal(compact) && compact.split(/\s+/).length <= 5;
+  }
+
+  private isMemorySummaryRequest(lower: string): boolean {
+    return MEMORY_QUERY_MARKERS.some((marker) => lower.includes(marker));
+  }
+
+  private isExternalRetrievalToolName(name: string): boolean {
+    return EXTERNAL_RETRIEVAL_TOOL_NAMES.has(name.toLowerCase());
+  }
+
+  private detectConversationSafetySignal(context: {
+    content: string;
+    toolResults: Array<{ tool_name?: string | null }>;
+    assistantLane?: AssistantLane | null;
+    nluFrame?: ChatNluFrame | null;
+    memoryEvents?: Array<{ action?: string | null }>;
+  }): ConversationSafetySignal | null {
+    const conversationalTurn =
+      context.assistantLane === 'conversation'
+      || context.nluFrame?.intent === 'conversation';
+    if (!conversationalTurn) {
+      return null;
+    }
+
+    const reasons: ConversationSafetySignal['reasons'] = [];
+    if ((context.toolResults || []).some((result) => this.isExternalRetrievalToolName(String(result?.tool_name || '')))) {
+      reasons.push('external_retrieval_on_direct_turn');
+    }
+    const memoryRecalled = Boolean((context.memoryEvents || []).some((event) => event.action === 'recalled'));
+    if (!memoryRecalled && /\b(?:according to|from|in|mentioned in)\s+(?:my|the)\s+(?:records|memory)\b/i.test(context.content || '')) {
+      reasons.push('memory_claim_without_recall');
+    }
+
+    if (!reasons.length) {
+      return null;
+    }
+
+    return {
+      confabulatedMemoryCandidate: true,
+      reasons,
+    };
+  }
+
+  private normalizeChatTaskSchedule(rawDescription: string): { description: string; schedule?: string; manualOnlyFallback: boolean } {
+    const compact = rawDescription.replace(/\s+/g, ' ').trim();
+    const lower = compact.toLowerCase();
+    const presets: Array<{ phrase: string; cron: string }> = [
+      { phrase: 'hourly', cron: '0 * * * *' },
+      { phrase: 'every 6 hours', cron: '0 */6 * * *' },
+      { phrase: 'daily at 9 am', cron: '0 9 * * *' },
+      { phrase: 'weekdays at 9 am', cron: '0 9 * * 1-5' },
+    ];
+
+    for (const preset of presets) {
+      if (lower.includes(preset.phrase)) {
+        const cleaned = compact.replace(new RegExp(`\\b${preset.phrase.replace(/\s+/g, '\\s+')}\\b`, 'i'), '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .replace(/^(to\s+)/i, '');
+        return {
+          description: cleaned || compact,
+          schedule: preset.cron,
+          manualOnlyFallback: false,
+        };
+      }
+    }
+
+    const cronMatch = compact.match(/((?:\S+\s+){4}\S+)/);
+    if (cronMatch?.[1]) {
+      const cleaned = compact.replace(cronMatch[1], '').replace(/\s+/g, ' ').trim().replace(/^(to\s+)/i, '');
+      return {
+        description: cleaned || compact,
+        schedule: cronMatch[1].trim(),
+        manualOnlyFallback: false,
+      };
+    }
+
+    if (/\btomorrow\b/i.test(compact)) {
+      const cleaned = compact.replace(/\btomorrow\b/i, '').replace(/\s+/g, ' ').trim().replace(/^(to\s+)/i, '');
+      return {
+        description: cleaned || compact,
+        schedule: undefined,
+        manualOnlyFallback: true,
+      };
+    }
+
+    return {
+      description: compact.replace(/^(to\s+)/i, ''),
+      schedule: undefined,
+      manualOnlyFallback: false,
+    };
+  }
+
+  private tryExtractTaskDescription(text: string): { name: string; description: string; schedule?: string; manualOnlyFallback: boolean } | null {
     const namedMatch = text.match(/create\s+a\s+task\s+named\s+['"]([^'"]+)['"]\s+to\s+(.+?)(?:\.|$)/i);
     if (namedMatch?.[1] && namedMatch?.[2]) {
-      const rawDescription = namedMatch[2].trim();
-      const schedule = /\btomorrow\b/i.test(rawDescription) ? 'tomorrow' : undefined;
-      const description = rawDescription.replace(/\btomorrow\b/i, '').replace(/\s+/g, ' ').trim().replace(/\s+$/, '');
+      const normalized = this.normalizeChatTaskSchedule(namedMatch[2].trim());
       return {
         name: namedMatch[1].trim(),
-        description: description || rawDescription,
-        schedule,
+        description: normalized.description,
+        schedule: normalized.schedule,
+        manualOnlyFallback: normalized.manualOnlyFallback,
       };
     }
     return null;
@@ -611,6 +849,7 @@ export class ChatOrchestratorService {
       advisoryEvents?: Array<{ category: 'next_step' | 'follow_up' | 'reminder' | 'blocker' | 'briefing'; summary: string; actionState: 'suggested' | 'queued' | 'executed' }>;
       nluFrame?: ChatNluFrame | null;
       contextBudget?: ChatContextBudget | null;
+      retrievalPolicy?: RetrievalPolicy | null;
     },
   ): Promise<boolean> {
     const lower = (latestUserContent || '').toLowerCase();
@@ -662,6 +901,7 @@ export class ChatOrchestratorService {
           confidenceState: 'direct',
           nlu: context?.nluFrame || undefined,
           contextBudget: context?.contextBudget ?? null,
+          retrievalPolicy: context?.retrievalPolicy ?? null,
         },
       });
     };
@@ -673,8 +913,8 @@ export class ChatOrchestratorService {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
-      res.write(`data: ${JSON.stringify({ type: 'content', content: directIdentityResponse })}\n\n`);
-      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      this.writeClientSseEvent(res, { type: 'content', content: directIdentityResponse });
+      this.writeClientSseEvent(res, { type: 'done' });
       res.end();
       return true;
     }
@@ -686,8 +926,8 @@ export class ChatOrchestratorService {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
-      res.write(`data: ${JSON.stringify({ type: 'content', content: directEditSuggestion })}\n\n`);
-      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      this.writeClientSseEvent(res, { type: 'content', content: directEditSuggestion });
+      this.writeClientSseEvent(res, { type: 'done' });
       res.end();
       return true;
     }
@@ -720,8 +960,8 @@ export class ChatOrchestratorService {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache, no-transform');
         res.setHeader('Connection', 'keep-alive');
-        res.write(`data: ${JSON.stringify({ type: 'tool_call', tool_call: { name: 'read_file', arguments: { path: 'README.md' } } })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'tool_result', tool_result: {
+        this.writeClientSseEvent(res, { type: 'tool_call', tool_call: { name: 'read_file', arguments: { path: 'README.md' } } });
+        this.writeClientSseEvent(res, { type: 'tool_result', tool_result: {
           tool_name: 'read_file',
           input: { path: 'README.md' },
           output: {
@@ -735,9 +975,9 @@ export class ChatOrchestratorService {
           is_truncated: false,
           source_url: null,
           provenance_hint: null,
-        } })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+        } });
+        this.writeClientSseEvent(res, { type: 'content', content });
+        this.writeClientSseEvent(res, { type: 'done' });
         res.end();
         return true;
       }
@@ -771,8 +1011,8 @@ export class ChatOrchestratorService {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache, no-transform');
         res.setHeader('Connection', 'keep-alive');
-        res.write(`data: ${JSON.stringify({ type: 'tool_call', tool_call: { name: 'skill_repo-explainer', arguments: { task: latestUserContent } } })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'tool_result', tool_result: {
+        this.writeClientSseEvent(res, { type: 'tool_call', tool_call: { name: 'skill_repo-explainer', arguments: { task: latestUserContent } } });
+        this.writeClientSseEvent(res, { type: 'tool_result', tool_result: {
           tool_name: 'skill_repo-explainer',
           input: { task: latestUserContent },
           output: {
@@ -786,9 +1026,9 @@ export class ChatOrchestratorService {
           is_truncated: false,
           source_url: null,
           provenance_hint: null,
-        } })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
-        res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+        } });
+        this.writeClientSseEvent(res, { type: 'content', content });
+        this.writeClientSseEvent(res, { type: 'done' });
         res.end();
         return true;
       }
@@ -801,8 +1041,8 @@ export class ChatOrchestratorService {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
-      res.write(`data: ${JSON.stringify({ type: 'content', content: directPhraseSummary })}\n\n`);
-      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      this.writeClientSseEvent(res, { type: 'content', content: directPhraseSummary });
+      this.writeClientSseEvent(res, { type: 'done' });
       res.end();
       return true;
     }
@@ -821,15 +1061,19 @@ export class ChatOrchestratorService {
         toolIds: [],
       });
 
+      const directTaskMessage = parsed.manualOnlyFallback
+        ? `I created the task '${task.name}' to ${parsed.description} without a schedule.`
+        : `I created the task '${task.name}' to ${parsed.description}${parsed.schedule ? ` (${parsed.schedule})` : ''}.`;
+
       await persistDirectAssistantMessage(
-        `I created the task '${task.name}' to ${parsed.description}${parsed.schedule ? ` (${parsed.schedule})` : ''}.`,
+        directTaskMessage,
       );
 
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
-      res.write(`data: ${JSON.stringify({ type: 'content', content: `I created the task '${task.name}' to ${parsed.description}${parsed.schedule ? ` (${parsed.schedule})` : ''}.` })}\n\n`);
-      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      this.writeClientSseEvent(res, { type: 'content', content: directTaskMessage });
+      this.writeClientSseEvent(res, { type: 'done' });
       res.end();
       return true;
     }
@@ -863,8 +1107,8 @@ export class ChatOrchestratorService {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
-      res.write(`data: ${JSON.stringify({ type: 'content', content })}\n\n`);
-      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      this.writeClientSseEvent(res, { type: 'content', content });
+      this.writeClientSseEvent(res, { type: 'done' });
       res.end();
       return true;
     }
@@ -996,8 +1240,41 @@ export class ChatOrchestratorService {
     const agentUrl = this.configService.get<string>('agentUrl');
     const systemContext = await this.docsService.getSystemContext();
     const latestUserMessage = (request.messages || []).filter(m => m.role === 'user').slice(-1)[0];
-    const latestUserContent = latestUserMessage?.content || '';
+    let latestUserContent = latestUserMessage?.content || '';
+    const correlationId = request.correlationId || request.correlation_id || `rc-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    request.correlationId = correlationId;
+    request.correlation_id = correlationId;
+    const requestAcceptedAt = Date.now();
+    const turnTrace = makeTurnTrace(request.session_id);
+    request.turn_id = turnTrace.turn_id;
     let assistantLane = this.promptCatalog.resolveAssistantLane(latestUserContent);
+    const initialIntake = this.intakeTransformerService.transform({
+      latestUserContent,
+      attachments: latestUserMessage?.attachments || [],
+      selection: request.selection || latestUserMessage?.selection || null,
+      nluFrame: null,
+    });
+    if (!initialIntake.ok) {
+      if (!res.writableEnded) {
+        res.status(400).json({
+          error: 'Invalid chat input',
+          code: initialIntake.error.code,
+          message: initialIntake.error.userFacingMessage,
+        });
+      }
+      return;
+    }
+    latestUserContent = initialIntake.normalized.latestUserContent;
+    if (latestUserMessage) {
+      latestUserMessage.content = initialIntake.normalized.latestUserContent;
+      latestUserMessage.attachments = initialIntake.normalized.attachments;
+      if (initialIntake.normalized.selection) {
+        latestUserMessage.selection = initialIntake.normalized.selection;
+      }
+    }
+    if (request.selection && initialIntake.normalized.selection) {
+      request.selection = initialIntake.normalized.selection;
+    }
     const assistantState = await this.assistantService.getState();
     let assistantStateText = this.assistantService.formatStateForPrompt(assistantState);
     const promptedAgent = !request.agent_id ? await this.maybeResolveAgentFromPrompt(latestUserContent) : null;
@@ -1030,6 +1307,7 @@ export class ChatOrchestratorService {
     request.surfaceType = resolvedBinding.binding.surfaceType;
     request.threadKey = resolvedBinding.binding.threadKey || undefined;
     request.channelKey = resolvedBinding.binding.channelKey || undefined;
+    turnTrace.session_id = request.session_id;
 
     if (!selectedAgent || selectedAgent.id !== (request.agent_id || 'main')) {
       selectedAgent = await this.agentsService.getOptional(request.agent_id);
@@ -1038,6 +1316,17 @@ export class ChatOrchestratorService {
 
     const sessionSnapshot = await this.chatService.getSession(request.session_id);
     const { settings, workspaceFiles } = await this.settingsService.getPayload();
+    const transformerEnabledByDefault = this.chatTransformerService.isEnabledByFlag();
+    const sessionPipelineMode = await this.chatService.resolveSessionPipelineMode(
+      request.session_id,
+      transformerEnabledByDefault,
+    );
+    let effectivePipelineMode: SessionPipelineMode = sessionPipelineMode;
+    let transformerFallbackReason: string | null = null;
+    const apiStageTimings: TransformStageTiming[] = [];
+    let agentStageTimings: TransformStageTiming[] = [];
+    let firstNonHeartbeatEventLatencyMs: number | undefined;
+    let executionIntent: any = null;
     const effectiveChatControls = this.mergeChatControls(
       settings.chatDefaults,
       sessionSnapshot?.chatControls,
@@ -1051,8 +1340,36 @@ export class ChatOrchestratorService {
     request.selectedPlugins = effectiveChatControls.selectedPlugins;
     request.selectedTools = effectiveChatControls.selectedTools;
 
+    if (effectivePipelineMode === 'transform_v1') {
+      try {
+        const stageStart = Date.now();
+        this.chatTransformerService.buildHumanTurnEnvelope({
+          sessionId: request.session_id,
+          workspaceId: request.workspace_id || null,
+          senderIdentifier: request.sender_identifier || null,
+          pipelineMode: effectivePipelineMode,
+          latestUserContent,
+          attachments: latestUserMessage?.attachments || [],
+          selection: request.selection || latestUserMessage?.selection || null,
+          chatControls: effectiveChatControls,
+          selectedAgentId: effectiveSelectedAgent?.id || request.agent_id || null,
+          selectedAgentName: effectiveSelectedAgent?.name || null,
+          selectedModel: request.model || selectedAgent?.modelId || null,
+          requestMessageCount: (request.messages || []).length,
+        });
+        apiStageTimings.push(
+          this.chatTransformerService.buildStageTiming('input_transform', 'api', Date.now() - stageStart),
+        );
+      } catch (error: any) {
+        transformerFallbackReason = transformerFallbackReason || 'input_transform_failed';
+        effectivePipelineMode = 'legacy';
+        this.logger.warn(`Transformer input stage failed, falling back to legacy for this turn: ${error?.message || String(error)}`);
+      }
+    }
+
     let nluFrame: ChatNluFrame | null = null;
     let contextBudget: ChatContextBudget | null = null;
+    let retrievalPolicy: RetrievalPolicy = { web: 'allowed', memory: 'allowed' };
     let preTurnSignals: Awaited<ReturnType<AssistantService['ingestUserTurn']>> = { memoryEvents: [], advisoryEvents: [] };
 
       const gatewayRunId = randomUUID();
@@ -1080,6 +1397,9 @@ export class ChatOrchestratorService {
           preferredWebMode: request.preferredWebMode || 'auto',
           toolUseMode: request.toolUseMode || 'auto',
           permissionMode: request.permissionMode || 'workspace_default',
+          correlationId,
+          turn_id: turnTrace.turn_id,
+          request_ts: turnTrace.request_ts,
         },
       });
       await this.gatewayRoutingService.markRunStarted(resolvedBinding.binding.id, gatewayRunId);
@@ -1207,10 +1527,29 @@ export class ChatOrchestratorService {
       if (nluFrame?.recommendedLane) {
         assistantLane = nluFrame.recommendedLane;
       }
+      if (effectivePipelineMode === 'transform_v1') {
+        try {
+          const stageStart = Date.now();
+          this.chatTransformerService.buildCanonicalIntentFrame(nluFrame, latestUserContent);
+          apiStageTimings.push(
+            this.chatTransformerService.buildStageTiming('intent_transform', 'api', Date.now() - stageStart),
+          );
+        } catch (error: any) {
+          transformerFallbackReason = transformerFallbackReason || 'intent_transform_failed';
+          effectivePipelineMode = 'legacy';
+          this.logger.warn(`Transformer intent stage failed, falling back to legacy for this turn: ${error?.message || String(error)}`);
+        }
+      }
     } catch (e: any) {
       this.logger.warn(`Chat NLU analysis failed; continuing with legacy routing: ${e?.message || String(e)}`);
       nluFrame = null;
+      if (effectivePipelineMode === 'transform_v1') {
+        transformerFallbackReason = transformerFallbackReason || 'intent_transform_failed';
+        effectivePipelineMode = 'legacy';
+      }
     }
+
+    retrievalPolicy = this.intakeTransformerService.deriveRetrievalPolicy(latestUserContent, nluFrame);
 
     preTurnSignals = latestUserContent
       ? await this.assistantService.ingestUserTurn(request.session_id, latestUserContent, nluFrame)
@@ -1229,11 +1568,27 @@ export class ChatOrchestratorService {
     }
 
     if (toolsSchema?.length) {
-      toolsSchema = this.selectRelevantTools(latestUserContent, toolsSchema, effectiveChatControls, effectiveSelectedAgent, nluFrame);
+      toolsSchema = this.selectRelevantTools(latestUserContent, toolsSchema, effectiveChatControls, effectiveSelectedAgent, nluFrame, retrievalPolicy);
       const allowedToolNames = new Set((toolsSchema || []).map((tool: any) => tool?.function?.name).filter(Boolean));
       availableSkills = availableSkills.filter((skill) => allowedToolNames.has(`skill_${skill.name}`));
+      if (
+        assistantLane !== 'research' &&
+        allowedToolNames.has('skill_grounded-web-summary') &&
+        this.hasResearchRoutingSignal(latestUserContent.toLowerCase(), nluFrame) &&
+        retrievalPolicy.web !== 'forbidden'
+      ) {
+        assistantLane = 'research';
+      }
       this.logger.log(`[TOOL_TRACE] Converted to OpenAI format, passing ${toolsSchema?.length || 0} filtered tools to agent`);
     }
+
+    turnTrace.model_requested = request.model || selectedAgent?.modelId || undefined;
+    turnTrace.tools_selected = toolsSchema?.length || 0;
+    turnTrace.research_mode = assistantLane === 'research';
+    this.logger.log(JSON.stringify({
+      event: 'turn_started',
+      ...turnTrace,
+    }));
 
     const toolGuidance = this.buildToolGuidance(toolsSchema);
     const skillGuidance = this.buildSkillGuidance(availableSkills, effectiveSelectedAgent);
@@ -1265,6 +1620,42 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       assistantLane,
       nluFrame,
     });
+
+    if (effectivePipelineMode === 'transform_v1') {
+      try {
+        const stageStart = Date.now();
+        executionIntent = this.chatTransformerService.buildExecutionIntent({
+          lane: assistantLane,
+          latestUserContent,
+          reviewEnabled: !!request.output_reviewer_id,
+          promptPackId: composedPrompt.provenance.promptPackId,
+          selectedAgentId: effectiveSelectedAgent?.id || request.agent_id || null,
+          selectedModel: request.model || selectedAgent?.modelId || null,
+          toolsSchema,
+          retrievalPolicy,
+        });
+        apiStageTimings.push(
+          this.chatTransformerService.buildStageTiming('execution_transform', 'api', Date.now() - stageStart),
+        );
+      } catch (error: any) {
+        transformerFallbackReason = transformerFallbackReason || 'execution_transform_failed';
+        effectivePipelineMode = 'legacy';
+        executionIntent = null;
+        this.logger.warn(`Transformer execution stage failed, falling back to legacy for this turn: ${error?.message || String(error)}`);
+      }
+    }
+    if (!executionIntent) {
+      executionIntent = this.chatTransformerService.buildExecutionIntent({
+        lane: assistantLane,
+        latestUserContent,
+        reviewEnabled: !!request.output_reviewer_id,
+        promptPackId: composedPrompt.provenance.promptPackId,
+        selectedAgentId: effectiveSelectedAgent?.id || request.agent_id || null,
+        selectedModel: request.model || selectedAgent?.modelId || null,
+        toolsSchema,
+        retrievalPolicy,
+      });
+    }
 
     systemMessages.push({
       role: 'system',
@@ -1376,6 +1767,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           await this.chatService.createMessage(request.session_id, m.role, m.content, {
             attachments: m.attachments,
             agentId: request.agent_id,
+            turnId: turnTrace.turn_id,
           });
         }
       }
@@ -1396,6 +1788,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       advisoryEvents: preTurnSignals.advisoryEvents,
       nluFrame,
       contextBudget,
+      retrievalPolicy,
       })) {
         await this.gatewayControlPlane.markRunTerminal(
           gatewayRunId,
@@ -1404,6 +1797,13 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           null,
         );
         await this.gatewayRoutingService.markRunFinished(resolvedBinding.binding.id, gatewayRunId, 'completed');
+        this.logger.log(JSON.stringify({
+          event: 'turn_completed',
+          turn_id: turnTrace.turn_id,
+          duration_ms: Date.now() - requestAcceptedAt,
+          guardian_outcome: null,
+          error: null,
+        }));
         return;
       }
 
@@ -1448,13 +1848,16 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     // Include tools in the request to the agent
     const agentRequest = {
       ...request,
+      turn_id: turnTrace.turn_id,
+      correlation_id: correlationId,
       tools: toolsSchema,
+      executionIntent: executionIntent || undefined,
       promptTemplates: composedPrompt.templates,
       promptProvenance: composedPrompt.provenance,
       gateway_context: this.buildGatewayContextPayload(request, effectiveSelectedAgent, toolsSchema, resolvedBinding.routing),
     };
     
-    this.logger.log(`[AGENT_REQ] Forwarding prompt to agent at ${agentUrl}/execute (${allMessages.length} msgs, session=${request.session_id})`);
+    this.logger.log(`[AGENT_REQ] Forwarding prompt to agent at ${agentUrl}/execute (${allMessages.length} msgs, session=${request.session_id}, correlationId=${correlationId})`);
     this.logger.log(`[TOOL_TRACE] Sending request to agent with model=${agentRequest.model}, complexity=${agentRequest.complexity}, toolsCount=${toolsSchema?.length || 0}, explicitModelSelection=${!!request.model}`);
 
     const attemptRequest = async (): Promise<any> => {
@@ -1464,6 +1867,10 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
             responseType: 'stream',
             timeout: 30000,
             signal: abortController.signal,
+            headers: {
+              'X-Turn-ID': turnTrace.turn_id,
+              'X-Session-ID': turnTrace.session_id,
+            },
           }),
         );
       } catch (err: any) {
@@ -1511,14 +1918,22 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       }
 
       this.logger.error(`Agent connection failed (${err.code}):`, err.message);
+      this.logger.log(JSON.stringify({
+        event: 'turn_completed',
+        turn_id: turnTrace.turn_id,
+        duration_ms: Date.now() - requestAcceptedAt,
+        guardian_outcome: null,
+        error: err?.message || 'Agent unavailable',
+      }));
       res.setHeader('Content-Type', 'text/event-stream');
-      res.write(`data: ${JSON.stringify({ 
-        type: 'error', 
+      await this.writeClientSseEventWithBackpressure(res, {
+        type: 'error',
         error: errorType,
-        message: isConnectionError 
+        correlationId,
+        message: isConnectionError
           ? 'The RawClaw agent is currently unreachable. Please check if the agent service is running.'
-          : `Agent error: ${err.message}`
-      })}\n\n`);
+          : `Agent error: ${err.message}`,
+      });
       res.end();
       return;
     }
@@ -1536,6 +1951,22 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
 
     let streamBuffer = '';
     let streamClosed = false;
+    const writeSseEvent = async (event: Record<string, unknown>) => {
+      if (res.writableEnded) {
+        return;
+      }
+      if (event.type === 'metadata') {
+        const metadata = event.metadata && typeof event.metadata === 'object' ? event.metadata : {};
+        event = { ...event, metadata: { ...metadata, correlationId }, correlationId };
+      } else if (event.type === 'done' || event.type === 'error') {
+        event = { ...event, correlationId };
+      }
+      const eventType = String(event.type || 'unknown');
+      if (eventType !== 'heartbeat' && firstNonHeartbeatEventLatencyMs === undefined) {
+        firstNonHeartbeatEventLatencyMs = Date.now() - requestAcceptedAt;
+      }
+      await this.writeClientSseEventWithBackpressure(res, event);
+    };
 
     // Set headers for SSE streaming
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1543,7 +1974,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     if (nluFrame && !res.writableEnded) {
-      res.write(`data: ${JSON.stringify({ type: 'metadata', metadata: { nlu: nluFrame } })}\n\n`);
+      await writeSseEvent({ type: 'metadata', metadata: { nlu: nluFrame } });
     }
 
     return new Promise<void>((resolve) => {
@@ -1553,16 +1984,39 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
       const STREAM_HEARTBEAT_MS = 10_000;
       let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
       let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+      let lastEventSent: string | null = null;
+      let streamPhase: 'model' | 'tool' = 'model';
+      let lastToolName: string | null = null;
+      let lastAgentError: { type: string; message: string } | null = null;
+
+      const getTimeoutMessage = () => {
+        if (streamPhase === 'tool') {
+          return lastToolName
+            ? `The tool "${lastToolName}" did not respond in time. Please retry or check the connection.`
+            : 'A tool did not respond in time. Please retry or check the connection.';
+        }
+        return 'The selected model took too long to respond. Try a faster model or retry.';
+      };
 
       const resetInactivityTimer = () => {
         if (inactivityTimer) clearTimeout(inactivityTimer);
         inactivityTimer = setTimeout(() => {
           if (!streamClosed) {
-            this.logger.error(`[STREAM_TIMEOUT] No data received for ${STREAM_INACTIVITY_TIMEOUT_MS / 1000}s. Force-closing stream.`);
+            this.logger.warn(
+              `[STREAM_TIMEOUT] No data received for ${STREAM_INACTIVITY_TIMEOUT_MS / 1000}s. ${JSON.stringify({
+                sessionId: request.session_id,
+                lastEventSent,
+                streamPhase,
+                pendingModelCall: streamPhase === 'model',
+                pendingToolCall: streamPhase === 'tool',
+                lastToolName,
+                lastError: lastAgentError,
+              })}`,
+            );
             void finalize({
               type: 'error',
               error: 'stream_timeout',
-              message: 'The agent stopped responding. Please try again.',
+              message: getTimeoutMessage(),
             });
           }
         }, STREAM_INACTIVITY_TIMEOUT_MS);
@@ -1591,6 +2045,8 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
 
         // Ensure we persist whatever we have
         const citations = sources.length > 0 ? sources.map(url => ({ url, title: url })) : undefined;
+        let coworkerActivityFrame: any = undefined;
+        let transformTrace: any = undefined;
         
         try {
           // If we had an error but also some content, prioritize content but mark it
@@ -1599,6 +2055,10 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           if (!persistContent && payload?.type !== 'error') {
             persistContent = 'Request failed';
           }
+          const streamStatus: 'completed' | 'incomplete' | 'failed' =
+            payload?.type === 'error'
+              ? (persistContent.trim().length > 0 ? 'incomplete' : 'failed')
+              : 'completed';
 
           // Finalize provenance if we have it
             if (provenanceTrace && !processedProvenance) {
@@ -1633,45 +2093,48 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
               actionState: item.actionState,
             })),
           ];
-
-          await this.chatService.createMessage(
-            request.session_id,
-            'assistant',
-            persistContent,
-            {
-              toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-              toolResults: toolResults.length > 0 ? toolResults : undefined,
-              provenance: processedProvenance || undefined,
-              runIds: processedProvenance?.runIds || undefined,
-              citations,
-              reviewEvents: reviewEvents.length > 0 ? reviewEvents.map((event) => ({
-                approved: event.approved,
-                feedback: event.feedback,
-                reviewerId: event.reviewer_id,
-              })) : undefined,
-              ...lastMetadata,
-              agentId: request.agent_id,
-              promptPackId: composedPrompt.provenance.promptPackId,
-              promptVersionHash: composedPrompt.provenance.promptVersionHash,
-              reviewerPromptVersionHash: composedPrompt.provenance.reviewerPromptVersionHash,
-              workflowPromptIds: composedPrompt.provenance.workflowPromptIds,
-              memoryEvents: memoryEvents.length > 0 ? memoryEvents : undefined,
-              advisoryEvents: allAdvisoryEvents.length > 0 ? allAdvisoryEvents : undefined,
-              workflowState: {
-                promptPackId: composedPrompt.provenance.promptPackId,
-                promptVersionHash: composedPrompt.provenance.promptVersionHash,
-                reviewerPromptVersionHash: composedPrompt.provenance.reviewerPromptVersionHash,
-                workflowPromptIds: composedPrompt.provenance.workflowPromptIds,
-                reviewEnabled: !!request.output_reviewer_id,
-                runIds: processedProvenance?.runIds || undefined,
-                assistantLane,
-                confidenceState,
-                nlu: nluFrame || undefined,
-                contextBudget,
-              },
-              ...(payload?.type === 'error' ? { error: { type: payload.error as string, message: payload.message as string } } : {})
-            }
-          );
+          const conversationSafety = this.detectConversationSafetySignal({
+            content: persistContent,
+            toolResults,
+            assistantLane,
+            nluFrame,
+            memoryEvents,
+          });
+          const persistedTurn = await this.persistenceTransformerService.persistAssistantTurn({
+            sessionId: request.session_id,
+            turnId: turnTrace.turn_id,
+            content: persistContent,
+            assistantLane,
+            confidenceState,
+            toolCalls,
+            toolResults,
+            provenance: processedProvenance || undefined,
+            runIds: processedProvenance?.runIds || undefined,
+            citations,
+            reviewEvents,
+            lastMetadata,
+            agentId: request.agent_id || selectedAgent?.id || null,
+            agentName: selectedAgent?.name || null,
+            modelId: typeof lastMetadata?.modelId === 'string' ? lastMetadata.modelId : request.model || selectedAgent?.modelId || null,
+            promptProvenance: composedPrompt.provenance,
+            memoryEvents,
+            advisoryEvents: allAdvisoryEvents,
+            contextBudget,
+            nluFrame,
+            conversationSafety,
+            retrievalPolicy,
+            streamStatus,
+            errorPayload: payload?.type === 'error'
+              ? { type: payload.error as string, message: payload.message as string }
+              : null,
+            pipelineMode: effectivePipelineMode,
+            apiStageTimings,
+            agentStageTimings,
+            firstEventLatencyMs: firstNonHeartbeatEventLatencyMs,
+            transformerFallbackReason,
+          });
+          coworkerActivityFrame = persistedTurn.coworkerActivityFrame;
+          transformTrace = persistedTurn.transformTrace;
           if (payload?.type === 'error' || (reviewEvents.length > 0 && reviewEvents[reviewEvents.length - 1]?.approved === false)) {
             const failureCategory = this.categorizeImprovementFailure((payload?.message as string) || null, reviewEvents);
             await this.selfImprovementService.createProposal({
@@ -1704,12 +2167,22 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
               persistContent.slice(0, 240) || null,
               payload?.type === 'error' ? String(payload?.message || payload?.error || 'Unknown agent error') : null,
             );
+            this.logger.log(JSON.stringify({
+              event: 'turn_completed',
+              turn_id: turnTrace.turn_id,
+              duration_ms: Date.now() - requestAcceptedAt,
+              guardian_outcome: processedProvenance?.guardian?.status || processedProvenance?.guardianOutcome?.status || null,
+              error: payload?.type === 'error' ? String(payload?.message || payload?.error || 'Unknown agent error') : null,
+            }));
           } catch (dbErr) {
             this.logger.error('Failed to persist assistant response:', dbErr);
           }
 
+        if (coworkerActivityFrame && !res.writableEnded) {
+          await writeSseEvent({ type: 'activity_frame', activityFrame: coworkerActivityFrame });
+        }
         if (payload && !res.writableEnded) {
-          res.write(`data: ${JSON.stringify(payload)}\n\n`);
+          await writeSseEvent(payload);
         }
         if (!res.writableEnded) {
           res.end();
@@ -1722,7 +2195,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           return;
         }
           try {
-            res.write(`data: ${JSON.stringify({ type: 'heartbeat', ts: Date.now() })}\n\n`);
+            void writeSseEvent({ type: 'heartbeat', ts: Date.now() });
             void this.gatewayRoutingService.heartbeat(resolvedBinding.binding.id, gatewayRunId);
             void this.gatewayControlPlane.markRunHeartbeat(gatewayRunId);
           } catch (e) {
@@ -1751,7 +2224,10 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
             return;
           }
 
+          lastEventSent = String(data.type || 'unknown');
+
           if (data.type === 'content') {
+            streamPhase = 'model';
             const sanitizedContent = this.sanitizeAssistantContentChunk(data.content || '', false);
             if (!sanitizedContent) {
               return;
@@ -1762,11 +2238,21 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
             this.logger.log(`[TOOL_TRACE] Received tool_call from agent: ${JSON.stringify(data.tool_call || data)}`);
             toolCalls.push(data.tool_call || data);
             const toolName = data.tool_call?.name || data.tool_call?.tool_name || data.tool_call?.function?.name || 'tool';
+            streamPhase = 'tool';
+            lastToolName = String(toolName);
             void this.gatewayRoutingService.emitToolActivity(resolvedBinding.binding.id, gatewayRunId, String(toolName), 'start');
           } else if (data.type === 'tool_result') {
             this.logger.log(`[TOOL_TRACE] Received tool_result from agent: ${data.tool_result?.tool_name || 'unknown'}`);
             toolResults.push(data.tool_result || data);
             const toolName = data.tool_result?.tool_name || data.tool_call?.name || 'tool';
+            const toolDuration = Number(data.tool_result?.duration_ms);
+            if (Number.isFinite(toolDuration) && toolDuration >= 0) {
+              agentStageTimings.push(
+                this.chatTransformerService.buildStageTiming(`tool:${String(toolName)}`, 'agent', Math.round(toolDuration)),
+              );
+            }
+            streamPhase = 'model';
+            lastToolName = String(toolName);
             void this.gatewayRoutingService.emitToolActivity(resolvedBinding.binding.id, gatewayRunId, String(toolName), 'result');
           } else if (data.type === 'provenance') {
             const rawTrace = data.provenance_trace || data.provenance || data;
@@ -1792,14 +2278,23 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
             delete (data as any).provenance_trace;
             delete (data as any).provenance;
           } else if (data.type === 'metadata') {
-            if (nluFrame || contextBudget) {
-              data.metadata = {
-                ...(data.metadata || {}),
-                ...(nluFrame ? { nlu: nluFrame } : {}),
-                contextBudget,
-              };
+            streamPhase = 'model';
+            const baseMetadata = data.metadata && typeof data.metadata === 'object' ? data.metadata : {};
+            const transformStageTimings = Array.isArray((baseMetadata as any).transformStageTimings)
+              ? (baseMetadata as any).transformStageTimings
+              : [];
+            if (transformStageTimings.length > 0) {
+              agentStageTimings = this.chatTransformerService.mergeStageTimings(agentStageTimings, transformStageTimings);
             }
-            lastMetadata = data.metadata;
+            data.metadata = {
+              ...baseMetadata,
+              ...(nluFrame ? { nlu: nluFrame } : {}),
+              contextBudget,
+            };
+            if (data.metadata?.transformStageTimings) {
+              delete data.metadata.transformStageTimings;
+            }
+            lastMetadata = data.metadata || {};
             await this.gatewayControlPlane.updateRun(gatewayRunId, {
               metadata: {
                 latestAgentMetadata: data.metadata || null,
@@ -1820,6 +2315,11 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
               reviewer_id: data.reviewer_id,
             });
             this.logger.log(`[REVIEW] Output review result: ${data.review?.status}`);
+          } else if (data.type === 'error') {
+            lastAgentError = {
+              type: String(data.error || 'error'),
+              message: String(data.message || ''),
+            };
           }
 
           // Real-time runId synchronization: if we found new runIds in provenance, inject into metadata
@@ -1831,7 +2331,11 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
           }
 
           if (data.type === 'done') {
-            this.logger.log(`[TOOL_TRACE] Stream complete: toolCalls=${toolCalls.length}, toolResults=${toolResults.length}, contentLength=${fullAssistantResponse.length}`);
+            this.logger.debug(
+              `[STREAM_DONE] sessionId=${request.session_id} toolCalls=${toolCalls.length} ` +
+              `toolResults=${toolResults.length} contentLength=${fullAssistantResponse.length} ` +
+              `correlationId=${correlationId || 'none'}`,
+            );
             await finalize({ type: 'done' });
             return;
           }
@@ -1843,7 +2347,7 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
 
           if (!res.writableEnded) {
             this.logger.log(`[STREAM_EVENT] Sending '${data.type}' event to client`);
-            res.write(`data: ${JSON.stringify(data)}\n\n`);
+            await writeSseEvent(data);
           }
         } catch (e) {
           this.logger.error('SSE processing error:', e);
@@ -1991,25 +2495,40 @@ Output ONLY your proposed replacement text wrapped in <edit_suggestion>...</edit
 
   private budgetContext(messages: ChatMessage[]): ChatMessage[] {
     // Stage 0: Deep copy to avoid mutating canonical objects (which might be used by UI or saved later)
-    let budgetMessages = messages.map(m => ({
+    let budgetMessages: ChatMessage[] = messages.map(m => ({
       ...m,
       attachments: m.attachments ? m.attachments.map(a => ({ ...a })) : undefined,
       toolResults: m.toolResults ? m.toolResults.map(tr => ({ ...tr })) : undefined,
     }));
 
-    let totalChars = budgetMessages.reduce((acc, msg) => acc + (msg.content?.length || 0), 0);
-    
-    // Add attachment and tool result length to total
-    budgetMessages.forEach(m => {
-      if (m.attachments) {
-        m.attachments.forEach(a => totalChars += (a.content?.length || 0));
-      }
-      if (m.toolResults) {
-        m.toolResults.forEach(tr => {
-          if (typeof tr.output === 'string') totalChars += tr.output.length;
-        });
-      }
-    });
+    const estimatePromptChars = (candidateMessages: ChatMessage[]): number => {
+      let chars = candidateMessages.reduce((acc, msg) => acc + (msg.content?.length || 0), 0);
+      candidateMessages.forEach(m => {
+        if (m.attachments) {
+          m.attachments.forEach(a => chars += (a.content?.length || 0));
+        }
+        if (m.toolResults) {
+          m.toolResults.forEach(tr => {
+            if (typeof tr.output === 'string') chars += tr.output.length;
+          });
+        }
+      });
+      return chars;
+    };
+
+    let totalChars = estimatePromptChars(budgetMessages);
+
+    const compactedContext = this.contextTransformerService.compactIfNeeded(budgetMessages, totalChars);
+    if ('messages' in compactedContext && compactedContext.compacted) {
+      budgetMessages = compactedContext.messages.map((message) => ({
+        ...message,
+        id: message.id ?? undefined,
+        attachments: message.attachments ? message.attachments.map((attachment: NonNullable<ChatMessage['attachments']>[number]) => ({ ...attachment })) : undefined,
+        toolResults: message.toolResults ? message.toolResults.map((toolResult: NonNullable<ChatMessage['toolResults']>[number]) => ({ ...toolResult })) : undefined,
+      }));
+      totalChars = estimatePromptChars(budgetMessages);
+      this.logger.log(`[CONTEXT_TRANSFORMER] Compacted prompt context before heuristic budgeting (${messages.length} -> ${budgetMessages.length} messages, ${totalChars} chars).`);
+    }
 
     if (totalChars <= this.MAX_TOTAL_PROMPT_CHARS) {
       return budgetMessages;
@@ -2341,180 +2860,58 @@ When you need a tool, output ONLY a tool call like:
   }
 
   private sanitizeAssistantContentChunk(content: string, finalize = false): string {
-    if (!content) {
-      return '';
-    }
-
-    const trimmed = content.trim();
-    if (
-      /<\/?edit_suggestion>/i.test(content)
-      || /^<edit/i.test(trimmed)
-      || /^edit_suggestion>/i.test(trimmed)
-      || /^_suggestion>/i.test(trimmed)
-    ) {
-      let repaired = trimmed;
-      if (/^_suggestion>/i.test(repaired)) {
-        repaired = `<edit${repaired}`;
-      } else if (/^edit_suggestion>/i.test(repaired)) {
-        repaired = `<${repaired}`;
-      }
-      return repaired;
-    }
-
-    let sanitized = content
-      .replace(/<\/think>/gi, '')
-      .replace(/<\/thinking>/gi, '')
-      .replace(/<think>/gi, '')
-      .replace(/<thinking>/gi, '')
-      .replace(/<\/?skill_[a-z0-9-]+>/gi, '')
-      .replace(/<\/?skill>/gi, '');
-
-    sanitized = sanitized.replace(
-      /^\s*>?\s*(?:\{[\s\S]*?"(?:tool|args|thought)"[\s\S]*?\}\s*)+/i,
-      '',
-    );
-
-    const transcriptMatch = sanitized.match(ChatOrchestratorService.TRANSCRIPT_MARKER_REGEX);
-    if (transcriptMatch?.index !== undefined) {
-      sanitized = sanitized.slice(0, transcriptMatch.index);
-    }
-
-    const rawLeakMatch = sanitized.match(
-      />?\s*(?:\{"name":|>\{"tool":|>sequential_thinking\{|<\/skill>|<tool_code>|<invoke|minimax:tool_call)/i,
-    );
-    if (rawLeakMatch?.index !== undefined) {
-      sanitized = sanitized.slice(0, rawLeakMatch.index);
-    }
-
-    if (!finalize) {
-      return sanitized;
-    }
-
-    return this.normalizeAssistantReadability(sanitized, true);
+    return this.emissionTransformerService.sanitizeAssistantContent(content, finalize);
   }
 
-  private normalizeAssistantReadability(content: string, finalize = false): string {
-    if (!content) {
-      return '';
+  private writeClientSseEvent(res: Response, event: Record<string, unknown>): void {
+    try {
+      const clientVisibleEvent = this.emissionTransformerService.toClientVisibleEvent(event) as ChatStreamChunk;
+      res.write(`data: ${JSON.stringify(clientVisibleEvent)}\n\n`);
+    } catch (error) {
+      const eventType = typeof event?.type === 'string' ? event.type : 'unknown';
+      this.logger.error(`[EMISSION_TRANSFORMER] Failed to emit ${eventType} event: ${error instanceof Error ? error.message : String(error)}`);
+      if (res.writableEnded) {
+        return;
+      }
+      if (eventType === 'metadata' || eventType === 'heartbeat') {
+        return;
+      }
+      const fallbackErrorEvent = {
+        type: 'error',
+        error: 'stream_error',
+        message: 'Something went wrong while sending the response.',
+      };
+      res.write(`data: ${JSON.stringify(fallbackErrorEvent)}\n\n`);
     }
-
-    let normalized = content
-      .replace(/\r\n/g, '\n')
-      .replace(/\u00a0/g, ' ')
-      .replace(/\bIam(?=[A-Z])/g, 'I am ')
-      .replace(/\bIve(?=[A-Z])/g, "I've ")
-      .replace(/\bIll(?=[A-Z])/g, "I'll ")
-      .replace(/\bId(?=[A-Z])/g, "I'd ")
-      .replace(/\bYouve(?=[A-Z])/g, "You've ")
-      .replace(/\bYoure(?=[A-Z])/g, "You're ")
-      .replace(/\bDont(?=[A-Z])/g, "Don't ")
-      .replace(/\bCant(?=[A-Z])/g, "Can't ")
-      .replace(/\bWont(?=[A-Z])/g, "Won't ")
-      .replace(/([,:;!?])([A-Za-z])/g, '$1 $2');
-
-    normalized = this.collapseRepeatedContent(normalized);
-
-    const alphaCount = (normalized.match(/[A-Za-z]/g) || []).length;
-    const whitespaceCount = (normalized.match(/\s/g) || []).length;
-    if (alphaCount >= 40 && whitespaceCount / Math.max(alphaCount, 1) < 0.08) {
-      normalized = this.expandCompactedEnglish(normalized);
-    }
-
-    normalized = normalized.replace(/[ \t]{2,}/g, ' ');
-    return finalize ? normalized.trim() : normalized;
   }
 
-  private collapseRepeatedContent(content: string): string {
-    let collapsed = content;
-
-    collapsed = collapsed.replace(/(.{50,180}?)(?:\s+\1){2,}/gis, '$1 ...');
-
-    const words = collapsed.split(/\s+/).filter(Boolean);
-    if (words.length < 40) {
-      return collapsed;
-    }
-
-    const maxWindow = Math.min(24, Math.floor(words.length / 3));
-    for (let size = maxWindow; size >= 10; size--) {
-      const tail = words.slice(-size).join(' ').toLowerCase();
-      if (tail.length < 60) {
-        continue;
+  private async writeClientSseEventWithBackpressure(res: Response, event: Record<string, unknown>): Promise<void> {
+    const writePayload = async (payload: Record<string, unknown>) => {
+      const canWrite = res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      if (!canWrite) {
+        // Respect backpressure: wait for drain before the next write.
+        await new Promise<void>((resolve) => res.once('drain', resolve));
       }
+    };
 
-      const body = words.slice(0, -size).join(' ').toLowerCase();
-      const firstIndex = body.indexOf(tail);
-      if (firstIndex === -1) {
-        continue;
+    try {
+      const clientVisibleEvent = this.emissionTransformerService.toClientVisibleEvent(event) as ChatStreamChunk;
+      await writePayload(clientVisibleEvent as unknown as Record<string, unknown>);
+    } catch (error) {
+      const eventType = typeof event?.type === 'string' ? event.type : 'unknown';
+      this.logger.error(`[EMISSION_TRANSFORMER] Failed to emit ${eventType} event: ${error instanceof Error ? error.message : String(error)}`);
+      if (res.writableEnded) {
+        return;
       }
-
-      const secondIndex = body.indexOf(tail, firstIndex + tail.length);
-      if (secondIndex === -1) {
-        continue;
+      if (eventType === 'metadata' || eventType === 'heartbeat') {
+        return;
       }
-
-      const prefixWords = words.slice(0, -size);
-      return `${prefixWords.join(' ')} ...`;
+      await writePayload({
+        type: 'error',
+        error: 'stream_error',
+        message: 'Something went wrong while sending the response.',
+        correlationId: typeof event?.correlationId === 'string' ? event.correlationId : undefined,
+      });
     }
-
-    return collapsed;
-  }
-
-  private expandCompactedEnglish(content: string): string {
-    const boundaryWords = [
-      'including',
-      'answering',
-      'questions',
-      'information',
-      'repository',
-      'workspace',
-      'favorite',
-      'summary',
-      'provide',
-      'assist',
-      'variety',
-      'latest',
-      'results',
-      'because',
-      'about',
-      'would',
-      'could',
-      'should',
-      'with',
-      'your',
-      'just',
-      'know',
-      'this',
-      'that',
-      'have',
-      'from',
-      'into',
-      'task',
-      'agent',
-      'search',
-      'read',
-      'list',
-      'help',
-      'what',
-      'mind',
-      'can',
-      'you',
-      'for',
-      'the',
-      'and',
-    ];
-
-    let expanded = content;
-    for (const word of boundaryWords) {
-      const regex = new RegExp(`(?<=[A-Za-z])(${word})(?=[A-Za-z])`, 'gi');
-      expanded = expanded.replace(regex, ' $1 ');
-    }
-
-    expanded = expanded
-      .replace(/\bI(?=[a-z]{4,})/g, 'I ')
-      .replace(/\bYou(?=[a-z]{4,})/g, 'You ')
-      .replace(/\bYour(?=[a-z]{4,})/g, 'Your ')
-      .replace(/[ \t]{2,}/g, ' ');
-
-    return expanded;
   }
 }

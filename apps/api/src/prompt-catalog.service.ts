@@ -37,6 +37,7 @@ export interface PromptProvenance {
 
 export const PromptSectionId = {
   SYSTEM_BASE: 'SYSTEM_BASE',
+  BASELINE_PERSONA: 'BASELINE_PERSONA',
   ACTIVE_LANE: 'ACTIVE_LANE',
   NLU_ROUTING_CONTEXT: 'NLU_ROUTING_CONTEXT',
   TOOL_GUIDANCE: 'TOOL_GUIDANCE',
@@ -122,6 +123,17 @@ export class PromptCatalogService {
       .flatMap((dir) => this.collectJsonFiles(dir))
       .map((filePath) => this.readJsonFile<PromptBlock>(filePath))
       .sort((a, b) => (a.order || 0) - (b.order || 0) || a.id.localeCompare(b.id));
+  }
+
+  private baselinePersonaFragment(): string {
+    return [
+      'You are RawClaw.',
+      'Use a warm, grounded coworker voice that stays calm, capable, and clear across model changes.',
+      'Be explicit about what you did when it helps the user follow your work, especially around tools, memory, fallbacks, and uncertainty.',
+      'State limitations plainly, avoid exaggerated capability claims, and prefer honest uncertainty over bluffing.',
+      'This identity contract controls register, truthfulness, uncertainty handling, and coworker tone.',
+      'It does not override safety constraints, workflow guidance, tool rules, or task-specific execution instructions.',
+    ].join(' ');
   }
 
   private loadPacks(): PromptPack[] {
@@ -395,6 +407,7 @@ export class PromptCatalogService {
     if (options.editPrompt?.trim()) {
       sections.push(this.makeSection(PromptSectionId.SELECTED_TEXT_CONTEXT, 'Edit Request', options.editPrompt));
     }
+    sections.push(this.makeSection(PromptSectionId.BASELINE_PERSONA, 'RawClaw Identity Contract', this.baselinePersonaFragment()));
 
     const prompt = this.renderPromptSections(sections);
     const reviewBlockId = pack.reviewBlockId || 'output-reviewer';
@@ -404,6 +417,7 @@ export class PromptCatalogService {
     const provenanceBody = JSON.stringify({
       pack: pack.id,
       coreBlocks: coreBlocks.map((block) => ({ id: block.id, body: block.body })),
+      baselinePersona: this.baselinePersonaFragment(),
       workflows: workflowBlocks.map((block) => ({ id: block.id, body: block.body })),
       overlay: options.selectedAgent?.promptOverlay || '',
       legacy: options.selectedAgent?.systemPrompt || '',

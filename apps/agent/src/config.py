@@ -18,16 +18,16 @@ class Settings(BaseSettings):
     MINIMAX_BASE_URL: str = "https://api.minimax.chat/v1"
     
     # Models
-    DEFAULT_LOW_MODEL: str = "ollama/qwen2.5:1.5b"
-    DEFAULT_MEDIUM_MODEL: str = "ollama/llama3.2:3b"
-    DEFAULT_HIGH_MODEL: str = "ollama/llama3:8b"
+    DEFAULT_LOW_MODEL: str = "ollama/gemma4:e4b"
+    DEFAULT_MEDIUM_MODEL: str = "ollama/gemma4:31b-cloud"
+    DEFAULT_HIGH_MODEL: str = "ollama/gemma4:31b-cloud"
 
     # Deterministic fallback order for local models
     OLLAMA_FALLBACK_ORDER: list[str] = [
-        "ollama/qwen2.5:1.5b",
-        "ollama/phi3:3.8b",
-        "ollama/llama3.2:3b",
-        "ollama/llama3:8b",
+        "ollama/gemma4:31b-cloud",
+        "ollama/gemma4:e4b",
+        "ollama/qwen3-vl:8b",
+        "ollama/deepseek-r1:8b",
     ]
 
     # ChromaDB Vector Memory
@@ -64,14 +64,14 @@ except Exception:
         OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
         MINIMAX_API_KEY = os.environ.get("MINIMAX_API_KEY")
         MINIMAX_BASE_URL = os.environ.get("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
-        DEFAULT_LOW_MODEL = "ollama/qwen2.5:1.5b"
-        DEFAULT_MEDIUM_MODEL = "ollama/llama3.2:3b"
-        DEFAULT_HIGH_MODEL = "ollama/llama3:8b"
+        DEFAULT_LOW_MODEL = "ollama/gemma4:e4b"
+        DEFAULT_MEDIUM_MODEL = "ollama/gemma4:31b-cloud"
+        DEFAULT_HIGH_MODEL = "ollama/gemma4:31b-cloud"
         OLLAMA_FALLBACK_ORDER = [
-            "ollama/qwen2.5:1.5b", 
-            "ollama/phi3:3.8b", 
-            "ollama/llama3.2:3b", 
-            "ollama/llama3:8b", 
+            "ollama/gemma4:31b-cloud",
+            "ollama/gemma4:e4b", 
+            "ollama/qwen3-vl:8b", 
+            "ollama/deepseek-r1:8b", 
         ]
         CHROMA_PERSIST_DIR = os.environ.get("CHROMA_PERSIST_DIR", "./data/chroma")
         CHROMA_COLLECTION = os.environ.get("CHROMA_COLLECTION", "rawclaw_memory")

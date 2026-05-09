@@ -29,6 +29,35 @@ TEAM_ALIASES = {
     "chennai super kings": ["chennai super kings", "csk"],
 }
 
+PARTY_ALIASES = {
+    "BJP": ["bjp", "bharatiya janata party", "saffron camp"],
+    "TMC": ["tmc", "trinamool congress", "all india trinamool congress"],
+    "Congress": ["congress", "inc", "indian national congress"],
+    "Left Front": ["left front", "left alliance"],
+    "CPI(M)": ["cpi(m)", "cpim", "communist party of india (marxist)"],
+    "DMK": ["dmk", "dravida munnetra kazhagam"],
+    "AIADMK": ["aiadmk", "all india anna dravida munnetra kazhagam"],
+}
+
+ELECTION_VICTORY_MARKERS = [
+    "won",
+    "wins",
+    "winning",
+    "victory",
+    "victorious",
+    "clinch",
+    "clinches",
+    "clinching",
+    "sweep",
+    "sweeping",
+    "landslide",
+    "majority",
+    "forms the government",
+    "form the government",
+    "form its first government",
+    "scripted a historic and sweeping victory",
+]
+
 PAYWALL_MARKERS = [
     "subscribe to continue",
     "subscribe to read",
@@ -159,7 +188,7 @@ class WebExtractTool(BaseTool):
             "fetchFailureKind": output.get("fetchFailureKind"),
             "httpStatus": output.get("httpStatus"),
             "networkError": output.get("networkError") or result.error if result else None,
-            "redirectedUrl": output.get("redirectedUrl") or output.get("url"),
+            "redirectedUrl": output.get("redirectedUrl"),
             "transportStrategy": output.get("transportStrategy"),
             "fetchBackendAttempts": output.get("backendAttempts") if isinstance(output.get("backendAttempts"), list) else [],
         }
@@ -190,7 +219,9 @@ class WebExtractTool(BaseTool):
         return flattened
 
     def _normalize_text(self, text: str) -> str:
-        return re.sub(r"\s+", " ", str(text or "")).strip()
+        cleaned = unescape(str(text or ""))
+        cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+        return re.sub(r"\s+", " ", cleaned).strip()
 
     def _strip_site_suffix(self, title: str) -> str:
         raw = self._normalize_text(title)
@@ -659,6 +690,84 @@ class WebExtractTool(BaseTool):
             data["dates"] = dates[:4]
         return data
 
+    def _is_election_result_task(self, task_type: str, expected_fields: Optional[List[str]] = None) -> bool:
+        lowered_task = str(task_type or "").lower()
+        lowered_fields = {str(field or "").strip().lower() for field in (expected_fields or [])}
+        return (
+            lowered_task == "election_results_brief"
+            or {"winner", "party", "seat_tally"}.issubset(lowered_fields)
+            or ("winner" in lowered_fields and "seat_tally" in lowered_fields)
+        )
+
+    def _extract_election_result_data(self, content: str, title: str = "") -> Dict[str, Any]:
+        text = self._normalize_text(" ".join(part for part in [title, content] if part))
+        lowered = text.lower()
+        title_lower = self._normalize_text(title).lower()
+        data: Dict[str, Any] = {}
+
+        date_match = re.search(
+            r"\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{4}\b",
+            lowered,
+        )
+        if date_match:
+            data["date_time"] = date_match.group(0)
+
+        seat_match = re.search(
+            r"\b(\d{1,3})\s+seats?\b(?:\s+out\s+of\s+\d{2,3}\b)?",
+            text,
+            re.IGNORECASE,
+        )
+        if seat_match:
+            data["seat_tally"] = seat_match.group(0).strip()
+
+        title_window = title_lower[:320]
+        title_hits: List[Tuple[int, str]] = []
+        for party, aliases in PARTY_ALIASES.items():
+            for alias in aliases:
+                idx = title_window.find(alias.lower())
+                if idx != -1:
+                    title_hits.append((idx, party))
+                    break
+        for idx, party in sorted(title_hits, key=lambda item: item[0]):
+            window = title_window[idx:idx + 120]
+            if any(marker in window for marker in ELECTION_VICTORY_MARKERS) or (
+                data.get("seat_tally") and str(data["seat_tally"]).lower() in window
+            ):
+                data["winner"] = party
+                data["party"] = party
+                return data
+
+        best_party = ""
+        best_score = 0
+        search_window = lowered[:1600]
+        victory_pattern = "|".join(re.escape(marker) for marker in ELECTION_VICTORY_MARKERS)
+        for party, aliases in PARTY_ALIASES.items():
+            score = 0
+            for alias in aliases:
+                pattern = re.escape(alias.lower())
+                if re.search(rf"\b{pattern}\b", search_window):
+                    score += 2
+                if re.search(rf"\b{pattern}\b", title_lower):
+                    score += 4
+                if re.search(rf"\b{pattern}\b.{0,100}\b(?:{victory_pattern})\b", search_window):
+                    score += 4
+                if re.search(rf"\b(?:{victory_pattern})\b.{0,100}\b{pattern}\b", search_window):
+                    score += 3
+                if data.get("seat_tally") and re.search(
+                    rf"\b{pattern}\b.{0,120}{re.escape(str(data['seat_tally']).lower())}",
+                    search_window,
+                ):
+                    score += 3
+            if score > best_score:
+                best_score = score
+                best_party = party
+
+        if best_party:
+            data["winner"] = best_party
+            data["party"] = best_party
+
+        return data
+
     def _extract_meta_tag(self, raw_html: str, attr_name: str, attr_value: str) -> str:
         pattern = (
             rf'<meta[^>]+{attr_name}=["\']{re.escape(attr_value)}["\'][^>]+content=["\']([^"\']+)["\']'
@@ -685,8 +794,12 @@ class WebExtractTool(BaseTool):
                 if not isinstance(candidate, dict):
                     continue
                 candidate_type = str(candidate.get("@type") or "").lower()
-                if candidate_type in {"newsarticle", "article", "blogposting", "report"}:
+                if candidate_type in {"newsarticle", "article", "blogposting", "report", "liveblogposting"}:
                     articles.append(candidate)
+                if candidate_type == "liveblogposting" and isinstance(candidate.get("liveBlogUpdate"), list):
+                    for update in candidate.get("liveBlogUpdate") or []:
+                        if isinstance(update, dict):
+                            articles.append(update)
                 graph = candidate.get("@graph")
                 if isinstance(graph, list):
                     for entry in graph:
@@ -862,7 +975,14 @@ class WebExtractTool(BaseTool):
 
         return " ".join(summary_parts), structured_data, standings_feed_url
 
-    def _extract_structured_data(self, task_type: str, page_kind: str, content: str, title: str = "") -> Dict[str, Any]:
+    def _extract_structured_data(
+        self,
+        task_type: str,
+        page_kind: str,
+        content: str,
+        title: str = "",
+        expected_fields: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         lowered_task = (task_type or "").lower()
         if lowered_task == "factual_extract" and page_kind == "standings/table":
             return self._extract_standings_data(content)
@@ -870,6 +990,8 @@ class WebExtractTool(BaseTool):
             return self._extract_standings_data(content)
         if page_kind == "news/article":
             data = self._extract_news_data(content)
+            if self._is_election_result_task(task_type, expected_fields):
+                data.update(self._extract_election_result_data(content, title))
             release_event = self._extract_release_event_from_title(title, page_kind)
             if release_event and not data.get("event"):
                 data["event"] = release_event
@@ -1127,6 +1249,16 @@ class WebExtractTool(BaseTool):
                 present.append(field)
             elif field == "date_time" and re.search(r"\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b", lowered):
                 present.append(field)
+            elif field == "winner" and any(marker in lowered for marker in [" won ", " wins ", " victory ", " clinches ", " landslide "]):
+                present.append(field)
+            elif field == "party" and any(
+                re.search(rf"\b{re.escape(alias)}\b", lowered)
+                for aliases in PARTY_ALIASES.values()
+                for alias in aliases
+            ):
+                present.append(field)
+            elif field == "seat_tally" and re.search(r"\b\d{1,3}\s+seats?\b", lowered):
+                present.append(field)
         return sorted(set(present))
 
     def _looks_like_garbage(self, content: str) -> bool:
@@ -1139,9 +1271,12 @@ class WebExtractTool(BaseTool):
             return True
         return False
 
-    def _detect_paywall_signal(self, text: str) -> bool:
-        lowered = str(text or "").lower()
-        return any(marker in lowered for marker in PAYWALL_MARKERS)
+    def _detect_paywall_signal(self, text: str, raw_html: str = "") -> bool:
+        visible = str(text or "").lower()
+        if any(marker in visible for marker in PAYWALL_MARKERS):
+            return True
+        raw_prefix = str(raw_html or "")[:5000].lower()
+        return any(marker in raw_prefix for marker in PAYWALL_MARKERS)
 
     def _detect_js_render_suspected(self, raw_text: str, cleaned_content: str) -> bool:
         raw = str(raw_text or "")
@@ -1175,7 +1310,7 @@ class WebExtractTool(BaseTool):
         if expected_fields:
             field_hits = len(self._present_fields(structured_data, content, expected_fields))
         metadata_only = extraction_method == "web_fetch_raw_html_article" and word_count < 180 and field_hits <= 2
-        paywall_signal = self._detect_paywall_signal(raw_source_text or content)
+        paywall_signal = self._detect_paywall_signal(content, raw_source_text)
         js_render_suspected = js_fallback_detected or self._detect_js_render_suspected(raw_source_text, content)
         shape_signals = self._page_shape_signals(content, structured_data, raw_source_text)
 
@@ -1358,6 +1493,8 @@ class WebExtractTool(BaseTool):
         def browser_escalation_suppressed(metadata: Dict[str, Any], quality_value: str) -> bool:
             if allow_internal_browser_escalation:
                 return False
+            # Diagnostic only. Must not influence evidence classification,
+            # fallback decisions, or result rendering.
             return has_weak_signal({**(metadata or {}), "quality": quality_value})
 
         candidates = self._discover_backend_tools(page_kind, allow_interaction, backend_order=backend_order)
@@ -1419,7 +1556,17 @@ class WebExtractTool(BaseTool):
                 raw_content = self._clean_js_fallback_content(raw_content, title, js_fallback_reason)
             cleaned_content = self._reader_style_cleanup(raw_content, page_kind)
             output_payload = result.output if isinstance(result.output, dict) else {}
-            extracted_structured = candidate_structured or self._extract_structured_data(task_type, page_kind, cleaned_content, title)
+            derived_structured = self._extract_structured_data(
+                task_type,
+                page_kind,
+                cleaned_content,
+                title,
+                expected_fields,
+            )
+            extracted_structured = {
+                **derived_structured,
+                **(candidate_structured or {}),
+            }
             candidate_quality, candidate_missing_fields, candidate_interaction_required = self._quality_and_missing_fields(
                 cleaned_content,
                 extracted_structured,
@@ -1471,7 +1618,7 @@ class WebExtractTool(BaseTool):
                     "title": title,
                     "url": candidate_url or str(output_payload.get("redirectedUrl") or output_payload.get("url") or url),
                     "httpStatus": output_payload.get("httpStatus"),
-                    "redirectedUrl": str(output_payload.get("redirectedUrl") or candidate_url or url),
+                    "redirectedUrl": output_payload.get("redirectedUrl"),
                     "transportStrategy": str(output_payload.get("transportStrategy") or backend_type or "none"),
                     "backendUsed": backend_type,
                     "jsFallbackDetected": bool(output_payload.get("jsFallbackDetected") or js_fallback_detected),
@@ -1646,6 +1793,16 @@ class WebExtractTool(BaseTool):
                 raw_url = str(raw_fetch_result.output.get("url") or url).strip()
                 raw_html = str(raw_fetch_result.output.get("content") or "")
                 recovered_content, recovered_structured = self._recover_article_from_raw_html(raw_html)
+                recovered_structured = {
+                    **self._extract_structured_data(
+                        task_type,
+                        page_kind,
+                        recovered_content,
+                        raw_title,
+                        expected_fields,
+                    ),
+                    **recovered_structured,
+                }
                 js_fallback_detected, js_fallback_reason = self._resolve_js_fallback_metadata(raw_fetch_result, raw_html or recovered_content)
                 if js_fallback_detected:
                     recovered_content = self._clean_js_fallback_content(recovered_content, raw_title, js_fallback_reason)

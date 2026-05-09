@@ -1,0 +1,5 @@
+[
+  "Use this command:\\n```bash\\nnpm test\\n```",
+  "Patch preview:\\n```diff\\n- old\\n+ new\\n```",
+  "Example JSON:\\n```json\\n{\\n  \"ok\": true\\n}\\n```"
+]

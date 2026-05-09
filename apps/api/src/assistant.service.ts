@@ -64,6 +64,49 @@ export class AssistantService {
     return normalized;
   }
 
+  private stripSessionScopedClauses(value: string): string {
+    return String(value || '')
+      .split(/\b(?:remember this(?: for later)?(?: in this chat)?|remind me(?: to)?|for later in this chat|keep this in mind|don't forget|note this)\b/i)[0]
+      .replace(/[\s;,:-]+$/g, '')
+      .trim();
+  }
+
+  private shouldForceSessionScope(value: string): boolean {
+    return this.classifyCaptureScope(value, 'session') === 'session';
+  }
+
+  private isSessionScopedSignal(value: string): boolean {
+    return /\b(?:remember this(?: for later)?(?: in this chat)?|remind me(?: to)?|for later in this chat|keep this in mind|don't forget|note this|for this chat|in this session|tomorrow|later today|next week|next month|this afternoon|this evening)\b/i.test(value || '');
+  }
+
+  private isDebuggingSignal(value: string): boolean {
+    return /\b(?:error|exception|stack trace|stacktrace|failing test|failed test|bug|line\s+\d+|debug|traceback)\b/i.test(value || '');
+  }
+
+  private isStableOperatorSignal(value: string): boolean {
+    return /\b(?:my name is|call me|i prefer|my preference is|i like|i usually|i work best|please keep responses|i prefer responses|preferred name)\b/i.test(value || '');
+  }
+
+  private isMissionSignal(value: string): boolean {
+    return /\b(?:we are working on|our mission is|the mission is|the goal is|i am working on|this project is about|current mission)\b/i.test(value || '');
+  }
+
+  private classifyCaptureScope(value: string, proposedScope: 'session' | 'operator' | 'mission' = 'session'): 'session' | 'operator' | 'mission' | null {
+    if (this.isSessionScopedSignal(value) || this.isDebuggingSignal(value)) {
+      return 'session';
+    }
+    if (this.isMissionSignal(value)) {
+      return 'mission';
+    }
+    if (this.isStableOperatorSignal(value)) {
+      return 'operator';
+    }
+    if (proposedScope === 'session') {
+      return 'session';
+    }
+    return null;
+  }
+
   private normalizeCommitments(commitments: AssistantCommitment[]): AssistantCommitment[] {
     const latestBySummary = new Map<string, AssistantCommitment>();
     for (const item of commitments || []) {
@@ -210,43 +253,47 @@ export class AssistantService {
 
     const preferenceMatch = text.match(/\b(?:i prefer|my preference is|i like)\s+(.+?)(?:[.?!]|$)/i);
     if (preferenceMatch?.[1]) {
-      const preference = preferenceMatch[1].trim().replace(/[.?!]+$/, '');
+      const preference = this.stripSessionScopedClauses(preferenceMatch[1].trim().replace(/[.?!]+$/, ''));
       const preferences = Array.from(new Set([...current.operatorProfile.preferences, preference]));
-      nextState.operatorProfile = {
-        ...(nextState.operatorProfile || current.operatorProfile),
-        preferences,
-      };
-      const entry = await this.memoryService.add({
-        content: `Operator preference: ${preference}`,
-        collection: 'operator',
-        source: 'assistant-state',
-        tags: ['assistant', 'operator-profile', 'preference'],
-      });
-      memoryEvents.push({
-        layer: 'operator',
-        action: 'updated',
-        summary: 'Added an operator preference to durable memory.',
-        entryId: entry.id,
-      });
+      if (preference) {
+        nextState.operatorProfile = {
+          ...(nextState.operatorProfile || current.operatorProfile),
+          preferences,
+        };
+        const entry = await this.memoryService.add({
+          content: `Operator preference: ${preference}`,
+          collection: 'operator',
+          source: 'assistant-state',
+          tags: ['assistant', 'operator-profile', 'preference'],
+        });
+        memoryEvents.push({
+          layer: 'operator',
+          action: 'updated',
+          summary: 'Added an operator preference to durable memory.',
+          entryId: entry.id,
+        });
+      }
     }
 
     const missionMatch = text.match(/\b(?:we are working on|our mission is|the mission is|the goal is|i am working on)\s+(.+?)(?:[.?!]|$)/i);
     if (missionMatch?.[1]) {
-      const mission = missionMatch[1].trim().replace(/[.?!]+$/, '');
-      nextState.missionSummary = mission;
-      nextState.activeFocus = Array.from(new Set([mission, ...current.activeFocus])).slice(0, 5);
-      const entry = await this.memoryService.add({
-        content: `Mission summary: ${mission}`,
-        collection: 'mission',
-        source: 'assistant-state',
-        tags: ['assistant', 'mission'],
-      });
-      memoryEvents.push({
-        layer: 'mission',
-        action: 'updated',
-        summary: 'Updated the active mission summary.',
-        entryId: entry.id,
-      });
+      const mission = this.stripSessionScopedClauses(missionMatch[1].trim().replace(/[.?!]+$/, ''));
+      if (mission) {
+        nextState.missionSummary = mission;
+        nextState.activeFocus = Array.from(new Set([mission, ...current.activeFocus])).slice(0, 5);
+        const entry = await this.memoryService.add({
+          content: `Mission summary: ${mission}`,
+          collection: 'mission',
+          source: 'assistant-state',
+          tags: ['assistant', 'mission'],
+        });
+        memoryEvents.push({
+          layer: 'mission',
+          action: 'updated',
+          summary: 'Updated the active mission summary.',
+          entryId: entry.id,
+        });
+      }
     }
 
     if (
@@ -255,8 +302,9 @@ export class AssistantService {
       nluFrame.confidence >= 0.82
     ) {
       const fact = (nluFrame.entities || []).find((entity) => entity.type === 'memory_fact' && entity.confidence >= 0.75);
-      const captureScope = nluFrame.memoryScopes?.capture || 'session';
-      if (fact?.value && ['session', 'operator', 'mission'].includes(captureScope)) {
+      const proposedScope = (nluFrame.memoryScopes?.capture || 'session') as 'session' | 'operator' | 'mission';
+      const captureScope = this.classifyCaptureScope(text, proposedScope);
+      if (fact?.value && captureScope && ['session', 'operator', 'mission'].includes(captureScope)) {
         const collection = captureScope as 'session' | 'operator' | 'mission';
         const entry = await this.memoryService.add({
           content: fact.value.trim(),

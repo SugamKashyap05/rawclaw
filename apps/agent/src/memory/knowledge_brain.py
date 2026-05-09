@@ -13,6 +13,8 @@ from typing import Any, Optional
 
 logger = logging.getLogger("rawclaw.knowledge_brain")
 
+CONVERSATIONAL_GLOBAL_COLLECTIONS = ("operator", "mission", "default")
+
 
 # WikipediaRetriever is lazy-loaded in __init__
 
@@ -52,58 +54,80 @@ class KnowledgeBrain:
         logger.info(f"DEBUG: Retrieving memory for query: '{query}' (session: {session_id})")
 
         if self.chroma_memory:
-            # Blend session-scoped chat recall with global knowledge recall.
-            # Test memory and manually added knowledge entries are usually not
-            # stored with a session_id, so a strict session filter hides them.
-            session_literal = self.chroma_memory.search_literal(
-                query=query,
-                session_id=session_id,
-                collection=collection,
-                tags=tags,
-                source=source,
-                n_results=limit,
-            )
-            global_literal = self.chroma_memory.search_literal(
-                query=query,
-                collection=collection,
-                tags=tags,
-                source=source,
-                n_results=limit,
-            )
-            session_results = self.chroma_memory.search(
-                query=query,
-                session_id=session_id,
-                collection=collection,
-                tags=tags,
-                source=source,
-                n_results=limit,
-            )
-            global_results = self.chroma_memory.search(
-                query=query,
-                collection=collection,
-                tags=tags,
-                source=source,
-                n_results=limit,
-            )
+            search_specs: list[dict[str, Any]] = []
+            if collection:
+                search_specs.append({
+                    "label": collection,
+                    "collection": collection,
+                    "session_id": session_id,
+                    "source": source,
+                })
+            else:
+                if session_id:
+                    search_specs.append({
+                        "label": "sessions",
+                        "collection": "sessions",
+                        "session_id": session_id,
+                        "source": None,
+                    })
+                    search_specs.append({
+                        "label": "session",
+                        "collection": "session",
+                        "session_id": None,
+                        "source": f"session:{session_id}",
+                    })
+                for global_collection in CONVERSATIONAL_GLOBAL_COLLECTIONS:
+                    search_specs.append({
+                        "label": global_collection,
+                        "collection": global_collection,
+                        "session_id": None,
+                        "source": None,
+                    })
 
-            logger.info(f"DEBUG: Session results count: {len(session_results)}")
-            logger.info(f"DEBUG: Global results count: {len(global_results)}")
-            logger.info(f"DEBUG: Session literal results count: {len(session_literal)}")
-            logger.info(f"DEBUG: Global literal results count: {len(global_literal)}")
-            if global_results:
-                logger.info(f"DEBUG: Top global result content: {global_results[0].get('content', 'N/A')[:100]}...")
-            if global_literal:
-                logger.info(f"DEBUG: Top global literal result content: {global_literal[0].get('content', 'N/A')[:100]}...")
-
+            collections_queried: list[str] = []
+            stage_counts: dict[str, int] = {}
             seen_ids: set[str] = set()
-            for item in session_literal + global_literal + session_results + global_results:
-                item_id = str(item.get("id", ""))
-                if item_id in seen_ids:
-                    continue
-                seen_ids.add(item_id)
-                internal.append(item)
+
+            for spec in search_specs:
+                collections_queried.append(spec["label"])
+                literal_hits = self.chroma_memory.search_literal(
+                    query=query,
+                    session_id=spec["session_id"],
+                    collection=spec["collection"],
+                    tags=tags,
+                    source=spec["source"],
+                    n_results=limit,
+                )
+                semantic_hits = self.chroma_memory.search(
+                    query=query,
+                    session_id=spec["session_id"],
+                    collection=spec["collection"],
+                    tags=tags,
+                    source=spec["source"],
+                    n_results=limit,
+                )
+                stage_counts[f'{spec["label"]}:literal'] = len(literal_hits)
+                stage_counts[f'{spec["label"]}:semantic'] = len(semantic_hits)
+
+                for item in literal_hits + semantic_hits:
+                    item_id = str(item.get("id", ""))
+                    if item_id in seen_ids:
+                        continue
+                    seen_ids.add(item_id)
+                    internal.append(item)
+                    if len(internal) >= limit:
+                        break
                 if len(internal) >= limit:
                     break
+
+            logger.info(
+                "memory_retrieval collections_queried=%s entries_returned=%s session_id=%s query=%r stage_counts=%s",
+                collections_queried,
+                len(internal),
+                session_id,
+                query[:160],
+                stage_counts,
+            )
 
         if self.wikipedia and query.strip():
             try:

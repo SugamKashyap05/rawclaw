@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { 
   FiActivity, FiCheckCircle, FiXCircle, FiClock, FiAlertCircle, 
-  FiRefreshCw, FiExternalLink, FiPlay, FiHash, FiArrowRight
+  FiRefreshCw, FiExternalLink, FiPlay, FiHash, FiArrowRight, FiSlash
 } from 'react-icons/fi';
 import { TaskRun } from '@rawclaw/shared';
 import { api } from '../../lib/api';
@@ -13,6 +13,7 @@ interface TaskRunPanelProps {
 }
 
 type ResumeState = { status: 'idle' } | { status: 'loading'; runId: string } | { status: 'error'; runId: string; message: string };
+type CancelState = { status: 'idle' } | { status: 'loading'; runId: string } | { status: 'error'; runId: string; message: string };
 
 export const TaskRunPanel: React.FC<TaskRunPanelProps> = ({ 
   runs, 
@@ -20,6 +21,7 @@ export const TaskRunPanel: React.FC<TaskRunPanelProps> = ({
   currentSessionId 
 }) => {
   const [resumeState, setResumeState] = useState<ResumeState>({ status: 'idle' });
+  const [cancelState, setCancelState] = useState<CancelState>({ status: 'idle' });
 
   // Since the API now filters by sessionId, runs are already session-scoped.
   // We sort by most recent first.
@@ -40,7 +42,30 @@ export const TaskRunPanel: React.FC<TaskRunPanelProps> = ({
     }
   }, [currentSessionId, onRefresh]);
 
+  const handleCancel = useCallback(async (runId: string) => {
+    setCancelState({ status: 'loading', runId });
+    try {
+      await api.post(`/tasks/runs/${runId}/cancel`, {});
+      onRefresh?.();
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || 'Cancel failed';
+      setCancelState({ status: 'error', runId, message });
+    }
+  }, [onRefresh]);
+
+  useEffect(() => {
+    if (cancelState.status !== 'loading') {
+      return;
+    }
+
+    const matchingRun = runs.find((run) => run.id === cancelState.runId);
+    if (!matchingRun || !['queued', 'running', 'cancelling'].includes(matchingRun.status)) {
+      setCancelState({ status: 'idle' });
+    }
+  }, [cancelState, runs]);
+
   const isResumable = (status: string) => status === 'failed' || status === 'cancelled';
+  const isCancelable = (status: string) => status === 'queued' || status === 'running';
 
   if (sortedRuns.length === 0) {
     return (
@@ -57,6 +82,8 @@ export const TaskRunPanel: React.FC<TaskRunPanelProps> = ({
         {sortedRuns.map((run) => {
           const isResuming = resumeState.status === 'loading' && resumeState.runId === run.id;
           const resumeError = resumeState.status === 'error' && resumeState.runId === run.id ? resumeState.message : null;
+          const isCancelling = cancelState.status === 'loading' && cancelState.runId === run.id;
+          const cancelError = cancelState.status === 'error' && cancelState.runId === run.id ? cancelState.message : null;
           const duration = computeDuration(run);
 
           return (
@@ -158,6 +185,19 @@ export const TaskRunPanel: React.FC<TaskRunPanelProps> = ({
                 </div>
               )}
 
+              {cancelError && (
+                <div style={{
+                  color: 'var(--error)',
+                  fontSize: '0.78rem',
+                  padding: '6px 10px',
+                  background: 'rgba(255, 77, 77, 0.08)',
+                  borderRadius: '6px',
+                  marginBottom: '0.5rem'
+                }}>
+                  Cancel failed: {cancelError}
+                </div>
+              )}
+
               {/* Row 3: Action bar */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -172,6 +212,12 @@ export const TaskRunPanel: React.FC<TaskRunPanelProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                       <FiClock size={12} />
                       <span>Queued</span>
+                    </div>
+                  )}
+                  {run.status === 'cancelling' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f59e0b', fontSize: '0.75rem' }}>
+                      <FiRefreshCw className="spin" size={12} />
+                      <span>Cancelling...</span>
                     </div>
                   )}
                   {run.status === 'done' && run.outputPath && (
@@ -221,6 +267,34 @@ export const TaskRunPanel: React.FC<TaskRunPanelProps> = ({
                         <FiPlay size={11} />
                       )}
                       {isResuming ? 'Resuming...' : 'Resume'}
+                    </button>
+                  )}
+                  {isCancelable(run.status) && (
+                    <button
+                      className="btn-tiny"
+                      onClick={() => void handleCancel(run.id)}
+                      disabled={isCancelling}
+                      title="Cancel this run"
+                      style={{ 
+                        padding: '4px 10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.72rem',
+                        color: 'var(--text-secondary)',
+                        border: '1px solid rgba(255, 255, 255, 0.16)',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        borderRadius: '6px',
+                        cursor: isCancelling ? 'wait' : 'pointer',
+                        opacity: isCancelling ? 0.6 : 1
+                      }}
+                    >
+                      {isCancelling ? (
+                        <FiRefreshCw className="spin" size={11} />
+                      ) : (
+                        <FiSlash size={11} />
+                      )}
+                      {isCancelling ? 'Cancelling...' : 'Cancel'}
                     </button>
                   )}
                   <button 
@@ -306,6 +380,7 @@ function getStatusColor(status: string, opacity = 1) {
   switch (status) {
     case 'queued': return `rgba(180, 180, 180, ${opacity})`;
     case 'running': return `rgba(0, 240, 255, ${opacity})`;
+    case 'cancelling': return `rgba(245, 158, 11, ${opacity})`;
     case 'done': return `rgba(0, 255, 150, ${opacity})`;
     case 'failed': return `rgba(255, 77, 77, ${opacity})`;
     case 'cancelled': return `rgba(255, 255, 255, ${opacity * 0.3})`;
@@ -317,6 +392,7 @@ function getStatusTextColor(status: string) {
   switch (status) {
     case 'queued': return 'var(--text-muted)';
     case 'running': return 'var(--neon-cyan)';
+    case 'cancelling': return '#f59e0b';
     case 'done': return 'var(--neon-green, #00ff96)';
     case 'failed': return 'var(--error, #ef4444)';
     case 'cancelled': return 'var(--text-muted)';

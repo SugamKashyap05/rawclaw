@@ -354,11 +354,10 @@ async function apiDelete(path, headers) {
 
 function chooseModel(models) {
   const preferred = [
-    'ollama/qwen2.5:1.5b',
-    'ollama/phi3:3.8b',
-    'ollama/llama3.2:3b',
-    'ollama/llama3.2:latest',
-    'ollama/llama3:8b',
+    'ollama/gemma4:31b-cloud',
+    'ollama/gemma4:e4b',
+    'ollama/qwen3-vl:8b',
+    'ollama/deepseek-r1:8b',
   ];
   for (const candidate of preferred) {
     if (models.some((model) => model.id === candidate)) {

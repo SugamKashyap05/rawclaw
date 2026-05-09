@@ -133,7 +133,7 @@ async def get_tools() -> list:
         return []
 
 
-async def send_chat_stream(session_id: str, message: str, model: str = "ollama/qwen2.5:1.5b") -> dict:
+async def send_chat_stream(session_id: str, message: str, model: str = "ollama/gemma4:31b-cloud") -> dict:
     """
     Send a chat message and collect the streaming response.
     Returns dict with: content, tool_calls, tool_results, provenance, success, error
@@ -150,7 +150,8 @@ async def send_chat_stream(session_id: str, message: str, model: str = "ollama/q
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        timeout = httpx.Timeout(connect=20.0, read=120.0, write=20.0, pool=20.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             # Get auth token first
             try:
                 auth_resp = await client.post(
@@ -226,13 +227,15 @@ async def send_chat_stream(session_id: str, message: str, model: str = "ollama/q
                 except json.JSONDecodeError:
                     continue
 
+    except httpx.ReadTimeout:
+        result["error"] = "[REPLAY_TIMEOUT] SSE read exceeded 120s"
     except Exception as e:
         result["error"] = str(e)
 
     return result
 
 
-async def test_agent_direct(session_id: str, message: str, model: str = "ollama/qwen2.5:1.5b") -> dict:
+async def test_agent_direct(session_id: str, message: str, model: str = "ollama/gemma4:31b-cloud") -> dict:
     """
     Test agent directly via /execute endpoint (bypasses API).
     """
@@ -247,7 +250,8 @@ async def test_agent_direct(session_id: str, message: str, model: str = "ollama/
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        timeout = httpx.Timeout(connect=20.0, read=120.0, write=20.0, pool=20.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
                 AGENT_EXECUTE_URL,
                 json={
@@ -316,6 +320,8 @@ async def test_agent_direct(session_id: str, message: str, model: str = "ollama/
                 except json.JSONDecodeError:
                     pass
 
+    except httpx.ReadTimeout:
+        result["error"] = "[REPLAY_TIMEOUT] SSE read exceeded 120s"
     except Exception as e:
         result["error"] = str(e)
 
@@ -577,7 +583,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Test RawClaw conversation flow")
     parser.add_argument("--direct", action="store_true", help="Test agent directly (bypasses API)")
-    parser.add_argument("--model", default="ollama/qwen2.5:1.5b", help="Model to use")
+    parser.add_argument("--model", default="ollama/gemma4:31b-cloud", help="Model to use")
     args = parser.parse_args()
 
     try:

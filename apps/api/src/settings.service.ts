@@ -7,6 +7,13 @@ import { join } from 'path';
 import { generateKeyPairSync } from 'crypto';
 
 const SETTINGS_KEY = 'rawclaw.settings';
+export const DEFAULT_WORKSPACE_FILES: WorkspaceFilesState = {
+  soul: '# RawClaw Soul\nYou are a senior AI agent architect. You are precise, secure, and helpful.',
+  user: '# User Profile\nUser context not yet provided.',
+  memory: '# Persistent Memory\nNo long-term memories stored yet.',
+  tools: '# Tool Guidelines\nPrefer local tools. Always verify security before execution.',
+};
+
 const DEFAULT_SETTINGS: AppSettingsState = {
   theme: 'dark',
   language: 'en',
@@ -46,7 +53,7 @@ export class SettingsService {
 
   async getPayload(): Promise<SettingsPayload> {
     const settings = await this.getSettings();
-    const workspaceFiles = this.getWorkspaceFiles();
+    const workspaceFiles = this.readWorkspaceFiles();
     return { settings, workspaceFiles };
   }
 
@@ -55,7 +62,7 @@ export class SettingsService {
     needsSetup: boolean;
     workspaceFiles: { user: boolean; soul: boolean; memory: boolean; tools: boolean };
   } {
-    const workspaceFiles = this.getWorkspaceFiles();
+    const workspaceFiles = this.readWorkspaceFiles();
     const fileStatus = {
       user: workspaceFiles.user.trim().length > 0,
       soul: workspaceFiles.soul.trim().length > 0,
@@ -78,7 +85,7 @@ export class SettingsService {
     memory?: string;
     tools?: string;
   }): Promise<SettingsPayload> {
-    const current = this.getWorkspaceFiles();
+    const current = this.readWorkspaceFiles();
     const next: WorkspaceFilesState = {
       soul: payload.soul ?? current.soul,
       user: payload.user.trim(),
@@ -86,7 +93,7 @@ export class SettingsService {
       tools: payload.tools ?? current.tools,
     };
 
-    this.writeWorkspaceFiles(next);
+    this.writeWorkspaceFilesState(next);
     return this.getPayload();
   }
 
@@ -132,9 +139,9 @@ export class SettingsService {
     });
 
     if (payload.workspaceFiles) {
-      const currentFiles = this.getWorkspaceFiles();
+      const currentFiles = this.readWorkspaceFiles();
       const nextFiles = { ...currentFiles, ...payload.workspaceFiles };
-      this.writeWorkspaceFiles(nextFiles);
+      this.writeWorkspaceFilesState(nextFiles);
     }
 
     return this.getPayload();
@@ -193,7 +200,7 @@ export class SettingsService {
     };
   }
 
-  private getWorkspaceFiles(): WorkspaceFilesState {
+  readWorkspaceFiles(): WorkspaceFilesState {
     return {
       soul: this.readWorkspaceFile('SOUL.md'),
       user: this.readWorkspaceFile('USER.md'),
@@ -202,12 +209,17 @@ export class SettingsService {
     };
   }
 
-  private writeWorkspaceFiles(files: WorkspaceFilesState): void {
+  writeWorkspaceFilesState(files: WorkspaceFilesState): void {
     this.ensureWorkspace();
     writeFileSync(join(this.rawclawDir, 'SOUL.md'), files.soul, 'utf8');
     writeFileSync(join(this.rawclawDir, 'USER.md'), files.user, 'utf8');
     writeFileSync(join(this.rawclawDir, 'MEMORY.md'), files.memory, 'utf8');
     writeFileSync(join(this.rawclawDir, 'TOOLS.md'), files.tools, 'utf8');
+  }
+
+  resetWorkspaceFiles(): WorkspaceFilesState {
+    this.writeWorkspaceFilesState(DEFAULT_WORKSPACE_FILES);
+    return this.readWorkspaceFiles();
   }
 
   private ensureWorkspace(): void {
@@ -216,10 +228,10 @@ export class SettingsService {
     }
 
     // Seed default files if they don't exist to provide a baseline "soul" and context
-    this.seedDefaultFile('SOUL.md', '# RawClaw Soul\nYou are a senior AI agent architect. You are precise, secure, and helpful.');
-    this.seedDefaultFile('USER.md', '# User Profile\nUser context not yet provided.');
-    this.seedDefaultFile('MEMORY.md', '# Persistent Memory\nNo long-term memories stored yet.');
-    this.seedDefaultFile('TOOLS.md', '# Tool Guidelines\nPrefer local tools. Always verify security before execution.');
+    this.seedDefaultFile('SOUL.md', DEFAULT_WORKSPACE_FILES.soul);
+    this.seedDefaultFile('USER.md', DEFAULT_WORKSPACE_FILES.user);
+    this.seedDefaultFile('MEMORY.md', DEFAULT_WORKSPACE_FILES.memory);
+    this.seedDefaultFile('TOOLS.md', DEFAULT_WORKSPACE_FILES.tools);
   }
 
   private seedDefaultFile(name: string, content: string): void {

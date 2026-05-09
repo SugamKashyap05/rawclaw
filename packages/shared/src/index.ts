@@ -10,6 +10,7 @@ export * from './contracts/agent';
 export * from './contracts/mcp';
 export * from './contracts/models';
 export * from './contracts/settings';
+export * from './contracts/bootstrap';
 export * from './contracts/skill';
 export * from './contracts/system';
 export * from './contracts/assistant';
@@ -17,6 +18,9 @@ export * from './contracts/process-controller';
 export * from './contracts/gateway';
 export * from './contracts/operator';
 export * from './contracts/app-builder';
+export * from './contracts/transformer';
+export * from './contracts/transformer-pipeline';
+export * from './constants/coworker-activity';
 export * from './constants/chat-nlu-intent-examples';
 export * from './constants/chat-nlu-intent-examples.test-fixtures';
 

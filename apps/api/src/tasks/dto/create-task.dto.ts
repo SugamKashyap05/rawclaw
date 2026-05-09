@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, IsNotEmpty, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsNotEmpty, MinLength, MaxLength, IsBoolean } from 'class-validator';
 
 export class CreateTaskDto {
   @IsString()
@@ -27,4 +27,8 @@ export class CreateTaskDto {
   @IsString()
   @IsOptional()
   workspaceId?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  enabled?: boolean;
 }

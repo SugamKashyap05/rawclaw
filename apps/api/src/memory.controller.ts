@@ -48,6 +48,20 @@ export class MemoryController {
     return this.memoryService.clear(collection);
   }
 
+  @Post('maintenance/dedupe-tool-discovery')
+  async dedupeToolDiscovery(@Body() body?: { dryRun?: boolean }) {
+    return this.memoryService.dedupeToolDiscovery(Boolean(body?.dryRun));
+  }
+
+  @Post('maintenance/prune-sessions')
+  async pruneSessions(@Body() body?: { ttlDays?: number; maxEntriesPerSession?: number; dryRun?: boolean }) {
+    return this.memoryService.pruneSessionIndex({
+      ttlDays: body?.ttlDays,
+      maxEntriesPerSession: body?.maxEntriesPerSession,
+      dryRun: body?.dryRun,
+    });
+  }
+
   @Delete('entries/:id')
   async deleteEntry(@Param('id') id: string): Promise<{ success: true }> {
     return this.memoryService.deleteEntry(id);

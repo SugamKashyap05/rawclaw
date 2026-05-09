@@ -515,7 +515,10 @@ async def test_single_session_chat_direct_url_thin_extract_stays_cautious():
         "forced_direct_extract": tool_call_names == ["web_extract"],
         "quality_summary_thin": (metadata.get("extractionQualitySummary") or {}).get("tier") == "thin",
         "evidence_gate_cautious": (metadata.get("evidenceGate") or {}).get("mode") == "PROCEED_CAUTIOUS",
-        "final_answer_stays_cautious": "Based on the recovered article fragments" in final_content
+        "final_answer_stays_cautious": (
+            "Based on the recovered article fragments" in final_content
+            or "Based on the recovered page fragments" in final_content
+        )
         and "recovered page fragments directly support" in final_content,
         "session_idle_again": canonical_session is not None and canonical_session.run_status == "idle",
     }
@@ -559,7 +562,8 @@ async def test_single_session_chat_direct_url_failed_extract_falls_back_to_searc
                 source_url="https://www.msn.com/en-in/sports/cricket/rinku-singh-creates-history-breaks-ms-dhoni-s-15-year-old-record-during-lsg-vs-kkr-tie/ar-AA21MNqQ",
             )
         if tool_call.tool_name == "web_search":
-            assert "site:msn.com" in str(tool_call.input.get("query") or "")
+            search_query = str(tool_call.input.get("query") or "").lower()
+            assert "msn" in search_query and "rinku" in search_query
             return _tool_result(
                 "web_search",
                 output={
@@ -600,7 +604,7 @@ async def test_single_session_chat_direct_url_failed_extract_falls_back_to_searc
     ]
 
     feature_status = {
-        "extract_then_search_fallback": tool_call_names == ["web_extract", "web_search"],
+        "orchestrated_extract_with_search_fallback": tool_call_names == ["web_extract"],
         "fallback_answer_mentions_direct_failure": "could not read the requested page directly" in final_content.lower(),
         "fallback_answer_mentions_search_evidence": "fallback summary rather than a direct page reading" in final_content.lower(),
         "fallback_answer_mentions_rinku": "rinku singh" in final_content.lower(),
@@ -689,7 +693,8 @@ async def test_single_session_chat_direct_url_transport_failure_mentions_fetch_l
     ]
 
     feature_status = {
-        "extract_then_search_attempted": tool_call_names == ["web_extract", "web_search"],
+        "orchestrated_extract_attempted": tool_call_names.count("web_extract") >= 1,
+        "no_top_level_web_search_for_direct_url": "web_search" not in tool_call_names,
         "final_answer_mentions_transport_layer": "transport layer" in final_content.lower(),
         "final_answer_mentions_failure_kind": "socket_permission_denied" in final_content.lower(),
         "session_idle_again": canonical_session is not None and canonical_session.run_status == "idle",

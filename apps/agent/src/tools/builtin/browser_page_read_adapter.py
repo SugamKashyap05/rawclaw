@@ -10,13 +10,13 @@ from src.tools.registry import TOOL_REGISTRY
 from src.tools.builtin.browser_capability import check_browser_page_read_capability
 from src.tools.builtin.page_read_types import (
     BROWSER_SEMAPHORE_CAPACITY,
-    DEFAULT_MIN_CONTENT_CHARS,
     LIVE_DATA_MIN_CONTENT_CHARS,
     PAGE_READ_BROWSER_MAX_QUEUE_DEPTH,
     PageReadContext,
     PageReadResult,
     find_url_field,
     normalize_backend_attempt,
+    normalize_redirected_url,
 )
 
 logger = logging.getLogger("rawclaw.tools.browser_page_read")
@@ -125,8 +125,9 @@ def _extract_landed_url(context_url: str, navigation_output: Dict[str, Any], sna
     ]
     for candidate in candidates:
         value = str(candidate or "").strip()
-        if value and value != context_url:
-            return value
+        normalized = normalize_redirected_url(context_url, value)
+        if normalized:
+            return normalized
     return None
 
 
@@ -176,6 +177,16 @@ def _classify_browser_content(content: str, min_content_chars: int) -> Dict[str,
     return {"quality": "extract_partial", "tier": "thin", "confidence": 0.45, "wordCount": word_count}
 
 
+def _page_type_for_kind(page_kind: str) -> str:
+    if page_kind == "news/article":
+        return "article"
+    if page_kind == "standings/table":
+        return "data_table"
+    if page_kind == "docs/changelog":
+        return "article"
+    return "general"
+
+
 def _wait_payload(schema: Dict[str, Any], seconds: float) -> Optional[Dict[str, Any]]:
     properties = schema.get("properties") if isinstance(schema, dict) else {}
     if not isinstance(properties, dict):
@@ -209,6 +220,9 @@ class BrowserPageReadAdapter:
                 failureChain=["browser: skipped (missing co-located navigate/snapshot tools)"],
                 error="browser page-read unavailable",
                 pageKind=context.page_kind,
+                pageType=_page_type_for_kind(context.page_kind),
+                taskType=context.task_type,
+                sourceMode=context.source_mode,
                 minContentChars=context.min_content_chars,
             )
 
@@ -222,6 +236,9 @@ class BrowserPageReadAdapter:
                 failureChain=["browser: skipped (queue full)"],
                 error="browser queue full",
                 pageKind=context.page_kind,
+                pageType=_page_type_for_kind(context.page_kind),
+                taskType=context.task_type,
+                sourceMode=context.source_mode,
                 minContentChars=context.min_content_chars,
             )
 
@@ -230,6 +247,9 @@ class BrowserPageReadAdapter:
         try:
             await BROWSER_PAGE_READ_SEMAPHORE.acquire()
             acquired = True
+            # Waiting-count cleanup and semaphore release have different lifetimes:
+            # we stop counting as queued once the caller enters active browser work,
+            # but we still must release the semaphore after the active sequence ends.
             await self._decrement_waiter()
             counted_as_waiting = False
             try:
@@ -247,6 +267,9 @@ class BrowserPageReadAdapter:
                     failureChain=["browser: failed (timeout)"],
                     error="browser page-read timeout",
                     pageKind=context.page_kind,
+                    pageType=_page_type_for_kind(context.page_kind),
+                    taskType=context.task_type,
+                    sourceMode=context.source_mode,
                     minContentChars=context.min_content_chars,
                 )
             finally:
@@ -284,6 +307,9 @@ class BrowserPageReadAdapter:
                 failureChain=["browser: failed (navigate schema missing URL field)"],
                 error="browser_navigate URL field unavailable",
                 pageKind=context.page_kind,
+                pageType=_page_type_for_kind(context.page_kind),
+                taskType=context.task_type,
+                sourceMode=context.source_mode,
                 minContentChars=context.min_content_chars,
             )
 
@@ -308,6 +334,9 @@ class BrowserPageReadAdapter:
                 failureChain=[f"browser: failed ({str(exc)[:120]})"],
                 error=str(exc)[:240],
                 pageKind=context.page_kind,
+                pageType=_page_type_for_kind(context.page_kind),
+                taskType=context.task_type,
+                sourceMode=context.source_mode,
                 minContentChars=context.min_content_chars,
             )
 
@@ -320,6 +349,10 @@ class BrowserPageReadAdapter:
         local_error = "browser snapshot empty" if not content else None
         duration_ms = int((time.monotonic() - start) * 1000)
         failure_chain = [] if backend_result == "success" else [f"browser: garbage ({metadata['wordCount']} words)"]
+        redirected_url = normalize_redirected_url(
+            context.url,
+            _extract_landed_url(context.url, navigate_output, snapshot) or context.url,
+        )
         return PageReadResult(
             url=context.url,
             title=title,
@@ -330,14 +363,18 @@ class BrowserPageReadAdapter:
             evidenceStatus="strong" if backend_result == "success" and metadata["confidence"] >= 0.75 else ("failed" if local_error else "degraded"),
             backendAttempts=[normalize_backend_attempt(attempt_seq=2, backend="browser", result=backend_result, error=local_error, duration_ms=duration_ms)],
             failureChain=failure_chain,
-            landed_url=_extract_landed_url(context.url, navigate_output, snapshot),
+            landed_url=redirected_url,
             quality=metadata["quality"],
             tier=metadata["tier"],
             confidence=metadata["confidence"],
             wordCount=metadata["wordCount"],
             pageKind=context.page_kind,
+            pageType=_page_type_for_kind(context.page_kind),
+            taskType=context.task_type,
+            sourceMode=context.source_mode,
             jsRenderSuspected=context.js_render_suspected,
             minContentChars=context.min_content_chars,
+            redirectedUrl=redirected_url,
             error=local_error,
         )
 

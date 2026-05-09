@@ -1,6 +1,7 @@
 import React from 'react';
 import { FiActivity, FiSearch, FiCpu, FiCheckCircle } from 'react-icons/fi';
 import { ProvenanceTrace as IProvenanceTrace } from '@rawclaw/shared';
+import { buildInitialAnalysisSummary } from './researchUiSummary';
 
 interface InitialAnalysisCardProps {
   trace: Partial<IProvenanceTrace> | null | undefined;
@@ -8,12 +9,7 @@ interface InitialAnalysisCardProps {
 }
 
 export const InitialAnalysisCard: React.FC<InitialAnalysisCardProps> = ({ trace, query }) => {
-  const steps = Array.isArray(trace?.steps) ? trace.steps : [];
-  
-  // Find key reasoning artifacts
-  const decisionLevel = steps.find(s => s.stepType === 'plan')?.outputSummary || 'Determining Action Level...';
-  const contexts = steps.filter(s => s.stepType === 'tool_result').map(s => s.toolName);
-  const isComplete = steps.some(s => s.stepType === 'synthesis');
+  const { decisionLevel, contexts, isComplete } = buildInitialAnalysisSummary(trace);
 
   return (
     <div 
@@ -105,7 +101,7 @@ export const InitialAnalysisCard: React.FC<InitialAnalysisCardProps> = ({ trace,
               </span>
             )) : (
               <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                Analyzing memory...
+                Analyzing evidence...
               </span>
             )}
           </div>

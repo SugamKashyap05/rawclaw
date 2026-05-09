@@ -7,17 +7,20 @@ interface HealthStatusData {
   status: SystemStatusSnapshot;
   refresh: () => Promise<void>;
   isRefreshing: boolean;
+  hasLoaded: boolean;
 }
 
 export function useHealthStatus(intervalMs = 5000): HealthStatusData {
   const [status, setStatus] = useState<SystemStatusSnapshot>(DEFAULT_SYSTEM_STATUS);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const fetchStatus = async () => {
     try {
       setIsRefreshing(true);
       const response = await api.get<SystemStatusSnapshot>('/system/status');
       setStatus(response.data);
+      setHasLoaded(true);
     } catch {
       setStatus((current) => ({
         ...current,
@@ -27,6 +30,7 @@ export function useHealthStatus(intervalMs = 5000): HealthStatusData {
         },
         websocket: { connected: false },
       }));
+      setHasLoaded(true);
     } finally {
       setIsRefreshing(false);
     }
@@ -56,5 +60,5 @@ export function useHealthStatus(intervalMs = 5000): HealthStatusData {
     };
   }, [intervalMs]);
 
-  return { status, refresh: fetchStatus, isRefreshing };
+  return { status, refresh: fetchStatus, isRefreshing, hasLoaded };
 }

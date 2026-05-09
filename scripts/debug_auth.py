@@ -14,7 +14,7 @@ async def test():
             r2 = await c.post(
                 'http://localhost:3000/api/chat/send',
                 headers={'Authorization': f'Bearer {token}'},
-                json={'session_id': 'test-123', 'messages': [{'role': 'user', 'content': 'hi'}], 'model': 'ollama/qwen2.5:1.5b', 'stream': True}
+                json={'session_id': 'test-123', 'messages': [{'role': 'user', 'content': 'hi'}], 'model': 'ollama/gemma4:31b-cloud', 'stream': True}
             )
             print(f'Chat status: {r2.status_code}')
             print(f'Chat body preview: {r2.text[:200]}')

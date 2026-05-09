@@ -11,7 +11,9 @@ export interface MemoryEntry {
 export interface MemoryStats {
   totalEntries: number;
   collections: string[];
+  collectionCounts?: Record<string, number>;
   embeddingModel: string;
+  warnings?: string[];
 }
 
 export interface MemorySearchRequest {

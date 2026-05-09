@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SettingsPayload, UpdateSettingsRequest } from '@rawclaw/shared';
 import { api } from '../lib/api';
+import { logout, resetRawClaw } from '../lib/auth';
 
 const EMPTY_SETTINGS: SettingsPayload = {
   settings: {
@@ -40,6 +41,7 @@ const EMPTY_SETTINGS: SettingsPayload = {
 export default function Settings() {
   const [payload, setPayload] = useState<SettingsPayload>(EMPTY_SETTINGS);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -67,6 +69,25 @@ export default function Settings() {
   const startStopBot = async (bot: 'telegram' | 'discord', enabled: boolean) => {
     await api.post(`/settings/bots/${bot}/${enabled ? 'stop' : 'start'}`);
     await load();
+  };
+
+  const handleFactoryReset = async () => {
+    const confirmed = window.confirm(
+      'This will clear sessions, agents, tasks, memory, local app settings, and reset RawClaw back to first-launch setup. Continue?',
+    );
+    if (!confirmed) return;
+
+    setResetting(true);
+    setMessage(null);
+    const ok = await resetRawClaw();
+    setResetting(false);
+    if (!ok) {
+      setMessage('Factory reset failed. Check the API logs and try again.');
+      return;
+    }
+
+    logout();
+    window.location.assign('/');
   };
 
   return (
@@ -173,6 +194,26 @@ export default function Settings() {
             value={payload.workspaceFiles.tools}
             onChange={(value) => setPayload((current) => ({ ...current, workspaceFiles: { ...current.workspaceFiles, tools: value } }))}
           />
+        </div>
+      </section>
+
+      <section
+        className="glass-card"
+        style={{
+          border: '1px solid rgba(255, 107, 129, 0.28)',
+          background: 'linear-gradient(180deg, rgba(255, 107, 129, 0.08), rgba(255,255,255,0.02))',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ fontSize: '1.15rem', marginBottom: '0.35rem' }}>Fresh start</h2>
+            <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, maxWidth: '62ch' }}>
+              Reset RawClaw back to its first-launch state. The app will reopen the setup flow, re-check Ollama, recreate background agents, and ask you to define a fresh main agent.
+            </p>
+          </div>
+          <button className="btn-ghost" onClick={() => void handleFactoryReset()} disabled={resetting}>
+            {resetting ? 'Restarting RawClaw…' : 'Reset everything'}
+          </button>
         </div>
       </section>
     </div>

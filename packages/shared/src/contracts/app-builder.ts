@@ -744,6 +744,7 @@ export interface AppBuilderApprovalGate {
 
 export interface AppBuilderQueueJob {
   id: string;
+  turn_id?: string | null;
   runId: string;
   projectId: string;
   phase: AppBuilderPhase;

@@ -5,11 +5,13 @@ interface StatusBarProps {
   status: SystemStatusSnapshot;
   onRefresh?: () => Promise<void> | void;
   isRefreshing?: boolean;
+  isInitializing?: boolean;
   variant?: 'default' | 'app-builder';
 }
 
-export function StatusBar({ status, onRefresh, isRefreshing = false, variant = 'default' }: StatusBarProps) {
+export function StatusBar({ status, onRefresh, isRefreshing = false, isInitializing = false, variant = 'default' }: StatusBarProps) {
   const isAppBuilder = variant === 'app-builder';
+  const websocketStatus = isInitializing ? 'degraded' : (status.websocket.connected ? 'ok' : 'down');
 
   return (
     <footer
@@ -28,12 +30,12 @@ export function StatusBar({ status, onRefresh, isRefreshing = false, variant = '
       }}
     >
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <StatusChip label="API" status={status.services.api} appBuilder={isAppBuilder} />
-        <StatusChip label="Agent" status={status.services.agent} appBuilder={isAppBuilder} />
-        <StatusChip label="Redis" status={status.services.redis} appBuilder={isAppBuilder} />
-        <StatusChip label="ChromaDB" status={status.services.chroma} appBuilder={isAppBuilder} />
-        <StatusChip label="Prisma / SQLite" status={status.services.database} appBuilder={isAppBuilder} />
-        <StatusChip label="WebSocket" status={status.websocket.connected ? 'ok' : 'down'} appBuilder={isAppBuilder} />
+        <StatusChip label="API" status={status.services.api} appBuilder={isAppBuilder} isInitializing={isInitializing} />
+        <StatusChip label="Agent" status={status.services.agent} appBuilder={isAppBuilder} isInitializing={isInitializing} />
+        <StatusChip label="Redis" status={status.services.redis} appBuilder={isAppBuilder} isInitializing={isInitializing} />
+        <StatusChip label="ChromaDB" status={status.services.chroma} appBuilder={isAppBuilder} isInitializing={isInitializing} />
+        <StatusChip label="Prisma / SQLite" status={status.services.database} appBuilder={isAppBuilder} isInitializing={isInitializing} />
+        <StatusChip label="WebSocket" status={websocketStatus} appBuilder={isAppBuilder} isInitializing={isInitializing} />
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--text-secondary)' }}>
@@ -63,8 +65,19 @@ export function StatusBar({ status, onRefresh, isRefreshing = false, variant = '
   );
 }
 
-function StatusChip({ label, status, appBuilder = false }: { label: string; status: string; appBuilder?: boolean }) {
-  const normalized = status === 'ok' ? 'ok' : status === 'degraded' ? 'loading' : 'down';
+function StatusChip({
+  label,
+  status,
+  appBuilder = false,
+  isInitializing = false,
+}: {
+  label: string;
+  status: string;
+  appBuilder?: boolean;
+  isInitializing?: boolean;
+}) {
+  const displayStatus = isInitializing ? 'loading' : status;
+  const normalized = displayStatus === 'ok' ? 'ok' : displayStatus === 'degraded' || displayStatus === 'loading' ? 'loading' : 'down';
 
   return (
     <div
@@ -81,7 +94,7 @@ function StatusChip({ label, status, appBuilder = false }: { label: string; stat
       <span className={`status-dot ${normalized}`} />
       <span style={{ fontSize: appBuilder ? '0.75rem' : '0.68rem' }}>{label}</span>
       <span className={appBuilder ? undefined : 'mono'} style={{ color: 'var(--text-muted)', fontSize: appBuilder ? '0.72rem' : '0.62rem', textTransform: 'lowercase' }}>
-        {status}
+        {displayStatus}
       </span>
     </div>
   );

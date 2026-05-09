@@ -6,11 +6,14 @@ import {
   ChatControlState,
   ChatMessage,
   ChatResponse,
+  CoworkerActivityFrame,
   ChatNluClarificationUpdateResult,
   ChatNluPendingClarificationUpdate,
   MemoryEvent,
   PendingNluClarification,
+  SessionPipelineMode,
   ToolCall,
+  TransformTrace,
   ReviewEvent,
   WorkflowState,
 } from '@rawclaw/shared';
@@ -37,6 +40,7 @@ interface MessageWithRelations {
   fallbacks: string | null;
   memoryRecall: boolean | null;
   agentId: string | null;
+  streamStatus?: string | null;
   errorType: string | null;
   errorMessage: string | null;
   attachments: string | null;
@@ -61,6 +65,7 @@ export interface SessionWithMessages {
   messages: ChatMessage[];
   chatControls?: ChatControlState;
   pendingNluClarification?: PendingNluClarification | null;
+  pipelineMode?: SessionPipelineMode;
 }
 
 @Injectable()
@@ -162,6 +167,12 @@ export class ChatService {
     return pending as PendingNluClarification;
   }
 
+  private parseSessionPipelineMode(metadataJson: string | null | undefined): SessionPipelineMode | undefined {
+    const metadata = this.parseSessionMetadata(metadataJson);
+    const mode = metadata?.pipelineMode;
+    return mode === 'legacy' || mode === 'transform_v1' ? mode : undefined;
+  }
+
   async upsertSessionControls(sessionId: string, chatControls: ChatControlState): Promise<void> {
     const existing = await this.prisma.session.findUnique({
       where: { id: sessionId },
@@ -185,6 +196,38 @@ export class ChatService {
         metadataJson: JSON.stringify({ chatControls: nextControls }),
       },
     });
+  }
+
+  async resolveSessionPipelineMode(
+    sessionId: string,
+    transformerEnabledByDefault: boolean,
+  ): Promise<SessionPipelineMode> {
+    const existing = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { metadataJson: true, title: true },
+    });
+    const currentMetadata = this.parseSessionMetadata(existing?.metadataJson);
+    const currentMode = this.parseSessionPipelineMode(existing?.metadataJson);
+    if (currentMode) {
+      return currentMode;
+    }
+
+    const pipelineMode: SessionPipelineMode = transformerEnabledByDefault ? 'transform_v1' : 'legacy';
+    await this.prisma.session.upsert({
+      where: { id: sessionId },
+      update: {
+        metadataJson: JSON.stringify({
+          ...currentMetadata,
+          pipelineMode,
+        }),
+      },
+      create: {
+        id: sessionId,
+        title: existing?.title || null,
+        metadataJson: JSON.stringify({ pipelineMode }),
+      },
+    });
+    return pipelineMode;
   }
 
   async getPendingNluClarification(sessionId: string): Promise<PendingNluClarification | null> {
@@ -240,6 +283,7 @@ export class ChatService {
       reviewEvents?: ReviewEvent[];
       citations?: Citation[];
       modelId?: string;
+      turnId?: string;
       isLocal?: boolean;
       fallbacks?: string[];
       memoryRecall?: boolean;
@@ -247,6 +291,7 @@ export class ChatService {
       error?: { type: string; message: string };
       attachments?: any[];
       durationMs?: number;
+      streamStatus?: 'completed' | 'incomplete' | 'failed';
       promptPackId?: string;
       promptVersionHash?: string;
       reviewerPromptVersionHash?: string;
@@ -255,6 +300,8 @@ export class ChatService {
       workflowState?: WorkflowState;
       memoryEvents?: MemoryEvent[];
       advisoryEvents?: AdvisoryEvent[];
+      coworkerActivityFrame?: CoworkerActivityFrame;
+      transformTrace?: TransformTrace;
     }
   ): Promise<MessageWithRelations> {
     const derivedTitle = role === 'user' ? this.deriveSessionTitle(content) : null;
@@ -289,13 +336,16 @@ export class ChatService {
         toolCalls: metadata?.toolCalls ? JSON.stringify(metadata.toolCalls) : null,
         toolResults: metadata?.toolResults ? JSON.stringify(metadata.toolResults) : null,
         provenance:
-          metadata?.provenance || metadata?.reviewEvents?.length || metadata?.workflowState
+          metadata?.provenance || metadata?.reviewEvents?.length || metadata?.workflowState || metadata?.coworkerActivityFrame || metadata?.transformTrace
             ? JSON.stringify({
                 trace: metadata?.provenance || null,
+                turnId: metadata?.turnId || null,
                 reviewEvents: metadata?.reviewEvents || [],
                 workflowState: metadata?.workflowState || null,
                 memoryEvents: metadata?.memoryEvents || [],
                 advisoryEvents: metadata?.advisoryEvents || [],
+                coworkerActivityFrame: metadata?.coworkerActivityFrame || null,
+                transformTrace: metadata?.transformTrace || null,
               })
             : null,
         citations: metadata?.citations ? JSON.stringify(metadata.citations) : null,
@@ -304,6 +354,7 @@ export class ChatService {
         fallbacks: metadata?.fallbacks ? JSON.stringify(metadata.fallbacks) : null,
         memoryRecall: metadata?.memoryRecall,
         agentId: metadata?.agentId,
+        streamStatus: metadata?.streamStatus || 'completed',
         errorType: metadata?.error?.type,
         errorMessage: metadata?.error?.message,
         attachments: metadata?.attachments ? JSON.stringify(metadata.attachments) : null,
@@ -315,15 +366,15 @@ export class ChatService {
         workflowPromptIds: metadata?.workflowPromptIds ? JSON.stringify(metadata.workflowPromptIds) : null,
         // @ts-ignore - runIds is present in generated client but TS server is stale
         runIds: metadata?.runIds ? JSON.stringify(metadata.runIds) : null,
-      },
-    });
+      } as any,
+    }) as Promise<MessageWithRelations>;
   }
 
   async getMessages(sessionId: string): Promise<ChatMessage[]> {
     const messages = await this.prisma.message.findMany({
       where: { sessionId },
       orderBy: { createdAt: 'asc' },
-    });
+    }) as MessageWithRelations[];
 
     return messages.map((m: MessageWithRelations) => this.mapToChatMessage(m));
   }
@@ -337,6 +388,12 @@ export class ChatService {
       : undefined;
     const memoryEvents = Array.isArray(parsedProvenance?.memoryEvents) ? parsedProvenance.memoryEvents : undefined;
     const advisoryEvents = Array.isArray(parsedProvenance?.advisoryEvents) ? parsedProvenance.advisoryEvents : undefined;
+    const coworkerActivityFrame = parsedProvenance?.coworkerActivityFrame && typeof parsedProvenance.coworkerActivityFrame === 'object'
+      ? parsedProvenance.coworkerActivityFrame
+      : undefined;
+    const transformTrace = parsedProvenance?.transformTrace && typeof parsedProvenance.transformTrace === 'object'
+      ? parsedProvenance.transformTrace
+      : undefined;
 
     return {
       id: m.id,
@@ -347,10 +404,12 @@ export class ChatService {
       provenanceTrace: rawTrace ? ProvenanceSanitizer.processTrace(rawTrace) : undefined,
       runIds: m.runIds ? JSON.parse(m.runIds) : undefined,
       modelId: m.modelId || undefined,
+      turnId: parsedProvenance?.turnId || undefined,
       isLocal: m.isLocal ?? undefined,
       fallbacks: m.fallbacks ? JSON.parse(m.fallbacks) : undefined,
       memoryRecall: m.memoryRecall ?? undefined,
       agentId: m.agentId || undefined,
+      streamStatus: (m.streamStatus as 'completed' | 'incomplete' | 'failed' | null) || undefined,
       error: m.errorType ? { type: m.errorType, message: m.errorMessage || '' } : undefined,
       attachments: m.attachments ? JSON.parse(m.attachments) : undefined,
       createdAt: m.createdAt,
@@ -366,6 +425,8 @@ export class ChatService {
       workflowState,
       memoryEvents,
       advisoryEvents,
+      coworkerActivityFrame,
+      transformTrace,
     };
   }
 
@@ -387,9 +448,10 @@ export class ChatService {
       senderIdentifier: session.senderIdentifier,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
-      messages: session.messages.map((m: MessageWithRelations) => this.mapToChatMessage(m)),
+      messages: (session.messages as MessageWithRelations[]).map((m) => this.mapToChatMessage(m)),
       chatControls: this.parseSessionControls(session.metadataJson),
       pendingNluClarification: this.parsePendingClarification(session.metadataJson),
+      pipelineMode: this.parseSessionPipelineMode(session.metadataJson),
     }));
   }
 
@@ -412,9 +474,10 @@ export class ChatService {
       senderIdentifier: session.senderIdentifier,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
-      messages: session.messages.map((m: MessageWithRelations) => this.mapToChatMessage(m)),
+      messages: (session.messages as MessageWithRelations[]).map((m) => this.mapToChatMessage(m)),
       chatControls: this.parseSessionControls(session.metadataJson),
       pendingNluClarification: this.parsePendingClarification(session.metadataJson),
+      pipelineMode: this.parseSessionPipelineMode(session.metadataJson),
     };
   }
 

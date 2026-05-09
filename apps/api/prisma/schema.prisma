@@ -214,6 +214,7 @@ model Message {
   attachments  String? // JSON stringified ChatAttachment[]
   durationMs   Int?
   runIds       String?  // JSON string array of background task IDs
+  streamStatus String   @default("completed")
   promptPackId String?
   promptVersionHash String?
   reviewerPromptVersionHash String?
@@ -237,6 +238,7 @@ model TaskDefinition {
   agentId     String?
   toolIds     String    // JSON array of tool names
   schedule    String?   // cron expression or null
+  enabled     Boolean   @default(true)
   workspaceId String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -250,8 +252,10 @@ model TaskRun {
   definitionId    String
   definition      TaskDefinition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
   status          String          @default("queued")
+  triggeredBy     String          @default("api")
   startedAt       DateTime?
   finishedAt      DateTime?
+  lastActivityAt  DateTime        @default(now())
   selectedAgent   String?
   outputPath      String?
   provenance      String?         // JSON stringified ProvenanceTrace

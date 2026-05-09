@@ -748,3 +748,379 @@ def test_update_answerability_records_breakdown_corroboration_and_freshness():
     assert answerability["evidence_breakdown"]["search_snippet"] >= 2
     assert answerability["corroboration_mode"] in {"multi_source_partial", "multi_source_corroborated"}
     assert answerability["freshness_summary"] in {"fresh_signals_present", "freshness_mixed"}
+
+
+def test_guided_web_research_detects_plain_results_queries_and_forces_grounded_skill():
+    executor = Executor()
+    query = "hello ji search for who won begal election 2026"
+
+    assert executor._should_use_guided_web_research(query) is True
+    assert executor._query_requires_fetch(query) is True
+
+    tool_call = executor._maybe_force_skill_tool_call(
+        query,
+        [
+            {
+                "function": {
+                    "name": "skill_grounded-web-summary",
+                }
+            }
+        ],
+    )
+
+    assert tool_call is not None
+    assert tool_call.tool_name == "skill_grounded-web-summary"
+
+
+def test_election_result_query_is_cleaned_without_forcing_official_bias():
+    executor = Executor()
+    query = "hello ji search for who won Bengal election 2026 and who will be the next cm"
+
+    plan = executor.research.planner.run(query)
+    search_query = executor._build_search_query(query, apply_domain_bias=True)
+    direct_route = executor._find_direct_route(query)
+
+    assert plan.category == "election_results"
+    assert plan.fetch_required is True
+    assert plan.official_source_requested is False
+    assert "https://results.eci.gov.in/" not in plan.target_urls
+    assert "hello ji" not in search_query.lower()
+    assert "west bengal election 2026" in search_query.lower()
+    assert "official eci" not in search_query.lower()
+    assert "site:results.eci.gov.in" not in search_query.lower()
+    assert direct_route is None
+
+
+def test_election_result_query_keeps_official_bias_when_user_asks_for_eci():
+    executor = Executor()
+    query = "search for who won the west bengal election in 2026 from the official ECI results page"
+
+    plan = executor.research.planner.run(query)
+    search_query = executor._build_search_query(query, apply_domain_bias=True)
+
+    assert plan.category == "election_results"
+    assert plan.official_source_requested is True
+    assert "https://results.eci.gov.in/" in plan.target_urls
+    assert "site:results.eci.gov.in" in search_query.lower()
+
+
+def test_guardian_fallback_prefers_structured_research_failure_when_evidence_exists():
+    executor = Executor()
+    answer = executor._build_guardian_fallback_answer(
+        "search for who won west bengal election 2026",
+        {"evidence": "- web_search: 4 result(s) available"},
+        "Guardian rejected the draft because it was not grounded enough.",
+        {
+            "plan": {"category": "breaking_news"},
+            "search_status": "ok",
+            "fetch_status": "not_attempted",
+            "search_evidence": [
+                {
+                    "title": "Election Commission of India",
+                    "url": "https://results.eci.gov.in/",
+                    "snippet": "Official counting and result dashboard.",
+                }
+            ],
+            "assessment_reasons": ["the gathered evidence remained contradictory and too thin to verify the winner confidently"],
+        },
+    )
+
+    assert "- I searched for:" in answer
+    assert "- Strongest source signals:" in answer
+    assert "Election Commission of India" in answer
+    assert "- Best next check:" in answer
+
+
+def test_guardian_fallback_suppresses_empty_strongest_source_signals_for_js_portal_failures():
+    executor = Executor()
+    fetch_result = _tool_result(
+        output={
+            "url": "https://results.eci.gov.in/",
+            "jsRenderSuspected": True,
+            "fetchFailureKind": "js_render_required",
+        }
+    )
+
+    answer = executor._build_guardian_fallback_answer(
+        "search for who won the west bengal election in 2026",
+        {"evidence": "- web_search: 2 result(s) available"},
+        "Guardian rejected the draft because it was not grounded enough.",
+        {
+            "plan": {"category": "election_results"},
+            "search_status": "ok",
+            "fetch_status": "relevant_but_unusable_fetch",
+            "search_evidence": [],
+            "fetch_result": fetch_result,
+            "assessment_reasons": [],
+            "evidence_state": "extraction_failed",
+        },
+    )
+
+    assert "- Strongest source signals:" not in answer
+    assert "could not read its content reliably" in answer
+    assert "alternative news sources" in answer
+
+
+def test_determine_research_evidence_state_covers_all_expected_literals():
+    executor = Executor()
+    js_fetch_result = _tool_result(
+        output={
+            "url": "https://results.eci.gov.in/",
+            "jsRenderSuspected": True,
+            "fetchFailureKind": "js_render_required",
+        }
+    )
+    thin_fetch_result = _tool_result(
+        output={
+            "url": "https://example.com/report",
+            "content": "A page was reached but the content is still thin.",
+        }
+    )
+    clean_fetch_result = _tool_result(
+        output={
+            "url": "https://www.ndtv.com/india-news/west-bengal-election-results-2026",
+            "content": "The article says the seat tally was declared on 29 April 2026 and names the winning alliance.",
+        }
+    )
+
+    assert executor._determine_research_evidence_state(
+        "search for who won the west bengal election in 2026",
+        [],
+        js_fetch_result,
+        "ok",
+        "relevant_but_unusable_fetch",
+    ) == "extraction_failed"
+    assert executor._determine_research_evidence_state(
+        "search for who won the west bengal election in 2026",
+        [{"title": "NDTV", "url": "https://ndtv.com", "snippet": "Seat tally article"}],
+        thin_fetch_result,
+        "ok",
+        "relevant_but_unusable_fetch",
+    ) == "evidence_thin"
+    assert executor._determine_research_evidence_state(
+        "search for who won the west bengal election in 2026",
+        [{"title": "NDTV", "url": "https://ndtv.com", "snippet": "Seat tally article"}],
+        clean_fetch_result,
+        "ok",
+        "ok",
+    ) == "evidence_found"
+    assert executor._determine_research_evidence_state(
+        "search for who won the west bengal election in 2026",
+        [],
+        None,
+        "ok",
+        "not_attempted",
+    ) == "no_results"
+
+
+def test_render_grounded_web_answer_uses_extraction_failed_branch_on_abstain_path():
+    executor = Executor()
+    search_result = _tool_result(output={"results": []})
+    fetch_result = _tool_result(
+        output={
+            "url": "https://results.eci.gov.in/",
+            "content": "",
+            "jsRenderSuspected": True,
+            "fetchFailureKind": "js_render_required",
+        }
+    )
+
+    answer = executor._render_grounded_web_answer(
+        "search for who won the west bengal election in 2026",
+        search_result,
+        fetch_result=fetch_result,
+        search_status="ok",
+        fetch_status="relevant_but_unusable_fetch",
+        answerability_override={"mode": "abstain"},
+        assessment_override={"reasons": ["the page did not expose enough dated numeric evidence for the requested current count"]},
+    )
+
+    assert "could not read its content reliably" in answer
+    assert "JavaScript" in answer
+    assert "Strongest source signals:" not in answer
+
+
+def test_render_grounded_web_answer_uses_no_results_branch_on_abstain_path():
+    executor = Executor()
+    search_result = _tool_result(output={"results": []})
+
+    answer = executor._render_grounded_web_answer(
+        "search for who won the west bengal election in 2026",
+        search_result,
+        fetch_result=None,
+        search_status="ok",
+        fetch_status="not_attempted",
+        answerability_override={"mode": "abstain"},
+        assessment_override={"reasons": []},
+    )
+
+    assert "My search did not return pages with specific enough evidence" in answer
+    assert "Strongest source signals:" not in answer
+
+
+def test_render_grounded_web_answer_returns_clean_prose_for_plain_research_queries():
+    executor = Executor()
+    search_result = _tool_result(output={"results": []})
+    query = "search for who won the west bengal election in 2026 and who will be the next cm of bengal"
+
+    answer = executor._render_grounded_web_answer(
+        query,
+        search_result,
+        fetch_result=None,
+        search_status="ok",
+        fetch_status="ok",
+        assessment_override={
+            "relevant": True,
+            "usable": True,
+            "sufficient": True,
+            "partial": False,
+            "abstain": False,
+            "clusters": [
+                {
+                    "best_claim": "<b>West Bengal Election Result 2026:</b> BJP won 206 seats in a historic sweep and is set to form the next government in Bengal after the results were declared on May 4, 2026, confirming a decisive mandate for the party across the state.",
+                    "claims": [],
+                    "rankings": {"winner"},
+                    "changes": {"historic sweep"},
+                    "numbers": {"206"},
+                    "dates": {"May 4, 2026"},
+                    "uncertainties": set(),
+                }
+            ],
+        },
+        answerability_override={"mode": "exact"},
+    )
+
+    assert "<b>" not in answer
+    assert "</b>" not in answer
+    assert "..." not in answer
+    assert not answer.lstrip().startswith("- ")
+    assert "West Bengal Election Result 2026:" in answer
+    assert "BJP won 206 seats" in answer
+    assert "May 4, 2026" in answer
+
+
+def test_render_grounded_web_answer_preserves_bullets_when_query_explicitly_requests_them():
+    executor = Executor()
+    search_result = _tool_result(output={"results": []})
+    query = "search for who won the west bengal election in 2026 and who will be the next cm of bengal in 3 bullets"
+
+    answer = executor._render_grounded_web_answer(
+        query,
+        search_result,
+        fetch_result=None,
+        search_status="ok",
+        fetch_status="ok",
+        assessment_override={
+            "relevant": True,
+            "usable": True,
+            "sufficient": True,
+            "partial": False,
+            "abstain": False,
+            "clusters": [
+                {
+                    "best_claim": "<b>West Bengal Election Result 2026:</b> BJP won 206 seats in a historic sweep and is set to form the next government in Bengal after the results were declared on May 4, 2026.",
+                    "claims": [],
+                    "rankings": {"winner"},
+                    "changes": {"historic sweep"},
+                    "numbers": {"206"},
+                    "dates": {"May 4, 2026"},
+                    "uncertainties": set(),
+                }
+            ],
+        },
+        answerability_override={"mode": "exact"},
+    )
+
+    assert answer.lstrip().startswith("- ")
+    assert "<b>" not in answer
+    assert "</b>" not in answer
+    assert "..." not in answer
+
+
+def test_normalize_web_answer_preserves_prose_when_query_does_not_request_structured_format():
+    executor = Executor()
+    query = "Write a 500 word story titled The Echoes of Willow Creek. It should be complete prose, not an outline, not bullets, not a plan."
+    draft = (
+        "# The Echoes of Willow Creek\n\n"
+        "The town of Willow Creek did not appear on most modern maps, and for those who lived there, that was precisely the point. "
+        "It was a place of heavy mist and weeping willows that dipped their silver branches into a current that flowed slower than time itself.\n\n"
+        "Elias had returned to Willow Creek after twenty years of fleeing its suffocating stillness. "
+        "He came back as a man grayed by the city, carrying a suitcase full of regrets and a heart that had forgotten how to beat in rhythm with the earth."
+    )
+
+    normalized = executor._normalize_web_answer_for_request(draft, query)
+
+    assert normalized.startswith("# The Echoes of Willow Creek")
+    assert not normalized.lstrip().startswith("- ")
+    assert "Elias had returned to Willow Creek" in normalized
+
+
+def test_local_review_does_not_require_bullets_when_query_says_not_bullets():
+    executor = Executor()
+    query = "Write a 500 word story titled The Echoes of Willow Creek. It should be complete prose, not an outline, not bullets, not a plan."
+    prose = (
+        "# The Echoes of Willow Creek\n\n"
+        "The town of Willow Creek did not appear on most modern maps, and for those who lived there, that was precisely the point. "
+        "Elias returned after twenty years away, carrying regrets that felt heavier than the river stones under the bridge."
+    )
+
+    review = executor._local_review_output(prose, latest_user_query=query, review_context={})
+
+    assert review["approved"] is True
+
+
+def test_failed_extract_fallback_query_does_not_relock_to_eci_site():
+    executor = Executor()
+
+    fallback_query = executor._build_search_query_from_failed_url_extract(
+        "https://results.eci.gov.in/",
+        "search for who won the west bengal election in 2026 and who will be the next cm of bengal",
+    )
+
+    assert "site:results.eci.gov.in" not in fallback_query.lower()
+    assert "official eci" not in fallback_query.lower()
+    assert "news" in fallback_query.lower()
+
+
+def test_extract_router_diversifies_same_domain_results_for_election_queries():
+    executor = Executor()
+    query = "search for who won the west bengal election in 2026 and who will be the next cm of bengal"
+    plan = executor.research.planner.run(query)
+    search_result = _tool_result(
+        output={
+            "results": [
+                {"title": "ECI dashboard", "url": "https://results.eci.gov.in/", "snippet": "Official counting dashboard."},
+                {"title": "ECI seat tally", "url": "https://eci.gov.in/results", "snippet": "Election results summary."},
+                {"title": "CEO West Bengal", "url": "https://ceowestbengal.nic.in/results", "snippet": "State election office dashboard."},
+                {"title": "NDTV report", "url": "https://www.ndtv.com/india-news/west-bengal-election-results-2026", "snippet": "Seat tally and CM race."},
+            ]
+        }
+    )
+
+    filtered_result, _decision = executor.research.pre_evidence_filter.run(query, plan, search_result)
+    extraction_decision = executor.research.router.run(query, plan, filtered_result)
+
+    domains = [url.split("/")[2] for url in extraction_decision.candidate_urls]
+    assert any("ndtv.com" in domain for domain in domains)
+    assert len(set(domains)) == len(domains)
+
+
+def test_extract_router_requests_broader_search_when_only_js_portal_domains_exist():
+    executor = Executor()
+    query = "search for who won the west bengal election in 2026"
+    plan = executor.research.planner.run(query)
+    search_result = _tool_result(
+        output={
+            "results": [
+                {"title": "ECI dashboard", "url": "https://results.eci.gov.in/", "snippet": "Official counting dashboard."},
+                {"title": "ECI summary", "url": "https://eci.gov.in/results", "snippet": "Election results summary."},
+                {"title": "CEO West Bengal", "url": "https://ceowestbengal.nic.in/results", "snippet": "State election office dashboard."},
+            ]
+        }
+    )
+
+    filtered_result, _decision = executor.research.pre_evidence_filter.run(query, plan, search_result)
+    extraction_decision = executor.research.router.run(query, plan, filtered_result)
+
+    assert extraction_decision.needs_query_broadening is True
+    assert extraction_decision.should_attempt_extract is False

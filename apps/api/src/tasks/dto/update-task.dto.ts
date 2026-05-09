@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, MaxLength, MinLength } from 'class-validator';
+import { IsString, IsOptional, IsArray, MaxLength, MinLength, IsBoolean } from 'class-validator';
 
 export class UpdateTaskDto {
   @IsString()
@@ -27,4 +27,8 @@ export class UpdateTaskDto {
   @IsString()
   @IsOptional()
   workspaceId?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  enabled?: boolean;
 }

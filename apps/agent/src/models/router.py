@@ -3,12 +3,14 @@ import time
 import asyncio
 from typing import AsyncIterator, List, Dict, Any, Optional
 from src.models.base import ModelProvider, ModelInfo, ProviderHealth
+from src.models.capability_manifest import CAPABILITY_MANIFEST, get_capability, is_eligible
 from src.models.providers.ollama import OllamaProvider
 from src.models.providers.anthropic import AnthropicProvider
 from src.models.providers.minimax import MinimaxProvider
 from src.config import settings
 
 logger = logging.getLogger("rawclaw.router")
+DEFAULT_FALLBACK_MODEL = settings.DEFAULT_HIGH_MODEL or settings.DEFAULT_LOW_MODEL
 
 class ModelRouter:
     def __init__(self):
@@ -30,6 +32,64 @@ class ModelRouter:
         logger.info(f"ModelRouter initialized. Routing map: {self.complexity_map}")
         
         self._cached_ollama_tags: Optional[List[str]] = None
+
+    def _provider_is_usable(self, provider_name: str) -> bool:
+        if provider_name == "anthropic":
+            return bool(getattr(settings, "ANTHROPIC_API_KEY", None))
+        if provider_name == "minimax":
+            return bool(getattr(settings, "MINIMAX_API_KEY", None))
+        return provider_name == "ollama"
+
+    def _task_complexity_for_request(self, complexity: Optional[str], requires_tools: bool) -> str:
+        if complexity:
+            return complexity
+        return "medium" if requires_tools else "low"
+
+    def select_eligible_model(self, requires_tools: bool, complexity: str) -> str:
+        complexity_rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        eligible = [
+            capability
+            for capability in CAPABILITY_MANIFEST.values()
+            if self._provider_is_usable(capability.provider)
+            and is_eligible(capability.model_id, requires_tools=requires_tools, complexity=complexity)
+        ]
+        if not eligible:
+            raise RuntimeError(
+                f"No eligible model exists for complexity={complexity} requires_tools={requires_tools}"
+            )
+
+        def sort_key(capability):
+            rank = complexity_rank.get(capability.complexity_ceiling, 0)
+            if complexity == "critical":
+                provider_bias = 0 if capability.provider != "ollama" else 1
+            else:
+                provider_bias = 0 if capability.provider == "ollama" else 1
+            return (provider_bias, -rank, -capability.max_context_tokens)
+
+        return sorted(eligible, key=sort_key)[0].model_id
+
+    def _should_try_next_model(self, error_message: str) -> bool:
+        lowered = (error_message or "").lower()
+        fallback_markers = [
+            "not found",
+            "404",
+            "does not support tools",
+            "does not support chat",
+            "does not support generate",
+            "not support chat",
+            "unsupported chat",
+            "unsupported generate",
+        ]
+        return any(marker in lowered for marker in fallback_markers)
+
+    def _is_tool_support_error(self, error_message: str) -> bool:
+        lowered = (error_message or "").lower()
+        return (
+            "does not support tools" in lowered
+            or "does not support chat" in lowered
+            or "not support chat" in lowered
+            or "unsupported chat" in lowered
+        )
 
     async def _get_ollama_tags(self) -> List[str]:
         """Fetch and cache available Ollama tags with a strict timeout."""
@@ -147,6 +207,10 @@ class ModelRouter:
         Routes the completion request based on explicit model or complexity hint.
         Implements fallback logic.
         """
+        explicit_model_requested = bool(model)
+        task_requires_tools = bool(tools)
+        task_complexity = self._task_complexity_for_request(complexity, task_requires_tools)
+
         # 1. Determine target model ID
         target_model_id = model
         if not target_model_id and complexity:
@@ -157,11 +221,55 @@ class ModelRouter:
 
         logger.info(f"[TOOL_TRACE] Router.complete called: input_model={model}, input_complexity={complexity}, resolved_model={target_model_id}, tools_count={len(tools) if tools else 0}")
 
+        target_model_id = await self.normalize_model_id(target_model_id)
+        selected_capability = get_capability(target_model_id)
+        if selected_capability is None:
+            logger.warning(
+                "model_not_in_manifest model_id=%s action=falling_back_to_default",
+                target_model_id,
+            )
+            if explicit_model_requested:
+                target_model_id = self.select_eligible_model(task_requires_tools, task_complexity)
+            else:
+                fallback_candidate = await self.normalize_model_id(DEFAULT_FALLBACK_MODEL)
+                target_model_id = (
+                    fallback_candidate
+                    if is_eligible(fallback_candidate, requires_tools=task_requires_tools, complexity=task_complexity)
+                    else self.select_eligible_model(task_requires_tools, task_complexity)
+                )
+            selected_capability = get_capability(target_model_id)
+        elif not is_eligible(target_model_id, requires_tools=task_requires_tools, complexity=task_complexity):
+            logger.warning(
+                "model_ineligible_for_task model_id=%s requires_tools=%s complexity=%s model_tool_use=%s model_ceiling=%s action=routing_to_eligible_model",
+                target_model_id,
+                task_requires_tools,
+                task_complexity,
+                selected_capability.tool_use,
+                selected_capability.complexity_ceiling,
+            )
+            target_model_id = self.select_eligible_model(task_requires_tools, task_complexity)
+            selected_capability = get_capability(target_model_id)
+
+        if selected_capability is None:
+            raise RuntimeError(f"Capability manifest did not resolve a model for {target_model_id}")
+
+        logger.info(
+            "model_routed final_model=%s provider=%s task_complexity=%s requires_tools=%s",
+            target_model_id,
+            selected_capability.provider,
+            task_complexity,
+            task_requires_tools,
+        )
+
         # 2. Determine provider chain (Primary -> Fallbacks)
-        # Normalize ALL models in the chain, not just the target
-        all_ids = [target_model_id] + settings.OLLAMA_FALLBACK_ORDER
-        if settings.DEFAULT_LOW_MODEL not in all_ids:
-            all_ids.append(settings.DEFAULT_LOW_MODEL)
+        if explicit_model_requested:
+            all_ids = [target_model_id]
+        else:
+            all_ids = [target_model_id] + settings.OLLAMA_FALLBACK_ORDER
+            if settings.DEFAULT_LOW_MODEL not in all_ids:
+                all_ids.append(settings.DEFAULT_LOW_MODEL)
+            if DEFAULT_FALLBACK_MODEL not in all_ids:
+                all_ids.append(DEFAULT_FALLBACK_MODEL)
 
         # Normalize each model ID (resolves bare names like 'llama3' to 'llama3:8b')
         normalized_ids = []
@@ -173,16 +281,26 @@ class ModelRouter:
         chain = []
         seen = set()
         for m_id in normalized_ids:
+            if m_id in seen:
+                continue
+            if not self._provider_is_usable(self._parse_model_id(m_id)[0]):
+                continue
+            if not is_eligible(m_id, requires_tools=task_requires_tools, complexity=task_complexity):
+                continue
             if m_id not in seen:
                 chain.append(m_id)
                 seen.add(m_id)
 
+        if not chain:
+            chain = [self.select_eligible_model(task_requires_tools, task_complexity)]
+
         last_error = ""
         tried_models = []
         success_model_id = None
+        terminal_error_emitted = False
 
         async def run_chain(model_list: List[str]) -> AsyncIterator[Any]:
-            nonlocal last_error, success_model_id
+            nonlocal last_error, success_model_id, terminal_error_emitted
             for current_model_id in model_list:
                 if current_model_id in tried_models:
                     continue
@@ -230,10 +348,54 @@ class ModelRouter:
                     async for chunk in ensure_async_iterator(generator):
                         if isinstance(chunk, dict) and chunk.get("type") == "error":
                             err_msg = chunk.get("message", "")
-                            if "not found" in err_msg.lower() or "404" in err_msg or "does not support tools" in err_msg.lower():
+                            if tools and self._is_tool_support_error(err_msg):
                                 last_error = err_msg
+                                logger.warning(
+                                    f"Model {current_model_id} rejected tool calling. "
+                                    f"Retrying the same model without tools. Error: {err_msg}"
+                                )
+                                retry_generator = provider.complete(messages, {
+                                    "model": inner_name,
+                                    "tools": None,
+                                    "temperature": temperature,
+                                    "top_p": top_p
+                                })
+                                retry_success = False
+                                async for retry_chunk in ensure_async_iterator(retry_generator):
+                                    if isinstance(retry_chunk, dict) and retry_chunk.get("type") == "error":
+                                        retry_err = retry_chunk.get("message", "")
+                                        if self._should_try_next_model(retry_err):
+                                            if explicit_model_requested:
+                                                terminal_error_emitted = True
+                                                yield retry_chunk
+                                                return
+                                            last_error = retry_err
+                                            logger.warning(
+                                                f"Model {current_model_id} remained incompatible after toolless retry. "
+                                                f"Falling through to the next candidate. Error: {retry_err}"
+                                            )
+                                            break
+                                        terminal_error_emitted = True
+                                        yield retry_chunk
+                                        return
+                                    else:
+                                        retry_success = True
+                                        success = True
+                                        yield retry_chunk
+                                if retry_success:
+                                    break
                                 break
+                            if self._should_try_next_model(err_msg):
+                                if explicit_model_requested:
+                                    terminal_error_emitted = True
+                                    yield chunk
+                                    return
+                                last_error = err_msg
+                                logger.warning(f"Model {current_model_id} is incompatible for this request. Falling through to the next candidate. Error: {err_msg}")
+                                break
+                            terminal_error_emitted = True
                             yield chunk
+                            return
                         else:
                             success = True
                             yield chunk
@@ -273,38 +435,18 @@ class ModelRouter:
             }
             return
 
-        # 3. Dynamic Fallback: If initial chain fails, try any other discovered local Ollama models
-        logger.info("Initial fallback chain failed. Attempting dynamic discovery...")
-        try:
-            available_models = await self.list_models()
-            other_models = [
-                m.id for m in available_models 
-                if m.provider == "ollama" and m.id not in tried_models
-            ]
-            
-            if other_models:
-                async for result in run_chain([other_models[0]]):
-                    if result is None:
-                        break
-                    yield result
-                
-                if success_model_id:
-                    duration_ms = int((time.time() - start_time) * 1000)
-                    provider_name, _ = self._parse_model_id(success_model_id)
-                    yield {
-                        "type": "metadata",
-                        "metadata": {
-                            "modelId": success_model_id,
-                            "isLocal": provider_name == "ollama",
-                            "fallbacks": [m for m in tried_models if m != success_model_id],
-                            "durationMs": duration_ms
-                        }
-                    }
-                    return
-        except Exception as e:
-            logger.error(f"Dynamic discovery failed: {e}")
+        if terminal_error_emitted:
+            return
 
-        # 4. Final failure frame
+        if explicit_model_requested:
+            yield {
+                "type": "error",
+                "error": "provider_routing_failed",
+                "message": f"Selected model failed. Last error: {last_error}"
+            }
+            return
+
+        # 3. Final failure frame
         yield {
             "type": "error",
             "error": "provider_routing_failed",

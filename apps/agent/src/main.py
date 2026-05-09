@@ -22,6 +22,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -114,9 +115,30 @@ async def retry_with_backoff(coro, max_retries=3, initial_delay=1):
 
 from pythonjsonlogger import jsonlogger
 
+def resolve_log_file_path() -> str:
+    preferred = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend.log"))
+    candidates = [
+        preferred,
+        os.path.join(os.environ.get("TEMP", "C:\\tmp"), "rawclaw-agent-backend.log"),
+        os.path.join("C:\\tmp", "rawclaw-agent-backend.log"),
+    ]
+
+    for candidate in candidates:
+        try:
+            os.makedirs(os.path.dirname(candidate), exist_ok=True)
+            with open(candidate, "a", encoding="utf-8"):
+                pass
+            if candidate != preferred:
+                print(f"[RawClaw agent] Falling back to log file: {candidate}")
+            return candidate
+        except OSError:
+            continue
+
+    return preferred
+
 # Configure structured JSON logging
 logHandler = logging.StreamHandler()
-log_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend.log"))
+log_file_path = resolve_log_file_path()
 fileHandler = logging.FileHandler(log_file_path, mode='a', encoding='utf-8')
 
 formatter = jsonlogger.JsonFormatter(
@@ -125,7 +147,11 @@ formatter = jsonlogger.JsonFormatter(
 logHandler.setFormatter(formatter)
 fileHandler.setFormatter(formatter)
 
-logging.basicConfig(handlers=[logHandler, fileHandler], level=logging.INFO)
+configured_log_level = str(os.getenv("LOG_LEVEL", "INFO") or "INFO").upper()
+logging.basicConfig(
+    handlers=[logHandler, fileHandler],
+    level=getattr(logging, configured_log_level, logging.INFO),
+)
 logger = logging.getLogger("rawclaw.main")
 
 # Global instances
@@ -262,17 +288,27 @@ async def lifespan(app: FastAPI):
             logger.error(f"Failed to connect to MCP servers during startup: {e}")
 
         # Wrap and register MCP tools (AFTER connection attempt)
-        # MCP tools override built-in tools with the same name
         mcp_wrappers = wrap_mcp_tools(mcp_gateway)
         for w in mcp_wrappers:
             try:
-                # Unregister any existing tool with the same name first (MCP takes precedence)
-                if w.name in TOOL_REGISTRY.tool_names:
-                    logger.info(f"MCP tool '{w.name}' overriding existing built-in tool")
-                    del TOOL_REGISTRY._tools[w.name]
-                TOOL_REGISTRY.register(w)
+                TOOL_REGISTRY.register_mcp_tool(w)
+                logger.info(
+                    "mcp_tool_registered",
+                    extra={
+                        "tool_name": w.name,
+                        "mcp_server": getattr(w, "source_server", "unknown"),
+                    },
+                )
             except ValueError as e:
-                logger.warning(f"MCP tool registration skipped: {e}")
+                logger.error(
+                    "mcp_tool_registration_rejected",
+                    extra={
+                        "tool_name": w.name,
+                        "mcp_server": getattr(w, "source_server", "unknown"),
+                        "reason": str(e),
+                    },
+                )
+                continue
 
         await reset_browser_capability_cache()
         browser_page_read_available = await check_browser_page_read_capability()
@@ -458,6 +494,18 @@ async def execute_chat(request: Request, chat_request: ChatRequest):
     if not active_gateway:
         return JSONResponse(status_code=503, content={"error": "Gateway service not initialized"})
 
+    incoming_turn_id = request.headers.get("X-Turn-ID") or getattr(chat_request, "turn_id", None) or str(uuid.uuid4())
+    incoming_session_id = request.headers.get("X-Session-ID") or chat_request.session_id or "unknown"
+    chat_request.turn_id = incoming_turn_id
+    chat_request.session_id = incoming_session_id
+    logger.info(
+        "agent_request_received turn_id=%s session_id=%s model=%s message_count=%s",
+        incoming_turn_id,
+        incoming_session_id,
+        getattr(chat_request, "model", None),
+        len(getattr(chat_request, "messages", []) or []),
+    )
+
     async def event_generator():
         try:
             async for chunk in active_gateway.stream_chat(
@@ -516,6 +564,15 @@ async def execute_task(request: TaskExecutionRequest):
     """
     result = await EXECUTOR.run_task(request)
     return result.model_dump()
+
+
+@app.post("/execute/task/{run_id}/cancel")
+async def cancel_task(run_id: str):
+    """
+    Requests best-effort cancellation for a background task run.
+    """
+    EXECUTOR.cancel_task_run(run_id)
+    return {"accepted": True, "run_id": run_id}
 
 
 @app.get("/api/mcp/servers")
@@ -602,9 +659,24 @@ async def mcp_connect(request: Request):
         wrappers = wrap_mcp_tools(mcp_gateway)
         for w in wrappers:
             try:
-                TOOL_REGISTRY.register(w)
+                TOOL_REGISTRY.register_mcp_tool(w)
+                logger.info(
+                    "mcp_tool_registered",
+                    extra={
+                        "tool_name": w.name,
+                        "mcp_server": getattr(w, "source_server", "unknown"),
+                    },
+                )
             except ValueError as e:
-                logger.warning(f"Tool registration skipped: {e}")
+                logger.error(
+                    "mcp_tool_registration_rejected",
+                    extra={
+                        "tool_name": w.name,
+                        "mcp_server": getattr(w, "source_server", "unknown"),
+                        "reason": str(e),
+                    },
+                )
+                continue
 
         await reset_browser_capability_cache()
         browser_page_read_available = await check_browser_page_read_capability()
@@ -730,7 +802,9 @@ async def memory_stats(request: Request):
         return {
             "totalEntries": 0,
             "collections": [],
+            "collectionCounts": {},
             "embeddingModel": "memory offline",
+            "warnings": [],
         }
     return chroma_memory.get_stats()
 
@@ -808,6 +882,30 @@ async def memory_clear(request: Request, collection: str = None):
     if not chroma_memory:
         return {"cleared": 0}
     return chroma_memory.clear(collection=collection)
+
+
+@app.post("/api/memory/maintenance/dedupe-tool-discovery")
+async def memory_dedupe_tool_discovery(request: Request):
+    """Deduplicate historical tool discovery entries using stable tool identity."""
+    chroma_memory = getattr(request.app.state, "chroma_memory", None)
+    if not chroma_memory:
+        return JSONResponse(status_code=503, content={"error": "Memory not available"})
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    return chroma_memory.dedupe_tool_discovery(dry_run=bool((body or {}).get("dryRun")))
+
+
+@app.post("/api/memory/maintenance/prune-sessions")
+async def memory_prune_sessions(request: Request):
+    """Prune raw session recall entries by TTL and per-session cap."""
+    chroma_memory = getattr(request.app.state, "chroma_memory", None)
+    if not chroma_memory:
+        return JSONResponse(status_code=503, content={"error": "Memory not available"})
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    return chroma_memory.prune_sessions(
+        ttl_days=int((body or {}).get("ttlDays", 14)),
+        max_entries_per_session=int((body or {}).get("maxEntriesPerSession", 100)),
+        dry_run=bool((body or {}).get("dryRun")),
+    )
 
 
 class CloneRequest(BaseModel):

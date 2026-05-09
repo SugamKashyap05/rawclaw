@@ -41,6 +41,49 @@ export const RESEARCH_FOLLOW_UP_PHRASES = [
   'verify that',
 ];
 
+const RESEARCH_SIGNAL_PHRASES = [
+  'search the web',
+  'search web',
+  'search for',
+  'latest',
+  'current',
+  'news',
+  'official page',
+  'official results',
+  'sources',
+  'research brief',
+  'verify',
+  'fact check',
+  'who won',
+  'winner',
+  'winners',
+  'seat tally',
+  'election result',
+  'election results',
+  'how much seats',
+  'how many seats',
+  'result for',
+  'results for',
+  'standings',
+  'points table',
+];
+
+const MEMORY_QUERY_PHRASES = [
+  'what do you know about me',
+  'what did we discuss',
+  'what do you remember',
+  'recall',
+  'memory about',
+  'earlier in this chat',
+  'summarize memory',
+  'summarise memory',
+  'memory summary',
+  'summarize what you remember',
+  'summarise what you remember',
+  'summarize our memory',
+  'summarise our memory',
+];
+
 const SECONDARY_INTENT_THRESHOLD = 0.62;
 const CLARIFICATION_TTL_MS = 15 * 60 * 1000;
 const SEMANTIC_MATCH_THRESHOLD = 0.55;
@@ -211,6 +254,7 @@ export class ChatNluService {
     const lower = text.toLowerCase();
     const candidates: IntentCandidate[] = [];
     const has = (tokens: string[]) => tokens.some((token) => lower.includes(token));
+    const hasResearchSignal = this.hasResearchSignal(lower, input);
     const push = (intent: ChatNluIntent, confidence: number, reason: string) => {
       candidates.push({ intent, confidence, reason });
     };
@@ -228,7 +272,7 @@ export class ChatNluService {
       push('edit_request', 0.9, 'selection edit');
     }
 
-    if (has(['search the web', 'search web', 'latest', 'current', 'news', 'official page', 'sources', 'research brief', 'verify', 'fact check'])) {
+    if (hasResearchSignal) {
       push('research', 0.88, 'research signal');
     }
 
@@ -240,7 +284,7 @@ export class ChatNluService {
       push('memory_capture', 0.9, 'memory capture');
     }
 
-    if (has(['what do you know about me', 'what did we discuss', 'what do you remember', 'recall', 'memory about', 'earlier in this chat'])) {
+    if (has(MEMORY_QUERY_PHRASES)) {
       push('memory_query', 0.86, 'memory query');
     }
 
@@ -273,6 +317,19 @@ export class ChatNluService {
     }
 
     return candidates.sort((a, b) => b.confidence - a.confidence || this.intentPriority(a.intent) - this.intentPriority(b.intent));
+  }
+
+  private hasResearchSignal(lower: string, input: ChatNluAnalyzeInput): boolean {
+    if (RESEARCH_SIGNAL_PHRASES.some((token) => lower.includes(token))) {
+      return true;
+    }
+
+    const selectedTools = input.chatControlsSubset?.selectedTools || [];
+    if (selectedTools.includes('skill_grounded-web-summary')) {
+      return true;
+    }
+
+    return false;
   }
 
   private semanticIntentCandidate(_input: ChatNluAnalyzeInput, text: string): IntentCandidate | null {

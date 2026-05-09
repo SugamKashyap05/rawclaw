@@ -10,10 +10,11 @@ from src.research.types import AnswerabilityDecision, ConfidenceRiskDecision, Ev
 class ConfidenceRiskModelStage:
     def _sports_fallback_answer(self, query: str, year: str) -> str:
         return (
-            f"I searched for {query.strip()} but the pages I found did not expose live {year} standings data I could verify.\n"
-            "For current IPL standings, check directly:\n"
+            f"I searched for {query.strip()} but the pages I found did not expose live {year} IPL data I could verify.\n"
+            "For current IPL results or standings, check directly:\n"
+            "- https://www.iplt20.com/matches\n"
             "- https://www.iplt20.com/matches/points-table\n"
-            "- https://www.cricbuzz.com/cricket-series/points-table"
+            "- https://www.cricbuzz.com/cricket-series"
         )
 
     def run(
@@ -33,7 +34,7 @@ class ConfidenceRiskModelStage:
             if output.get("networkError"):
                 reason += f" ({output.get('networkError')})"
             synthesis: Dict[str, Any] = {}
-            if plan.category == "sports_standings":
+            if plan.category in {"sports_standings", "sports_results"}:
                 year = next((token for token in str(query).split() if token.isdigit() and len(token) == 4), "2026")
                 synthesis = {
                     "answer": self._sports_fallback_answer(query, year),
@@ -59,7 +60,7 @@ class ConfidenceRiskModelStage:
                     failure_state = "empty_body_js_required"
                 else:
                     failure_state = "extract_failure"
-                if plan.category == "sports_standings":
+                if plan.category in {"sports_standings", "sports_results"}:
                     year = next((token for token in str(query).split() if token.isdigit() and len(token) == 4), "2026")
                     synthesis = {
                         "answer": self._sports_fallback_answer(query, year),

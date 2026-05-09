@@ -17,7 +17,11 @@ class ResearchPlannerStage:
     def run(self, query: str) -> ResearchPlan:
         base_plan = self._build_research_plan(query)
         queries: List[str] = []
-        target_urls: List[str] = []
+        target_urls: List[str] = [
+            str(item).strip()
+            for item in (base_plan.get("target_urls") or [])
+            if str(item).strip()
+        ]
 
         primary = self._build_search_query(query, True)
         simplified = self._build_search_query(query, False)
@@ -27,7 +31,13 @@ class ResearchPlannerStage:
                 queries.append(normalized)
 
         lowered = (query or "").lower()
-        if base_plan.get("category") == "sports_standings":
+        if base_plan.get("category") == "election_results":
+            targeted = simplified or primary
+            if any(token in lowered for token in ["bengal", "begal"]):
+                targeted = targeted or "West Bengal election 2026 results winner seat tally"
+            if targeted and targeted not in queries:
+                queries.append(targeted)
+        elif base_plan.get("category") == "sports_standings":
             targeted = primary
             if "chennai super kings" in lowered or "csk" in lowered:
                 targeted = "Chennai Super Kings IPL 2026 points table standings"
@@ -37,6 +47,17 @@ class ResearchPlannerStage:
                 queries.append(targeted)
             if "ipl" in lowered and "iplt20.com" in [str(item).strip().lower() for item in (base_plan.get("domain_bias") or [])]:
                 target_urls.append("https://www.iplt20.com/matches/points-table")
+        elif base_plan.get("category") == "sports_results":
+            year = "2026"
+            for token in lowered.split():
+                if token.isdigit() and len(token) == 4:
+                    year = token
+                    break
+            targeted = f"IPL {year} results fixtures schedule matches played this week"
+            if "how many" in lowered or "number of" in lowered or "count" in lowered:
+                targeted += " match count"
+            if targeted not in queries:
+                queries.append(targeted)
 
         return ResearchPlan(
             lane="research",
@@ -54,4 +75,5 @@ class ResearchPlannerStage:
             focus=[str(item) for item in (base_plan.get("focus") or []) if str(item)],
             domain_bias=[str(item) for item in (base_plan.get("domain_bias") or []) if str(item)],
             exact_structured_data_needed=bool(base_plan.get("exact_structured_data_needed")),
+            official_source_requested=bool(base_plan.get("official_source_requested")),
         )

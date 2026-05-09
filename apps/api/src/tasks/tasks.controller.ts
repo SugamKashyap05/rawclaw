@@ -35,12 +35,12 @@ export class TasksController {
   @Post()
   async create(@Body() dto: CreateTaskDto) {
     const task = await this.tasksService.createDefinition(dto);
-    if (dto.schedule) {
+    if (task.schedule && task.enabled) {
       await this.scheduleService.registerTask(task.id, task);
     }
     return {
       ...task,
-      nextRun: task.schedule ? this.scheduleService.getNextRun(task.schedule) : null,
+      nextRun: task.schedule && task.enabled ? this.scheduleService.getNextRun(task.schedule) : null,
     };
   }
 
@@ -49,7 +49,7 @@ export class TasksController {
     const tasks = await this.tasksService.listDefinitions();
     return tasks.map((task) => ({
       ...task,
-      nextRun: task.schedule ? this.scheduleService.getNextRun(task.schedule) : null,
+      nextRun: task.schedule && task.enabled ? this.scheduleService.getNextRun(task.schedule) : null,
     }));
   }
 
@@ -64,8 +64,20 @@ export class TasksController {
   }
 
   @Get('runs')
-  listRuns(@Query('page') page: string, @Query('limit') limit: string) {
-    return this.tasksService.listRuns(+page || 1, +limit || 10);
+  listRuns(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('agentId') agentId?: string,
+    @Query('sessionId') sessionId?: string,
+  ) {
+    return this.tasksService.listRuns({
+      page: +page! || 1,
+      limit: +limit! || 25,
+      status,
+      agentId,
+      sessionId,
+    });
   }
 
   @Get('runs/recent')
@@ -78,27 +90,20 @@ export class TasksController {
     const task = await this.tasksService.getDefinition(id);
     return {
       ...task,
-      nextRun: task.schedule ? this.scheduleService.getNextRun(task.schedule) : null,
+      nextRun: task.schedule && task.enabled ? this.scheduleService.getNextRun(task.schedule) : null,
     };
   }
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateTaskDto) {
     const task = await this.tasksService.updateDefinition(id, dto);
-    if (dto.schedule === undefined) {
-      return {
-        ...task,
-        nextRun: task.schedule ? this.scheduleService.getNextRun(task.schedule) : null,
-      };
-    }
-
     await this.scheduleService.unregisterTask(id);
-    if (task.schedule) {
+    if (task.schedule && task.enabled) {
       await this.scheduleService.registerTask(id, task);
     }
     return {
       ...task,
-      nextRun: task.schedule ? this.scheduleService.getNextRun(task.schedule) : null,
+      nextRun: task.schedule && task.enabled ? this.scheduleService.getNextRun(task.schedule) : null,
     };
   }
 
@@ -111,7 +116,7 @@ export class TasksController {
   @Post(':id/run')
   @HttpCode(HttpStatus.ACCEPTED)
   run(@Param('id') id: string) {
-    return this.tasksService.enqueueRun(id);
+    return this.tasksService.enqueueRun(id, { triggeredBy: 'manual' });
   }
 
   @Get('runs/:runId')
@@ -127,7 +132,19 @@ export class TasksController {
   @Post('runs/:runId/resume')
   @HttpCode(HttpStatus.ACCEPTED)
   resumeRun(@Param('runId') runId: string, @Body('sessionId') sessionId: string) {
-    return this.tasksService.resumeRun(runId, sessionId);
+    return this.tasksService.resumeRun(runId, sessionId, 'manual');
+  }
+
+  @Post('runs/:runId/cancel')
+  @HttpCode(HttpStatus.ACCEPTED)
+  cancelRun(@Param('runId') runId: string) {
+    return this.tasksService.cancelRun(runId);
+  }
+
+  @Post('runs/:runId/heartbeat')
+  @HttpCode(HttpStatus.OK)
+  heartbeatRun(@Param('runId') runId: string) {
+    return this.tasksService.heartbeatRun(runId);
   }
 
   @Post('runs/:runId/update')

@@ -8,6 +8,8 @@
     "packages/*"
   ],
   "scripts": {
+    "runtime:up": "docker compose --profile worker up -d",
+    "runtime:down": "docker compose --profile worker down",
     "dev": "node scripts/dev-start.mjs",
     "build": "cross-env TURBO_FORCE_GIT=0 turbo run build",
     "lint": "cross-env TURBO_FORCE_GIT=0 turbo run lint",

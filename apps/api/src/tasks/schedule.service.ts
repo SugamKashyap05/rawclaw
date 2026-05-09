@@ -34,6 +34,7 @@ export class ScheduleService implements OnModuleInit {
     const tasks = await this.prisma.taskDefinition.findMany({
       where: {
         schedule: { not: null },
+        enabled: true,
       },
     });
 
@@ -61,7 +62,7 @@ export class ScheduleService implements OnModuleInit {
           where: { id: taskId },
         });
 
-        if (!definition || !definition.schedule) continue;
+        if (!definition || !definition.schedule || definition.enabled === false) continue;
 
         const nextRun = this.getNextRun(definition.schedule);
         if (!nextRun) continue;
@@ -70,7 +71,7 @@ export class ScheduleService implements OnModuleInit {
           this.logger.log(`Triggering scheduled task: ${definition.name}`);
           
           try {
-            await this.tasksService.enqueueRun(taskId);
+            await this.tasksService.enqueueRun(taskId, { triggeredBy: 'cron' });
             this.logger.log(`Task ${definition.name} enqueued successfully`);
           } catch (error: any) {
             this.logger.error(`Failed to enqueue task ${definition.name}: ${error.message}`);
@@ -96,7 +97,7 @@ export class ScheduleService implements OnModuleInit {
   }
 
   async registerTask(taskId: string, definition: any) {
-    if (definition.schedule) {
+    if (definition.schedule && definition.enabled !== false) {
       this.scheduledTasks.set(taskId, {
         taskId,
         definition,
@@ -168,7 +169,8 @@ export class ScheduleService implements OnModuleInit {
       id: t.id,
       name: t.name,
       schedule: t.schedule,
-      nextRun: t.schedule ? this.getNextRun(t.schedule) : null,
+      enabled: t.enabled ?? true,
+      nextRun: t.schedule && (t.enabled ?? true) ? this.getNextRun(t.schedule) : null,
       lastRunStatus: t.runs[0]?.status || 'never_run',
     }));
   }

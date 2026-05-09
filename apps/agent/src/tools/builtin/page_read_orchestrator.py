@@ -3,8 +3,8 @@ import re
 import time
 from copy import deepcopy
 from dataclasses import replace
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 from src.contracts.tool import ToolResult
@@ -23,6 +23,7 @@ from src.tools.builtin.page_read_types import (
     is_strong_evidence,
     meaningful_slug_segments,
     normalize_backend_attempt,
+    normalize_redirected_url,
     provenance_subset,
 )
 from src.tools.builtin.web_extract import WebExtractTool
@@ -74,8 +75,13 @@ def _output_from_tool_result(result: Optional[ToolResult]) -> Dict[str, Any]:
 
 
 class PageReadOrchestrator:
-    def __init__(self, tool_registry=TOOL_REGISTRY) -> None:
+    def __init__(
+        self,
+        tool_registry=TOOL_REGISTRY,
+        execute_tool: Optional[Callable[[str, Dict[str, Any]], Awaitable[ToolResult]]] = None,
+    ) -> None:
         self.tool_registry = tool_registry
+        self.execute_tool = execute_tool
         self.extract_tool = WebExtractTool()
         self.browser_adapter = BrowserPageReadAdapter(tool_registry)
 
@@ -137,6 +143,7 @@ class PageReadOrchestrator:
 
         final_result.backendAttempts = sorted(attempts, key=lambda attempt: int(attempt.get("attemptSeq") or 0))
         final_result.failureChain = self._cap_failure_chain(failure_chain)
+        self._carry_http_failure_metadata(final_result, http_page_result)
         final_result.backendResult = aggregate_backend_result(final_result.backendAttempts)
         if final_result.isFallback:
             final_result.backendUsed = "search_fallback"
@@ -170,6 +177,8 @@ class PageReadOrchestrator:
             "allowInternalBrowserEscalation": False,
             "maxDurationMs": clamped,
         }
+        if self.execute_tool:
+            return await self.execute_tool("web_extract", tool_input)
         return await self.extract_tool.execute(tool_input)
 
     def _page_result_from_http(self, context: PageReadContext, result: ToolResult, output: Dict[str, Any]) -> PageReadResult:
@@ -178,12 +187,30 @@ class PageReadOrchestrator:
         tier = str(output.get("tier") or ("failed" if result.error else "partial"))
         word_count = int(output.get("wordCount") or len(content.split()))
         confidence = float(output.get("confidence") or 0.0)
+        page_type = str(output.get("pageType") or self._page_type_for_kind(context.page_kind))
+        paywall_signal = bool(output.get("paywallSignal"))
         normalized_output = {**output, "quality": quality, "tier": tier, "wordCount": word_count, "confidence": confidence}
         weak = has_weak_signal(normalized_output)
-        backend_result = "success" if not weak and content else ("garbage" if content else "failed")
+        garbage_signal = bool(
+            quality == "extract_garbage"
+            or tier in {"thin", "failed"}
+            or page_type in {"blocked", "sparse"}
+            or paywall_signal
+            or bool(output.get("jsRenderSuspected"))
+        )
+        if not content:
+            backend_result = "failed"
+        elif weak and garbage_signal:
+            backend_result = "garbage"
+        else:
+            backend_result = "success"
         evidence_status = evidence_status_for_output(normalized_output, final_error=bool(result.error and not content))
         backend = str(output.get("backendUsed") or "http")
         failure_chain = [] if backend_result == "success" else [f"http: {backend_result} ({word_count} words)"]
+        redirected_url = normalize_redirected_url(
+            context.url,
+            str(output.get("redirectedUrl") or output.get("url") or "").strip(),
+        )
         return PageReadResult(
             url=context.url,
             title=str(output.get("title") or ""),
@@ -200,7 +227,15 @@ class PageReadOrchestrator:
             confidence=confidence,
             wordCount=word_count,
             pageKind=context.page_kind,
+            pageType=page_type,
+            taskType=context.task_type,
+            sourceMode=context.source_mode,
             jsRenderSuspected=bool(output.get("jsRenderSuspected")),
+            fetchFailureKind=str(output.get("fetchFailureKind") or "") or None,
+            networkError=str(output.get("networkError") or "") or None,
+            httpStatus=output.get("httpStatus") if isinstance(output.get("httpStatus"), int) else None,
+            transportStrategy=str(output.get("transportStrategy") or "") or None,
+            redirectedUrl=redirected_url,
             error=result.error,
         )
 
@@ -218,10 +253,16 @@ class PageReadOrchestrator:
                 isFallback=False,
                 error="web_search tool not registered",
                 pageKind=context.page_kind,
+                pageType=self._page_type_for_kind(context.page_kind),
+                taskType=context.task_type,
+                sourceMode=context.source_mode,
             )
         query = self._fallback_query(context.url)
         start = time.monotonic()
-        result = await search_tool.execute({"query": query})
+        if self.execute_tool:
+            result = await self.execute_tool("web_search", {"query": query})
+        else:
+            result = await search_tool.execute({"query": query})
         duration_ms = int((time.monotonic() - start) * 1000)
         output = result.output if isinstance(result.output, dict) else {}
         results = list(output.get("results") or []) if isinstance(output, dict) else []
@@ -252,6 +293,9 @@ class PageReadOrchestrator:
                 confidence=0.45,
                 wordCount=len(content.split()),
                 pageKind=context.page_kind,
+                pageType=self._page_type_for_kind(context.page_kind),
+                taskType=context.task_type,
+                sourceMode=context.source_mode,
             )
         error = result.error or "0 snippets"
         return PageReadResult(
@@ -265,13 +309,16 @@ class PageReadOrchestrator:
             isFallback=False,
             error=error,
             pageKind=context.page_kind,
+            pageType=self._page_type_for_kind(context.page_kind),
+            taskType=context.task_type,
+            sourceMode=context.source_mode,
         )
 
     def _fallback_query(self, url: str) -> str:
         parsed = urlparse(url)
         domain = self._registered_domain(parsed.hostname or "")
         slug = " ".join(meaningful_slug_segments(parsed.path))
-        year = str(datetime.utcnow().year)
+        year = str(datetime.now(timezone.utc).year)
         return " ".join(part for part in [domain, slug, year] if part).strip()
 
     def _registered_domain(self, hostname: str) -> str:
@@ -282,11 +329,21 @@ class PageReadOrchestrator:
             return labels[-2]
         return labels[0] if labels else ""
 
+    def _page_type_for_kind(self, page_kind: str) -> str:
+        if page_kind == "news/article":
+            return "article"
+        if page_kind == "standings/table":
+            return "data_table"
+        if page_kind == "docs/changelog":
+            return "article"
+        return "general"
+
     def _landed_url(self, requested_url: str, output: Dict[str, Any]) -> Optional[str]:
         for key in ("landed_url", "redirectedUrl", "url"):
             value = str(output.get(key) or "").strip()
-            if value and value != requested_url:
-                return value
+            normalized = normalize_redirected_url(requested_url, value)
+            if normalized:
+                return normalized
         return None
 
     def _cap_failure_chain(self, chain: List[str]) -> List[str]:
@@ -294,6 +351,11 @@ class PageReadOrchestrator:
             return chain
         omitted = len(chain) - 9
         return chain[:9] + [f"... {omitted} more attempts truncated"]
+
+    def _carry_http_failure_metadata(self, target: PageReadResult, http_result: PageReadResult) -> None:
+        for attr in ("fetchFailureKind", "networkError", "httpStatus", "transportStrategy", "redirectedUrl"):
+            if getattr(target, attr, None) in {None, ""}:
+                setattr(target, attr, getattr(http_result, attr, None))
 
     def to_tool_result(self, result: PageReadResult, original_input: Dict[str, Any], duration_ms: float) -> ToolResult:
         if not result.url:

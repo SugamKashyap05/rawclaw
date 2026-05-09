@@ -1,6 +1,8 @@
 import { ProvenanceTrace } from './provenance';
 
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type TaskRunStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'failed' | 'cancelled';
+export type TaskStatus = TaskRunStatus;
+export type TaskRunTrigger = 'manual' | 'chat' | 'cron' | 'api';
 
 export interface Task {
   id: string;
@@ -9,35 +11,46 @@ export interface Task {
   agentId?: string;
   toolIds: string[];
   schedule?: string;
+  enabled: boolean;
   nextRun?: string | null;
   workspaceId?: string;
   createdAt: string;
   updatedAt: string;
-  lastRunStatus?: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  lastRunStatus?: TaskRunStatus;
 }
 
 export interface TaskRun {
   id: string;
   taskId: string;
-  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  status: TaskRunStatus;
+  triggeredBy?: TaskRunTrigger;
   startedAt?: string;
   finishedAt?: string;
+  lastActivityAt?: string;
   selectedAgent?: string;
   outputPath?: string;
-   provenance?: ProvenanceTrace;
-   errorMessage?: string;
-   resumedFromRunId?: string;
-   sessionId?: string;
-   createdAt: string;
+  provenance?: ProvenanceTrace;
+  errorMessage?: string;
+  resumedFromRunId?: string;
+  sessionId?: string;
+  createdAt: string;
   steps: RunStep[];
   task?: Task;
+}
+
+export interface TaskRunListResponse {
+  items: TaskRun[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
 export interface RunStep {
   id: string;
   runId: string;
   stepIndex: number;
-  stepType: 'plan' | 'tool_call' | 'tool_result' | 'synthesis' | 'error';
+  stepType: 'plan' | 'tool_call' | 'tool_result' | 'synthesis' | 'error' | 'review';
   toolName?: string;
   inputSummary?: string;
   outputSummary?: string;
@@ -105,5 +118,5 @@ export interface TaskExecution {
   startedAt: string;
   completedAt?: string;
   result?: TaskResult;
-  triggeredBy: 'manual' | 'cron' | 'webhook';
+  triggeredBy: TaskRunTrigger;
 }

@@ -28,14 +28,15 @@ class MCPToolWrapper(BaseTool):
         server_name: str,
         gateway: MCPGateway,
     ) -> None:
-        # Use the original MCP tool name directly (no prefix)
-        # This allows MCP tools to replace built-in tools with the same name
+        # Keep the original MCP tool name for routing fidelity.
+        # The registry is responsible for collision handling and namespacing.
         self.name = mcp_tool['name']
         self.description = mcp_tool.get("description", f"MCP tool from {server_name}")
         self.parameters = mcp_tool.get("inputSchema", {})
         self.last_schema_hash = schema_behavior_hash(self.parameters)
         self.accepts_url = schema_accepts_url(self.parameters)
         self.mcp_server_id = server_name
+        self.source_server = server_name
         self.capability_tags = self._infer_capability_tags(server_name, self.name, self.description)
         self.requires_sandbox = False
         # MCP tools require confirmation by default, but web-search tools can run without

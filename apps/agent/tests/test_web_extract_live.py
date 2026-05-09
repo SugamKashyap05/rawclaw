@@ -134,6 +134,69 @@ def test_web_extract_recovers_article_from_raw_html_metadata_and_jsonld():
     assert structured["date_time"] == "2026-04-20"
 
 
+def test_web_extract_election_result_article_recovers_expected_fields():
+    tool = WebExtractTool()
+    raw_html = """
+    <html>
+      <head>
+        <meta property="og:title" content="West Bengal Election Results 2026: BJP wins 206 seats in historic sweep" />
+        <meta property="og:description" content="The BJP won 206 seats out of 294 and is set to form the next government in Bengal." />
+        <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "NewsArticle",
+            "headline": "West Bengal Election Results 2026: BJP wins 206 seats in historic sweep",
+            "description": "The BJP won 206 seats out of 294 and is set to form the next government in Bengal.",
+            "datePublished": "2026-05-04",
+            "articleBody": "The BJP won 206 seats out of 294 in West Bengal and is set to form its first government in the state."
+          }
+        </script>
+      </head>
+      <body></body>
+    </html>
+    """
+
+    content, structured = tool._recover_article_from_raw_html(raw_html)
+    structured = {
+        **tool._extract_structured_data(
+            "election_results_brief",
+            "news/article",
+            content,
+            structured.get("event", ""),
+            ["winner", "party", "seat_tally", "date_time"],
+        ),
+        **structured,
+    }
+    quality, missing, _ = tool._quality_and_missing_fields(
+        content,
+        structured,
+        ["winner", "party", "seat_tally", "date_time"],
+        "news/article",
+        False,
+    )
+    metadata = tool._extraction_quality_metadata(
+        url="https://example.com/elections/west-bengal-results-2026",
+        task_type="election_results_brief",
+        source_mode="system_chosen",
+        page_kind="news/article",
+        content=content,
+        structured_data=structured,
+        expected_fields=["winner", "party", "seat_tally", "date_time"],
+        quality=quality,
+        extraction_method="web_fetch_raw_html_article",
+        raw_source_text=raw_html,
+    )
+
+    assert structured["winner"] == "BJP"
+    assert structured["party"] == "BJP"
+    assert structured["seat_tally"] == "206 seats"
+    assert structured["date_time"] == "2026-05-04"
+    assert quality == "extract_clean"
+    assert missing == []
+    assert metadata["tier"] == "clean"
+    assert metadata["pageType"] == "article"
+
+
 def test_web_extract_quality_metadata_marks_meta_only_article_as_thin():
     tool = WebExtractTool()
 
@@ -162,6 +225,72 @@ def test_web_extract_quality_metadata_marks_meta_only_article_as_thin():
     assert "approximateItemCount" in metadata
     assert "tableRowCount" in metadata
     assert "structuredRecordCount" in metadata
+
+
+def test_web_extract_strips_html_from_structured_article_description():
+    tool = WebExtractTool()
+    raw_html = """
+    <html>
+      <head>
+        <meta property="og:title" content="West Bengal Election Results 2026: BJP wins 206 seats in historic sweep" />
+        <meta property="og:description" content="<b>West Bengal Election Result 2026:</b> BJP wins 206 seats &amp; is set to form the next government in Bengal." />
+        <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "NewsArticle",
+            "headline": "West Bengal Election Results 2026: BJP wins 206 seats in historic sweep",
+            "description": "<b>West Bengal Election Result 2026:</b> BJP wins 206 seats &amp; is set to form the next government in Bengal.",
+            "datePublished": "2026-05-04"
+          }
+        </script>
+      </head>
+      <body></body>
+    </html>
+    """
+
+    _content, structured = tool._recover_article_from_raw_html(raw_html)
+
+    assert structured["what_changed"].startswith("West Bengal Election Result 2026:")
+    assert "<b>" not in structured["what_changed"]
+    assert "</b>" not in structured["what_changed"]
+    assert "&amp;" not in structured["what_changed"]
+    assert "BJP wins 206 seats & is set to form the next government in Bengal." in structured["what_changed"]
+
+
+def test_web_extract_quality_metadata_ignores_hidden_paywall_blob_when_article_content_is_present():
+    tool = WebExtractTool()
+    visible_article = (
+        "West Bengal Election Results 2026: BJP wins 206 seats in historic sweep. "
+        "The BJP won 206 seats out of 294 and is set to form its first government in the state on May 4, 2026."
+    )
+    raw_html = (
+        "<html><body><article><p>"
+        + visible_article
+        + "</p></article>"
+        + ("x" * 6005)
+        + '<script>{"copy":"sign in to continue"}</script></body></html>'
+    )
+
+    metadata = tool._extraction_quality_metadata(
+        url="https://example.com/elections/west-bengal-results-2026",
+        task_type="election_results_brief",
+        source_mode="system_chosen",
+        page_kind="news/article",
+        content=visible_article,
+        structured_data={
+            "winner": "BJP",
+            "party": "BJP",
+            "seat_tally": "206 seats",
+            "date_time": "May 4, 2026",
+        },
+        expected_fields=["winner", "party", "seat_tally", "date_time"],
+        quality="extract_clean",
+        extraction_method="web_fetch_raw_html_article",
+        raw_source_text=raw_html,
+    )
+
+    assert metadata["paywallSignal"] is False
+    assert metadata["pageType"] == "article"
 
 
 def test_web_extract_quality_metadata_flags_paywall_and_js_shell():
@@ -201,6 +330,85 @@ def test_web_extract_quality_metadata_flags_paywall_and_js_shell():
 
     assert metadata["paywallSignal"] is True
     assert metadata["jsRenderSuspected"] is True
+    assert metadata["tier"] == "failed"
+    assert metadata["pageType"] == "blocked"
+
+
+def test_web_extract_quality_metadata_flags_bloomberg_style_metered_paywall():
+    tool = WebExtractTool()
+    teaser = (
+        "Stocks rose in late trading after the central bank signaled it may slow the pace of tightening, "
+        "giving investors a brief reprieve before the next inflation report."
+    )
+    raw_html = """
+    <html>
+      <head>
+        <meta property="og:title" content="Markets Rally After Central Bank Signal" />
+      </head>
+      <body>
+        <article>
+          <p>Stocks rose in late trading after the central bank signaled it may slow the pace of tightening.</p>
+          <p>Already a subscriber? Sign in to continue.</p>
+          <div class="paywall-banner">Subscribe to continue reading this article.</div>
+        </article>
+      </body>
+    </html>
+    """
+
+    metadata = tool._extraction_quality_metadata(
+        url="https://www.bloomberg.com/news/articles/2026-05-04/markets-rally-after-central-bank-signal",
+        task_type="page_read",
+        source_mode="user_named",
+        page_kind="news/article",
+        content=teaser,
+        structured_data={"event": "Markets Rally After Central Bank Signal"},
+        expected_fields=["event", "date_time", "what_changed"],
+        quality="extract_partial",
+        extraction_method="web_fetch_raw_html_article",
+        raw_source_text=raw_html,
+    )
+
+    assert metadata["paywallSignal"] is True
+    assert metadata["tier"] == "failed"
+    assert metadata["pageType"] == "blocked"
+
+
+def test_web_extract_quality_metadata_flags_ft_style_subscription_wall():
+    tool = WebExtractTool()
+    teaser = (
+        "The company told investors it expects a slower second half as tariffs and currency swings weigh on demand."
+    )
+    raw_html = """
+    <html>
+      <head>
+        <meta property="og:title" content="Company Warns on Second-Half Outlook" />
+      </head>
+      <body>
+        <main>
+          <p>The company told investors it expects a slower second half as tariffs and currency swings weigh on demand.</p>
+          <div class="n-content-paywall">
+            Continue reading with a free trial.
+            Already a subscriber? Sign in to continue.
+          </div>
+        </main>
+      </body>
+    </html>
+    """
+
+    metadata = tool._extraction_quality_metadata(
+        url="https://www.ft.com/content/company-warns-on-second-half-outlook",
+        task_type="page_read",
+        source_mode="user_named",
+        page_kind="news/article",
+        content=teaser,
+        structured_data={"event": "Company Warns on Second-Half Outlook"},
+        expected_fields=["event", "date_time", "what_changed"],
+        quality="extract_partial",
+        extraction_method="web_fetch_raw_html_article",
+        raw_source_text=raw_html,
+    )
+
+    assert metadata["paywallSignal"] is True
     assert metadata["tier"] == "failed"
     assert metadata["pageType"] == "blocked"
 

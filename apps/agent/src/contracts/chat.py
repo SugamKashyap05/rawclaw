@@ -63,6 +63,8 @@ class GatewayContextPayload(BaseModel):
 class ChatRequest(BaseModel):
     """Request payload for initiating a chat completion."""
     session_id: str
+    turn_id: Optional[str] = None
+    correlation_id: Optional[str] = None
     messages: List[ChatMessage]
     model: Optional[str] = None
     complexity: Optional[str] = None
@@ -77,6 +79,7 @@ class ChatRequest(BaseModel):
     output_reviewer_id: Optional[str] = None
     promptTemplates: Optional[Dict[str, str]] = None
     promptProvenance: Optional[Dict[str, Any]] = None
+    executionIntent: Optional[Dict[str, Any]] = None
     gateway_context: Optional[GatewayContextPayload] = None
     # P2 Parameters
     temperature: Optional[float] = None

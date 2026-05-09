@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 
 const DEFAULT_API_BASE = process.env.RAWCLAW_API_URL || 'http://localhost:3000/api';
 const DEFAULT_AUTH_SECRET = process.env.RAWCLAW_AUTH_SECRET || 'Kuki7816';
-const DEFAULT_MODEL = process.env.RAWCLAW_CHAT_MODEL || 'ollama/qwen2.5:1.5b';
+const DEFAULT_MODEL = process.env.RAWCLAW_CHAT_MODEL || 'ollama/gemma4:31b-cloud';
 const DEFAULT_COMPLEXITY = process.env.RAWCLAW_CHAT_COMPLEXITY || 'medium';
 const DEFAULT_BUILDER_MODE = process.env.RAWCLAW_APP_BUILDER_MODE || 'chat';
 const DEFAULT_BUILDER_WORKSPACE = process.env.RAWCLAW_APP_BUILDER_WORKSPACE || 'default';
@@ -674,8 +674,10 @@ async function showHistory(state, countText) {
 }
 
 async function sendMessage(state, text) {
+  const correlationId = `rc-cli-${randomUUID().slice(0, 8)}`;
   const request = {
     session_id: state.sessionId,
+    correlation_id: correlationId,
     messages: [{ role: 'user', content: text }],
     model: state.model,
     complexity: state.complexity,

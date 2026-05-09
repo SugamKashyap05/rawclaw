@@ -1,0 +1,4 @@
+-- SQLite rollback note:
+-- Dropping columns requires rebuilding the table.
+-- Revert application code first, then rebuild "task_runs" without
+-- "triggeredBy" and "lastActivityAt" if permanent rollback is needed.

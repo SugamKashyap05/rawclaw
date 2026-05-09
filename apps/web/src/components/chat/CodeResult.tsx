@@ -1,16 +1,26 @@
 import { ToolResult } from '@rawclaw/shared';
-import { toRecord, asString, ToolResultHeader, CollapsiblePre } from './toolResultUtils';
+import { ToolActivityCard } from './ToolActivityCard';
+import { toRecord, asString, CollapsiblePre } from './toolResultUtils';
 
-export function CodeResult({ result }: { result: ToolResult }) {
+export function CodeResult({ result, framed = true }: { result: ToolResult; framed?: boolean }) {
   const payload = toRecord(result.output);
   const code = asString(payload.code) || asString(result.input?.code) || 'No code captured.';
   const output = asString(payload.output) || asString(payload.stdout) || JSON.stringify(result.output, null, 2);
 
-  return (
-    <div className="glass-card" style={{ padding: '1rem', display: 'grid', gap: '0.85rem' }}>
-      <ToolResultHeader label="CODE EXECUTION" result={result} />
+  const body = (
+    <>
       <CollapsiblePre>{code}</CollapsiblePre>
       <CollapsiblePre>{output}</CollapsiblePre>
-    </div>
+    </>
+  );
+
+  if (!framed) {
+    return body;
+  }
+
+  return (
+    <ToolActivityCard sourceLabel="Code Execution" status={result.error ? 'failed' : 'success'} durationMs={result.duration_ms}>
+      {body}
+    </ToolActivityCard>
   );
 }

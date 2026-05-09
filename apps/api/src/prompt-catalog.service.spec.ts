@@ -76,4 +76,61 @@ describe('PromptCatalogService NLU routing context', () => {
     expect(composed.sections.every((section) => allowed.has(section.sectionId))).toBe(true);
     expect(composed.sections.some((section) => section.sectionId === PromptSectionId.NLU_ROUTING_CONTEXT)).toBe(true);
   });
+
+  it('renders the RawClaw identity contract as the final prompt section', () => {
+    const composed = service.composeChatPrompt({
+      systemContext: 'System context',
+      workspaceFiles: {},
+      latestUserContent: 'hi',
+      assistantLane: 'research',
+      nluFrame: {
+        ...baseNluFrame,
+        intent: 'research',
+        recommendedLane: 'research',
+        confidence: 0.91,
+      },
+    });
+
+    const labels = composed.sections.map((section) => section.label);
+    expect(labels[labels.length - 1]).toBe('RawClaw Identity Contract');
+    expect(composed.sections[composed.sections.length - 1]?.sectionId).toBe(PromptSectionId.BASELINE_PERSONA);
+  });
+
+  it('includes the baseline persona for a simple greeting without workflow or agent overlays', () => {
+    const composed = service.composeChatPrompt({
+      systemContext: 'System context',
+      workspaceFiles: {},
+      latestUserContent: 'hi',
+      assistantLane: 'conversation',
+      nluFrame: baseNluFrame,
+    });
+
+    const labels = composed.sections.map((section) => section.label);
+    expect(labels).toContain('RawClaw Identity Contract');
+    expect(labels).not.toContain('Active Workflow Guidance');
+    expect(composed.prompt).toContain('Use a warm, grounded coworker voice');
+  });
+
+  it('keeps agent overlay and legacy agent prompt above the identity contract', () => {
+    const composed = service.composeChatPrompt({
+      systemContext: 'System context',
+      workspaceFiles: {},
+      latestUserContent: 'help me debug this',
+      assistantLane: 'conversation',
+      nluFrame: baseNluFrame,
+      selectedAgent: {
+        id: 'agent-1',
+        name: 'Debugger',
+        promptOverlay: 'You specialize in debugging.',
+        systemPrompt: 'Legacy debugger prompt',
+      } as any,
+    });
+
+    const labels = composed.sections.map((section) => section.label);
+    const identityIndex = labels.indexOf('RawClaw Identity Contract');
+    expect(labels.indexOf('Agent Overlay')).toBeGreaterThanOrEqual(0);
+    expect(labels.indexOf('Legacy Agent Prompt')).toBeGreaterThanOrEqual(0);
+    expect(labels.indexOf('Agent Overlay')).toBeLessThan(identityIndex);
+    expect(labels.indexOf('Legacy Agent Prompt')).toBeLessThan(identityIndex);
+  });
 });
