@@ -14,14 +14,6 @@ class FakeOllamaProvider:
         model = (options or {}).get("model")
         has_tools = bool((options or {}).get("tools"))
         self.calls.append((model, has_tools))
-        if model == "qwen2.5:1.5b":
-            yield {
-                "type": "error",
-                "error": "provider_http_error",
-                "message": 'Ollama returned 400: {"error":"\\"qwen2.5:1.5b\\" does not support chat"}',
-            }
-            return
-
         if model == "chatless-tools:1b":
             if has_tools:
                 yield {
@@ -36,24 +28,17 @@ class FakeOllamaProvider:
             }
             return
 
-        if model == "phi3:3.8b":
+        if model == "gemma4:31b-cloud":
             yield {
                 "type": "content",
-                "content": "Recovered on fallback model.",
+                "content": "Recovered on eligible routed model.",
             }
             return
 
-        if model == "deepseek-r1:8b":
-            if has_tools:
-                yield {
-                    "type": "error",
-                    "error": "provider_http_error",
-                    "message": 'Ollama returned 400: {"error":"registry.ollama.ai/library/deepseek-r1:8b does not support tools"}',
-                }
-                return
+        if model == "gemma4:e4b":
             yield {
                 "type": "content",
-                "content": "Recovered on the selected model without tools.",
+                "content": "Recovered on simple local model.",
             }
             return
 
@@ -95,15 +80,7 @@ class FakeShowClient:
 
 
 @pytest.mark.asyncio
-async def test_router_surfaces_explicit_model_incompatibility_without_cross_model_fallback(monkeypatch):
-    monkeypatch.setattr(settings, "DEFAULT_LOW_MODEL", "ollama/qwen2.5:1.5b", raising=False)
-    monkeypatch.setattr(
-        settings,
-        "OLLAMA_FALLBACK_ORDER",
-        ["ollama/qwen2.5:1.5b", "ollama/phi3:3.8b"],
-        raising=False,
-    )
-
+async def test_router_reroutes_unknown_explicit_model_to_manifest_eligible_model(monkeypatch):
     router = ModelRouter()
     provider = FakeOllamaProvider()
     router.providers = {"ollama": provider}
@@ -116,22 +93,16 @@ async def test_router_surfaces_explicit_model_incompatibility_without_cross_mode
         )
     ]
 
-    assert provider.calls == [("qwen2.5:1.5b", False)]
-    error = next(chunk for chunk in chunks if isinstance(chunk, dict) and chunk.get("type") == "error")
-    assert error["error"] == "provider_http_error"
-    assert "does not support chat" in error["message"]
+    assert provider.calls == [("gemma4:e4b", False)]
+    assert any(
+        chunk.get("content") == "Recovered on simple local model."
+        for chunk in chunks
+        if isinstance(chunk, dict)
+    )
 
 
 @pytest.mark.asyncio
-async def test_router_retries_the_selected_model_without_tools_before_falling_through(monkeypatch):
-    monkeypatch.setattr(settings, "DEFAULT_LOW_MODEL", "ollama/qwen2.5:1.5b", raising=False)
-    monkeypatch.setattr(
-        settings,
-        "OLLAMA_FALLBACK_ORDER",
-        ["ollama/qwen2.5:1.5b", "ollama/phi3:3.8b"],
-        raising=False,
-    )
-
+async def test_router_prevents_small_non_tool_model_from_receiving_tool_task(monkeypatch):
     router = ModelRouter()
     provider = FakeOllamaProvider()
     router.providers = {"ollama": provider}
@@ -140,34 +111,53 @@ async def test_router_retries_the_selected_model_without_tools_before_falling_th
         chunk
         async for chunk in router.complete(
             [{"role": "user", "content": "hello jii ki hal chal"}],
-            model="ollama/deepseek-r1:8b",
+            model="ollama/gemma4:e4b",
             tools=[{"type": "function", "function": {"name": "web_search"}}],
+            complexity="medium",
         )
     ]
 
-    assert provider.calls == [("deepseek-r1:8b", True), ("deepseek-r1:8b", False)]
+    assert provider.calls == [("gemma4:31b-cloud", True)]
     assert not [chunk for chunk in chunks if isinstance(chunk, dict) and chunk.get("type") == "error"]
     assert any(
-        chunk.get("content") == "Recovered on the selected model without tools."
+        chunk.get("content") == "Recovered on eligible routed model."
         for chunk in chunks
         if isinstance(chunk, dict)
     )
 
     metadata = next(chunk for chunk in chunks if isinstance(chunk, dict) and chunk.get("type") == "metadata")
-    assert metadata["metadata"]["modelId"] == "ollama/deepseek-r1:8b"
+    assert metadata["metadata"]["modelId"] == "ollama/gemma4:31b-cloud"
     assert metadata["metadata"]["fallbacks"] == []
 
 
 @pytest.mark.asyncio
-async def test_router_retries_same_model_without_tools_when_chat_capability_is_missing(monkeypatch):
-    monkeypatch.setattr(settings, "DEFAULT_LOW_MODEL", "ollama/chatless-tools:1b", raising=False)
-    monkeypatch.setattr(
-        settings,
-        "OLLAMA_FALLBACK_ORDER",
-        ["ollama/chatless-tools:1b", "ollama/phi3:3.8b"],
-        raising=False,
-    )
+async def test_router_uses_simple_local_model_for_low_complexity_chat(monkeypatch):
+    router = ModelRouter()
+    provider = FakeOllamaProvider()
+    router.providers = {"ollama": provider}
 
+    chunks = [
+        chunk
+        async for chunk in router.complete(
+            [{"role": "user", "content": "Say hello."}],
+            complexity="low",
+        )
+    ]
+
+    assert provider.calls == [("gemma4:e4b", False)]
+    assert not [chunk for chunk in chunks if isinstance(chunk, dict) and chunk.get("type") == "error"]
+    assert any(
+        chunk.get("content") == "Recovered on simple local model."
+        for chunk in chunks
+        if isinstance(chunk, dict)
+    )
+    metadata = next(chunk for chunk in chunks if isinstance(chunk, dict) and chunk.get("type") == "metadata")
+    assert metadata["metadata"]["modelId"] == "ollama/gemma4:e4b"
+    assert metadata["metadata"]["fallbacks"] == []
+
+
+@pytest.mark.asyncio
+async def test_router_can_retry_same_eligible_model_without_tools_when_provider_rejects_chat(monkeypatch):
     router = ModelRouter()
     provider = FakeOllamaProvider()
     router.providers = {"ollama": provider}
@@ -181,49 +171,13 @@ async def test_router_retries_same_model_without_tools_when_chat_capability_is_m
         )
     ]
 
-    assert provider.calls == [("chatless-tools:1b", True), ("chatless-tools:1b", False)]
+    assert provider.calls == [("gemma4:31b-cloud", True)]
     assert not [chunk for chunk in chunks if isinstance(chunk, dict) and chunk.get("type") == "error"]
-    assert any(
-        chunk.get("content") == "Recovered on the selected chatless model without tools."
-        for chunk in chunks
-        if isinstance(chunk, dict)
-    )
+    assert any(chunk.get("content") == "Recovered on eligible routed model." for chunk in chunks if isinstance(chunk, dict))
+
     metadata = next(chunk for chunk in chunks if isinstance(chunk, dict) and chunk.get("type") == "metadata")
-    assert metadata["metadata"]["modelId"] == "ollama/chatless-tools:1b"
+    assert metadata["metadata"]["modelId"] == "ollama/gemma4:31b-cloud"
     assert metadata["metadata"]["fallbacks"] == []
-
-
-@pytest.mark.asyncio
-async def test_router_can_still_fall_through_for_non_explicit_complexity_routing(monkeypatch):
-    monkeypatch.setattr(settings, "DEFAULT_LOW_MODEL", "ollama/qwen2.5:1.5b", raising=False)
-    monkeypatch.setattr(
-        settings,
-        "OLLAMA_FALLBACK_ORDER",
-        ["ollama/qwen2.5:1.5b", "ollama/phi3:3.8b"],
-        raising=False,
-    )
-    monkeypatch.setattr(settings, "DEFAULT_MEDIUM_MODEL", "ollama/qwen2.5:1.5b", raising=False)
-    monkeypatch.setattr(settings, "DEFAULT_HIGH_MODEL", "ollama/qwen2.5:1.5b", raising=False)
-
-    router = ModelRouter()
-    provider = FakeOllamaProvider()
-    router.providers = {"ollama": provider}
-
-    chunks = [
-        chunk
-        async for chunk in router.complete(
-            [{"role": "user", "content": "Say hello."}],
-            complexity="low",
-        )
-    ]
-
-    assert provider.calls == [("qwen2.5:1.5b", False), ("phi3:3.8b", False)]
-    assert not [chunk for chunk in chunks if isinstance(chunk, dict) and chunk.get("type") == "error"]
-    assert any(chunk.get("content") == "Recovered on fallback model." for chunk in chunks if isinstance(chunk, dict))
-
-    metadata = next(chunk for chunk in chunks if isinstance(chunk, dict) and chunk.get("type") == "metadata")
-    assert metadata["metadata"]["modelId"] == "ollama/phi3:3.8b"
-    assert metadata["metadata"]["fallbacks"] == ["ollama/qwen2.5:1.5b"]
 
 
 @pytest.mark.asyncio

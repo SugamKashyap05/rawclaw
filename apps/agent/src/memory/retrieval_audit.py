@@ -13,11 +13,41 @@ Without this, "should have remembered" bugs are invisible.
 """
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger("rawclaw.memory.retrieval")
+
+
+def _attach_audit_file_handler() -> None:
+    """Attach a dedicated audit file handler when a path is configured."""
+    audit_log_path = (os.getenv("RAWCLAW_AUDIT_LOG_PATH") or "").strip()
+    if not audit_log_path:
+        return
+
+    resolved_path = Path(audit_log_path)
+    try:
+        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+
+    for handler in logger.handlers:
+        if isinstance(handler, logging.FileHandler) and Path(getattr(handler, "baseFilename", "")) == resolved_path:
+            return
+
+    file_handler = logging.FileHandler(resolved_path, mode="a", encoding="utf-8")
+    file_handler.setFormatter(
+        logging.Formatter(
+            '{"ts":"%(asctime)s","logger":"%(name)s","level":"%(levelname)s","message":"%(message)s"}'
+        )
+    )
+    logger.addHandler(file_handler)
+
+
+_attach_audit_file_handler()
 
 
 @dataclass
@@ -46,7 +76,7 @@ def retrieve_with_audit(
     turn_id: str,
     k: int = 5,
     token_limit: int = 2048,
-    score_threshold: float = 0.0,
+    similarity_threshold: float = 0.0,
     *,
     query_embedding: Optional[list[float]] = None,
     where: Optional[dict[str, Any]] = None,
@@ -75,10 +105,12 @@ def retrieve_with_audit(
     documents: list[str] = raw.get("documents", [[]])[0]
     distances: list[float] = raw.get("distances", [[]])[0]
 
+    # Chroma returns distance for cosine space. Convert to similarity and keep
+    # only entries at or above the configured similarity floor.
     filtered = [
-        (doc, dist)
-        for doc, dist in zip(documents, distances)
-        if (1.0 - float(dist)) >= score_threshold
+        (index, doc, dist)
+        for index, (doc, dist) in enumerate(zip(documents, distances))
+        if (1.0 - float(dist)) >= similarity_threshold
     ]
 
     kept_docs: list[str] = []
@@ -86,17 +118,17 @@ def retrieve_with_audit(
     kept_indices: list[int] = []
     token_count = 0
 
-    for index, (doc, dist) in enumerate(filtered):
+    for original_index, doc, dist in filtered:
         estimated_tokens = int(len(str(doc or "").split()) * 1.35)
         if token_count + estimated_tokens > token_limit:
             break
         kept_docs.append(str(doc or ""))
         kept_scores.append(round(1.0 - float(dist), 4))
-        kept_indices.append(index)
+        kept_indices.append(original_index)
         token_count += estimated_tokens
 
     latency_ms = round((time.monotonic() - start) * 1000, 2)
-    was_truncated = len(kept_docs) < len(documents)
+    was_truncated = len(kept_docs) < len(filtered)
 
     audit = RetrievalAudit(
         turn_id=turn_id,

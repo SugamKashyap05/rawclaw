@@ -7,6 +7,14 @@
     "apps/*",
     "packages/*"
   ],
+  "overrides": {
+    "axios": "^1.16.0",
+    "fast-uri": "^3.1.2",
+    "multer": "2.1.1",
+    "@nestjs/platform-express": {
+      "multer": "2.1.1"
+    }
+  },
   "scripts": {
     "runtime:up": "docker compose --profile worker up -d",
     "runtime:down": "docker compose --profile worker down",

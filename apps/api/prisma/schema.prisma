@@ -215,6 +215,7 @@ model Message {
   durationMs   Int?
   runIds       String?  // JSON string array of background task IDs
   streamStatus String   @default("completed")
+  turnId       String?
   promptPackId String?
   promptVersionHash String?
   reviewerPromptVersionHash String?
@@ -228,6 +229,7 @@ model Message {
   sessionId String
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
+  @@index([turnId])
   @@map("messages")
 }
 

@@ -39,6 +39,8 @@ from src.memory.knowledge_brain import KnowledgeBrain
 from src.agents import AgentProfileStore
 from src.gateway import GatewayExecutionError, GatewayRegistry, GatewayService
 from src.sessions import SessionManager
+from src.security.input_sanitizer import sanitize_user_input
+from src.telemetry import setup_telemetry
 
 # Tool subsystem imports (auto-registers built-in tools)
 from src.tools.registry import TOOL_REGISTRY
@@ -153,6 +155,25 @@ logging.basicConfig(
     level=getattr(logging, configured_log_level, logging.INFO),
 )
 logger = logging.getLogger("rawclaw.main")
+
+
+def resolve_cors_allowed_origins() -> list[str]:
+    raw_origins = (
+        os.getenv("RAWCLAW_CORS_ALLOWED_ORIGINS")
+        or os.getenv("CORS_ALLOWED_ORIGINS")
+        or ""
+    ).strip()
+    if raw_origins:
+        return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+
+    return [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ]
 
 # Global instances
 model_router = ModelRouter()
@@ -350,10 +371,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="RawClaw Agent", lifespan=lifespan)
+tracer = setup_telemetry("rawclaw-agent", app=app)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=resolve_cors_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -494,10 +516,30 @@ async def execute_chat(request: Request, chat_request: ChatRequest):
     if not active_gateway:
         return JSONResponse(status_code=503, content={"error": "Gateway service not initialized"})
 
-    incoming_turn_id = request.headers.get("X-Turn-ID") or getattr(chat_request, "turn_id", None) or str(uuid.uuid4())
+    header_turn_id = request.headers.get("X-Turn-ID")
+    body_turn_id = getattr(chat_request, "turn_id", None)
+    if body_turn_id and not header_turn_id:
+        logger.warning("Ignoring body-supplied turn_id without trusted header.")
+    elif body_turn_id and header_turn_id and str(body_turn_id) != str(header_turn_id):
+        logger.warning("Ignoring mismatched body-supplied turn_id in favor of trusted header.")
+    incoming_turn_id = header_turn_id or str(uuid.uuid4())
     incoming_session_id = request.headers.get("X-Session-ID") or chat_request.session_id or "unknown"
     chat_request.turn_id = incoming_turn_id
     chat_request.session_id = incoming_session_id
+    for message in getattr(chat_request, "messages", []) or []:
+        if getattr(message, "role", "") != "user":
+            continue
+        clean_content, was_flagged = sanitize_user_input(
+            getattr(message, "content", ""),
+            incoming_turn_id,
+        )
+        if was_flagged:
+            logger.warning(
+                "prompt_injection_input_sanitized turn_id=%s session_id=%s",
+                incoming_turn_id,
+                incoming_session_id,
+            )
+        message.content = clean_content
     logger.info(
         "agent_request_received turn_id=%s session_id=%s model=%s message_count=%s",
         incoming_turn_id,
@@ -507,6 +549,12 @@ async def execute_chat(request: Request, chat_request: ChatRequest):
     )
 
     async def event_generator():
+        span_context = tracer.start_as_current_span("agent.turn.execute") if tracer else None
+        if span_context:
+            span = span_context.__enter__()
+            span.set_attribute("rawclaw.turn_id", incoming_turn_id)
+            span.set_attribute("rawclaw.session_id", incoming_session_id)
+            span.set_attribute("rawclaw.model", str(getattr(chat_request, "model", "") or "default"))
         try:
             async for chunk in active_gateway.stream_chat(
                 chat_request,
@@ -523,6 +571,9 @@ async def execute_chat(request: Request, chat_request: ChatRequest):
         except Exception as e:
             logger.error(f"Error in event_generator: {e}", exc_info=True)
             yield json.dumps({"type": "error", "error": "generator_error", "message": str(e)}) + "\n"
+        finally:
+            if span_context:
+                span_context.__exit__(None, None, None)
 
     return StreamingResponse(
         event_generator(),
@@ -955,13 +1006,14 @@ def main():
     """Entry point for running the agent."""
     from src.config import settings
     port = int(os.environ.get("AGENT_PORT", settings.AGENT_PORT))
+    bind_host = os.environ.get("RAWCLAW_AGENT_BIND_HOST", "127.0.0.1").strip() or "127.0.0.1"
     reload_enabled = os.environ.get("AGENT_RELOAD", str(getattr(settings, "AGENT_RELOAD", False))).lower() == "true"
     if os.name == "nt" and reload_enabled:
         logger.warning("AGENT_RELOAD=true requested on Windows; disabling reload to avoid multiprocessing permission errors.")
         reload_enabled = False
     uvicorn.run(
         "src.main:app",
-        host="0.0.0.0",
+        host=bind_host,
         port=port,
         reload=reload_enabled,
         loop="asyncio",

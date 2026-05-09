@@ -47,6 +47,20 @@ class ModelRouter:
 
     def select_eligible_model(self, requires_tools: bool, complexity: str) -> str:
         complexity_rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        preferred_ids: list[str] = []
+        if complexity == "critical":
+            preferred_ids.extend([
+                "anthropic/claude-sonnet-4-20250514",
+                "anthropic/claude-haiku-4-5-20251001",
+            ])
+        preferred_ids.extend([
+            self.complexity_map.get(complexity),
+            settings.DEFAULT_HIGH_MODEL,
+            settings.DEFAULT_MEDIUM_MODEL,
+            settings.DEFAULT_LOW_MODEL,
+            *settings.OLLAMA_FALLBACK_ORDER,
+        ])
+
         eligible = [
             capability
             for capability in CAPABILITY_MANIFEST.values()
@@ -57,6 +71,22 @@ class ModelRouter:
             raise RuntimeError(
                 f"No eligible model exists for complexity={complexity} requires_tools={requires_tools}"
             )
+
+        normalized_preferred: list[str] = []
+        seen_preferred: set[str] = set()
+        for raw_id in preferred_ids:
+            if not raw_id:
+                continue
+            canonical = raw_id if "/" in raw_id else f"ollama/{raw_id}"
+            if canonical in seen_preferred:
+                continue
+            normalized_preferred.append(canonical)
+            seen_preferred.add(canonical)
+
+        eligible_ids = {capability.model_id for capability in eligible}
+        for candidate in normalized_preferred:
+            if candidate in eligible_ids:
+                return candidate
 
         def sort_key(capability):
             rank = complexity_rank.get(capability.complexity_ceiling, 0)

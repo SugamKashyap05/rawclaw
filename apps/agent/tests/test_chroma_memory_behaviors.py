@@ -82,6 +82,19 @@ class MaintenanceCollection:
         self.deleted_ids.extend(ids)
 
 
+class ThresholdCollection:
+    def query(self, **kwargs):
+        return {
+            "ids": [["trusted-1", "low-confidence-1"]],
+            "documents": [["Trusted memory chunk", "Low confidence memory chunk"]],
+            "metadatas": [[
+                {"collection": "operator", "timestamp": "2026-05-08T04:00:00Z", "tags": '["operator"]'},
+                {"collection": "operator", "timestamp": "2026-05-08T05:00:00Z", "tags": '["operator"]'},
+            ]],
+            "distances": [[0.1, 0.45]],
+        }
+
+
 def build_memory(collection) -> ChromaMemory:
     memory = ChromaMemory.__new__(ChromaMemory)
     memory.collection = collection
@@ -143,3 +156,12 @@ def test_prune_sessions_applies_ttl_and_per_session_cap():
 
     assert result["deletedEntries"] == 2
     assert set(memory.collection.deleted_ids) == {"old-1", "recent-1"}
+
+
+def test_memory_search_filters_low_confidence_chunks_before_context_injection():
+    memory = build_memory(ThresholdCollection())
+
+    results = memory.search(query="operator preference", collection="operator", n_results=5, turn_id="t-101")
+
+    assert [item["id"] for item in results] == ["trusted-1"]
+    assert results[0]["score"] >= 0.75

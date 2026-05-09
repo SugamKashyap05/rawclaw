@@ -1,0 +1,12 @@
+title = "rawclaw gitleaks configuration"
+
+[allowlist]
+description = "Known false positives in example, skill, reference, and fixture content"
+regexTarget = "line"
+paths = [
+  '''apps/agent/skills/.*''',
+  '''apps/agent/skills_research/.*''',
+  '''.*\.example$''',
+  '''.*reference.*\.md$''',
+  '''.*test.*fixture.*''',
+]

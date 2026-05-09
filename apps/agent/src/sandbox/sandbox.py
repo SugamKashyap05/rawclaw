@@ -324,7 +324,7 @@ class SandboxRunner:
             f"--memory={self.memory_limit}",
             "--cpus=0.5",                   # CPU limit
             "--read-only",                  # Read-only root filesystem
-            "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",  # Writable tmp
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",  # nosec B108
             "--user", "nobody",             # Non-root user
         ]
 
@@ -419,7 +419,7 @@ class SandboxRunner:
             f"--memory={self.memory_limit}",
             "--cpus=0.5",
             "--read-only",
-            "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",  # nosec B108
             "--user", "nobody",
         ]
 

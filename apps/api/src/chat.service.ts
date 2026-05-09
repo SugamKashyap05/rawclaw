@@ -34,6 +34,7 @@ interface MessageWithRelations {
   citations: string | null;
   createdAt: Date;
   sessionId: string;
+  turnId?: string | null;
   // P1 Metadata
   modelId: string | null;
   isLocal: boolean | null;
@@ -350,6 +351,7 @@ export class ChatService {
             : null,
         citations: metadata?.citations ? JSON.stringify(metadata.citations) : null,
         modelId: metadata?.modelId,
+        turnId: metadata?.turnId || null,
         isLocal: metadata?.isLocal,
         fallbacks: metadata?.fallbacks ? JSON.stringify(metadata.fallbacks) : null,
         memoryRecall: metadata?.memoryRecall,
@@ -404,7 +406,10 @@ export class ChatService {
       provenanceTrace: rawTrace ? ProvenanceSanitizer.processTrace(rawTrace) : undefined,
       runIds: m.runIds ? JSON.parse(m.runIds) : undefined,
       modelId: m.modelId || undefined,
-      turnId: parsedProvenance?.turnId || undefined,
+      // NOTE: Messages before the 2026-05-09 P1 migration can have NULL turnId.
+      // Audit queries must account for this epoch boundary; backfill only covers
+      // rows that already carried turn provenance in JSON.
+      turnId: m.turnId || parsedProvenance?.turnId || undefined,
       isLocal: m.isLocal ?? undefined,
       fallbacks: m.fallbacks ? JSON.parse(m.fallbacks) : undefined,
       memoryRecall: m.memoryRecall ?? undefined,

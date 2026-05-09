@@ -34,6 +34,7 @@ import { PromptCatalogService } from './prompt-catalog.service';
 import { SelfImprovementService } from './self-improvement.service';
 import { AssistantService } from './assistant.service';
 import { EventEmitter } from 'events';
+import { trace as otelTrace } from '@opentelemetry/api';
 import { existsSync, promises as fs } from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -1585,6 +1586,11 @@ export class ChatOrchestratorService {
     turnTrace.model_requested = request.model || selectedAgent?.modelId || undefined;
     turnTrace.tools_selected = toolsSchema?.length || 0;
     turnTrace.research_mode = assistantLane === 'research';
+    const activeSpan = otelTrace.getActiveSpan();
+    activeSpan?.setAttribute('rawclaw.turn_id', turnTrace.turn_id);
+    activeSpan?.setAttribute('rawclaw.session_id', turnTrace.session_id);
+    activeSpan?.setAttribute('rawclaw.model', turnTrace.model_requested ?? 'default');
+    activeSpan?.setAttribute('rawclaw.research_mode', turnTrace.research_mode);
     this.logger.log(JSON.stringify({
       event: 'turn_started',
       ...turnTrace,

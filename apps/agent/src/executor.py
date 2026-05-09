@@ -21,6 +21,30 @@ from urllib.parse import urlparse, unquote
 from typing import Any, Dict, List, Optional, AsyncGenerator, Tuple
 
 import httpx
+try:
+    from opentelemetry import trace as otel_trace
+except Exception:  # pragma: no cover - optional local dependency during tests
+    class _NoopSpan:
+        def set_attribute(self, *_args, **_kwargs) -> None:
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+    class _NoopTrace:
+        def get_current_span(self):
+            return _NoopSpan()
+
+        def get_tracer(self, _name: str):
+            return self
+
+        def start_as_current_span(self, _name: str):
+            return _NoopSpan()
+
+    otel_trace = _NoopTrace()
 
 from src.contracts.tool import ToolCall, ToolResult
 from src.contracts.chat import ChatRequest, ChatMessage
@@ -184,6 +208,7 @@ class Executor:
         self._self_learning_loop = SelfLearningLoop(self._adaptive_store, self._parallel_executor)
         self._swarm = InProcessSwarmCoordinator()
         self._task_cancel_events: Dict[str, asyncio.Event] = {}
+        self._active_turn_id: Optional[str] = None
         self.research = InternalResearchCoordinator(
             planner=ResearchPlannerStage(
                 build_research_plan=self._build_research_plan,
@@ -1776,6 +1801,7 @@ class Executor:
             trace.metadata["correlationId"] = correlation_id
         turn_id = getattr(request, "turn_id", None) or str(uuid.uuid4())
         request.turn_id = turn_id
+        self._active_turn_id = turn_id
         trace.metadata["turnId"] = turn_id
 
         requested_tools_schema = self._resolve_requested_tools_schema(request.tools)
@@ -1800,6 +1826,10 @@ class Executor:
 
         session_id = gateway_context.session_record.session_id if gateway_context else request.session_id
         log_ctx = {"turn_id": turn_id, "session_id": session_id}
+        active_span = otel_trace.get_current_span()
+        active_span.set_attribute("rawclaw.turn_id", turn_id)
+        active_span.set_attribute("rawclaw.session_id", session_id or "unknown")
+        active_span.set_attribute("rawclaw.model", request.model or "default")
 
         memory_recall_occurred = False
 
@@ -3119,6 +3149,7 @@ class Executor:
             self._active_request_prompt_templates = {}
             self._active_request_prompt_provenance = {}
             self._active_request_execution_intent = {}
+            self._active_turn_id = None
 
     def _fuzzy_map_tool_name(self, name: str) -> str:
         """Maps hallucinations or slightly incorrect tool names to real ones."""
@@ -8318,6 +8349,8 @@ class Executor:
         start = time.time()
         tool_name = tool_call.tool_name
         tool_input = tool_call.input
+        effective_turn_id = turn_id or getattr(self, "_active_turn_id", None)
+        tracer = otel_trace.get_tracer("rawclaw-agent")
 
         try:
             if allowed_tools is not None and tool_name not in allowed_tools:
@@ -8334,18 +8367,21 @@ class Executor:
             tool_use_mode = self._normalized_tool_use_mode()
             force_confirmation = permission_mode == "ask_every_time" or tool_use_mode == "manual"
 
-            # Check if confirmation is required
-            if tool.requires_confirmation or force_confirmation:
-                result = await self.confirmation_gate.check_and_execute(
-                    session_id,
-                    tool_name,
-                    tool_input,
-                    lambda: TOOL_REGISTRY.execute_tool(tool_name, tool_input, knowledge_brain=knowledge_brain, turn_id=turn_id),
-                )
+            with tracer.start_as_current_span("agent.tool.execute") as span:
+                span.set_attribute("tool.name", tool_name)
+                span.set_attribute("rawclaw.turn_id", effective_turn_id or "no-turn-id")
+                # SECURITY: Never attach tool arguments to spans; they may contain PII.
+                if tool.requires_confirmation or force_confirmation:
+                    result = await self.confirmation_gate.check_and_execute(
+                        session_id,
+                        tool_name,
+                        tool_input,
+                        lambda: TOOL_REGISTRY.execute_tool(tool_name, tool_input, knowledge_brain=knowledge_brain, turn_id=effective_turn_id),
+                    )
+                else:
+                    result = await TOOL_REGISTRY.execute_tool(tool_name, tool_input, knowledge_brain=knowledge_brain, turn_id=effective_turn_id)
+                span.set_attribute("tool.success", result.success)
                 return result
-
-            # Execute directly
-            return await TOOL_REGISTRY.execute_tool(tool_name, tool_input, knowledge_brain=knowledge_brain, turn_id=turn_id)
 
         except ToolNotFoundError:
             return ToolResult(

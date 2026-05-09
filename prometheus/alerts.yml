@@ -1,0 +1,11 @@
+groups:
+  - name: rawclaw.worker
+    rules:
+      - alert: WorkerMemoryHigh
+        expr: rawclaw_worker_memory_bytes / rawclaw_worker_memory_limit_bytes > 0.85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Worker using more than 85% of memory limit
+          description: Worker at {{ $value | humanizePercentage }} memory usage

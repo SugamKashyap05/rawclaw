@@ -82,6 +82,7 @@ import { AppBuilderHarnessJanitorService } from './app-builder/app-builder-harne
 import { AppBuilderStorageService } from './app-builder/app-builder-storage.service';
 import { BootstrapController } from './bootstrap.controller';
 import { BootstrapService } from './bootstrap.service';
+import { RateLimitService } from './rate-limit.service';
 
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
@@ -149,6 +150,7 @@ import { AuthModule } from './auth/auth.module';
     SelfImprovementService,
     AssistantService,
     BootstrapService,
+    RateLimitService,
     ProcessControllerService,
     GatewayEventsService,
     GatewayControlPlaneService,

@@ -17,12 +17,16 @@ import chromadb
 # Heavy imports moved to lazy loaders
 
 from src.config import settings
+from src.memory.collection_config import get_collection_config
 from src.memory.retrieval_audit import retrieve_with_audit
+from src.security.input_sanitizer import sanitize_retrieved_chunk
 
 logger = logging.getLogger("rawclaw.memory")
 
 CHROMA_HOST = settings.CHROMA_HOST
 CHROMA_PORT = settings.CHROMA_PORT
+MEMORY_RETRIEVAL_SIMILARITY_FLOOR = 0.75
+MEMORY_RETRIEVAL_MAX_DISTANCE = 1.0 - MEMORY_RETRIEVAL_SIMILARITY_FLOOR
 
 
 class ChromaMemory:
@@ -334,6 +338,12 @@ class ChromaMemory:
             formatted: list[dict[str, Any]] = []
             for index, document in enumerate(documents):
                 metadata = metadatas[index] if index < len(metadatas) else {}
+                entry_collection = str(metadata.get("collection") or collection or "default")
+                clean_document, _chunk_flagged = sanitize_retrieved_chunk(
+                    str(document or ""),
+                    entry_collection,
+                    turn_id,
+                )
                 entry_tags = self._parse_tags(metadata.get("tags"))
                 if requested_tags and not requested_tags.issubset({tag.lower() for tag in entry_tags}):
                     continue
@@ -341,15 +351,15 @@ class ChromaMemory:
                 formatted.append(
                     {
                         "id": str(entry_id),
-                        "content": document,
-                        "preview": document[:217] + "..." if len(document) > 220 else document,
+                        "content": clean_document,
+                        "preview": clean_document[:217] + "..." if len(clean_document) > 220 else clean_document,
                         "role": metadata.get("role", "knowledge"),
                         "session_id": metadata.get("session_id", ""),
                         "timestamp": metadata.get("timestamp", ""),
                         "distance": 0.0,
                         "score": 1.0,
                         "source": metadata.get("source") or None,
-                        "collection": metadata.get("collection", "default"),
+                        "collection": entry_collection,
                         "tags": entry_tags,
                         "createdAt": metadata.get("timestamp", ""),
                         "updatedAt": metadata.get("timestamp", ""),
@@ -360,13 +370,15 @@ class ChromaMemory:
             return formatted[:n_results]
 
         try:
-            query_limit = max(n_results * 4, n_results)
+            config = get_collection_config(collection or ("sessions" if session_id else "default"))
+            query_limit = max(n_results, config.max_results)
             _, _, results = retrieve_with_audit(
                 collection=self.collection,
                 query=query,
                 turn_id=turn_id,
                 k=query_limit,
                 token_limit=4096,
+                similarity_threshold=float(config.similarity_floor),
                 query_embedding=self._embed(query),
                 where=self._build_where(session_id=session_id, collection=collection, source=source),
                 include=["documents", "metadatas", "distances", "ids"],
@@ -385,6 +397,12 @@ class ChromaMemory:
 
         for index, document in enumerate(documents):
             metadata = metadatas[index] if index < len(metadatas) else {}
+            entry_collection = str(metadata.get("collection") or collection or "default")
+            clean_document, _chunk_flagged = sanitize_retrieved_chunk(
+                str(document or ""),
+                entry_collection,
+                turn_id,
+            )
             entry_tags = self._parse_tags(metadata.get("tags"))
             if requested_tags and not requested_tags.issubset({tag.lower() for tag in entry_tags}):
                 continue
@@ -394,15 +412,15 @@ class ChromaMemory:
             formatted.append(
                 {
                     "id": ids[index] if index < len(ids) else metadata.get("id") or f"memory-{index}",
-                    "content": document,
-                    "preview": document[:217] + "..." if len(document) > 220 else document,
+                    "content": clean_document,
+                    "preview": clean_document[:217] + "..." if len(clean_document) > 220 else clean_document,
                     "role": metadata.get("role", "knowledge"),
                     "session_id": metadata.get("session_id", ""),
                     "timestamp": metadata.get("timestamp", ""),
                     "distance": distance,
                     "score": round(score, 4),
                     "source": metadata.get("source") or None,
-                    "collection": metadata.get("collection", "default"),
+                    "collection": entry_collection,
                     "tags": entry_tags,
                     "metadata": metadata,
                     "createdAt": metadata.get("timestamp", ""),
@@ -456,7 +474,12 @@ class ChromaMemory:
             if requested_tags and not requested_tags.issubset({tag.lower() for tag in entry_tags}):
                 continue
 
-            doc_text = str(document or "")
+            entry_collection = str(metadata.get("collection") or collection or "default")
+            doc_text, _chunk_flagged = sanitize_retrieved_chunk(
+                str(document or ""),
+                entry_collection,
+                "literal-memory",
+            )
             haystack_lower = doc_text.lower()
             haystack_upper = doc_text.upper()
 
@@ -484,7 +507,7 @@ class ChromaMemory:
                     "distance": 0.0,
                     "score": round(score, 4),
                     "source": metadata.get("source") or None,
-                    "collection": metadata.get("collection", "default"),
+                    "collection": entry_collection,
                     "tags": entry_tags,
                     "metadata": metadata,
                     "createdAt": metadata.get("timestamp", ""),
@@ -509,10 +532,15 @@ class ChromaMemory:
             messages = []
             for index, document in enumerate(documents):
                 metadata = metadatas[index] if index < len(metadatas) else {}
+                clean_document, _chunk_flagged = sanitize_retrieved_chunk(
+                    str(document or ""),
+                    str(metadata.get("collection") or "sessions"),
+                    "session-history",
+                )
                 messages.append(
                     {
                         "role": metadata.get("role", "unknown"),
-                        "content": document,
+                        "content": clean_document,
                         "timestamp": metadata.get("timestamp", ""),
                     }
                 )

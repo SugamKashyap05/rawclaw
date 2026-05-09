@@ -75,10 +75,22 @@ const SANDBOX_QUEUE_GROUP = 'gateway-sandbox-workers';
 const BUILDER_QUEUE_STREAM = 'gateway:queue:builder';
 const BUILDER_QUEUE_GROUP = 'gateway-builder-workers';
 const MAX_RECENT_WORKERS = 120;
+const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class GatewayControlPlaneService {
   private readonly logger = new Logger(GatewayControlPlaneService.name);
+
+  private coerceTrustedTurnId(candidate?: string | null): string {
+    const normalized = String(candidate || '').trim();
+    if (normalized && UUID_V4_PATTERN.test(normalized)) {
+      return normalized;
+    }
+    if (normalized) {
+      this.logger.warn(`Rejected non-UUID turn_id candidate at queue boundary: ${normalized}`);
+    }
+    return randomUUID();
+  }
   private queueGroupsReady = false;
   private queueGroupBootstrapPromise: Promise<void> | null = null;
 
@@ -733,10 +745,7 @@ export class GatewayControlPlaneService {
   }
 
   async enqueueSubagentJob(job: Omit<SubagentJob, 'id' | 'status' | 'createdAt'>): Promise<SubagentJob> {
-    const requestedTurnId =
-      job.turn_id
-      || (job.requestPayload && typeof job.requestPayload === 'object' ? String((job.requestPayload as Record<string, unknown>).turn_id || '') : '')
-      || randomUUID();
+    const requestedTurnId = this.coerceTrustedTurnId(job.turn_id);
     const normalized: SubagentJob = {
       ...job,
       turn_id: requestedTurnId,
@@ -827,10 +836,7 @@ export class GatewayControlPlaneService {
   }
 
   async enqueueAutomationJob(payload: Omit<AutomationQueueJob, 'status' | 'createdAt'>): Promise<void> {
-    const requestedTurnId =
-      payload.turn_id
-      || (payload.requestPayload && typeof payload.requestPayload === 'object' ? String((payload.requestPayload as Record<string, unknown>).turn_id || '') : '')
-      || randomUUID();
+    const requestedTurnId = this.coerceTrustedTurnId(payload.turn_id);
     const normalized: AutomationQueueJob = {
       ...payload,
       turn_id: requestedTurnId,
@@ -910,7 +916,7 @@ export class GatewayControlPlaneService {
   }
 
   async enqueueSandboxJob(job: Omit<SandboxJob, 'id' | 'status' | 'createdAt' | 'startedAt' | 'finishedAt'>): Promise<SandboxJob> {
-    const requestedTurnId = job.turn_id || randomUUID();
+    const requestedTurnId = this.coerceTrustedTurnId(job.turn_id);
     const normalized: SandboxJob = {
       ...job,
       turn_id: requestedTurnId,
@@ -949,10 +955,7 @@ export class GatewayControlPlaneService {
   }
 
   async enqueueBuilderJob(job: Omit<AppBuilderQueueJob, 'id' | 'status' | 'createdAt'> & { gatewayRunId?: string | null }): Promise<AppBuilderQueueJob> {
-    const requestedTurnId =
-      job.turn_id
-      || (job.requestPayload && typeof job.requestPayload === 'object' ? String((job.requestPayload as Record<string, unknown>).turn_id || '') : '')
-      || randomUUID();
+    const requestedTurnId = this.coerceTrustedTurnId(job.turn_id);
     const normalized: AppBuilderQueueJob = {
       ...job,
       turn_id: requestedTurnId,

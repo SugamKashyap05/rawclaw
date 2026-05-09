@@ -75,7 +75,8 @@ SPA_SIGNALS = [
 
 
 def _ipv4_transport() -> httpx.AsyncHTTPTransport:
-    return httpx.AsyncHTTPTransport(retries=0, local_address="0.0.0.0")
+    # Outbound source address selection, not a listening bind.
+    return httpx.AsyncHTTPTransport(retries=0, local_address="0.0.0.0")  # nosec B104
 
 
 def _detect_js_fallback_reason(text: str) -> Optional[str]:

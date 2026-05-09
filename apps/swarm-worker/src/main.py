@@ -17,6 +17,30 @@ from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
 from .config import WorkerConfig
+from .metrics import job_duration_seconds, jobs_processed_total, start_metrics_server, update_memory_metrics
+from .telemetry import setup_telemetry
+
+try:
+    from opentelemetry import trace as otel_trace
+except Exception:  # pragma: no cover
+    class _NoopSpan:
+        def set_attribute(self, *_args, **_kwargs) -> None:
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+    class _NoopTrace:
+        def get_tracer(self, _name: str):
+            return self
+
+        def start_as_current_span(self, _name: str):
+            return _NoopSpan()
+
+    otel_trace = _NoopTrace()
 
 logging.basicConfig(
     level=getattr(logging, str(os.getenv("LOG_LEVEL", "INFO") or "INFO").upper(), logging.INFO),
@@ -245,6 +269,7 @@ class SwarmWorker:
     async def _heartbeat_loop(self) -> None:
         while not self._stop_event.is_set():
             try:
+                update_memory_metrics()
                 await self.api.heartbeat(
                     self.config.worker_id,
                     self._current_job_id,
@@ -562,7 +587,11 @@ class SwarmWorker:
         heartbeat_task = asyncio.create_task(self._job_heartbeat_loop(heartbeat_path))
         try:
             job_started_at = time.time()
-            result = await self._execute_chat_request(request_payload)
+            with otel_trace.get_tracer("rawclaw-swarm-worker").start_as_current_span("worker.job.execute") as span:
+                span.set_attribute("rawclaw.turn_id", turn_id)
+                span.set_attribute("worker.job_id", job_id)
+                span.set_attribute("worker.job_type", job_type)
+                result = await self._execute_chat_request(request_payload)
             await self.api.post(
                 complete_path,
                 {
@@ -580,6 +609,8 @@ class SwarmWorker:
                 job_id,
                 round((time.time() - job_started_at) * 1000, 2),
             )
+            jobs_processed_total.labels(status="success").inc()
+            job_duration_seconds.observe(time.time() - job_started_at)
         except Exception as error:
             logger.error(
                 "worker_job_failed turn_id=%s job_type=%s job_id=%s error=%s",
@@ -596,6 +627,8 @@ class SwarmWorker:
                     "cancelled": "Cancelled by operator" in str(error),
                 },
             )
+            jobs_processed_total.labels(status="error").inc()
+            job_duration_seconds.observe(time.time() - job_started_at)
         finally:
             heartbeat_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -609,7 +642,8 @@ class SwarmWorker:
         url = f"{self.config.agent_url}/execute"
         turn_id = str(request_payload.get("turn_id") or "no-turn-id")
         session_id = str(request_payload.get("session_id") or "unknown")
-        async with httpx.AsyncClient(timeout=None) as client:
+        stream_timeout = float(os.getenv("RAWCLAW_WORKER_AGENT_STREAM_TIMEOUT_SECONDS", "120"))
+        async with httpx.AsyncClient(timeout=httpx.Timeout(stream_timeout, connect=10.0)) as client:
             async with client.stream(
                 "POST",
                 url,
@@ -692,7 +726,8 @@ class SwarmWorker:
             "--cpus=0.5",
             "--read-only",
             "--tmpfs",
-            "/tmp:rw,noexec,nosuid,size=64m",
+            # Docker tmpfs mount, not host temp-file usage.
+            "/tmp:rw,noexec,nosuid,size=64m",  # nosec B108
             "--user",
             "nobody",
         ]
@@ -748,6 +783,9 @@ class SwarmWorker:
 
 
 def main() -> None:
+    setup_telemetry("rawclaw-swarm-worker")
+    metrics_port = int(os.getenv("RAWCLAW_WORKER_METRICS_PORT", "9090"))
+    start_metrics_server(metrics_port)
     logger.info("swarm_worker_started", extra={"pid": os.getpid()})
     try:
         config = WorkerConfig()

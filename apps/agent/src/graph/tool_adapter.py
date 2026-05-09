@@ -17,7 +17,7 @@ def rawclaw_tool_to_langchain(tool: BaseTool) -> StructuredTool:
     Wrap a RawClaw BaseTool as a LangChain StructuredTool.
     """
     async def _execute(input: Dict[str, Any]) -> str:
-        result = await tool.execute(input)
+        result = await TOOL_REGISTRY.execute_tool(tool.name, input)
         return result.model_dump_json()
 
     return StructuredTool(
@@ -46,7 +46,7 @@ def get_tool_func(tool_name: str):
     tool = TOOL_REGISTRY.get(tool_name)
     
     async def execute_func(input: Dict[str, Any]) -> str:
-        result = await tool.execute(input)
+        result = await TOOL_REGISTRY.execute_tool(tool.name, input)
         return result.model_dump_json()
     
     return execute_func

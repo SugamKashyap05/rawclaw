@@ -1,10 +1,15 @@
 import { NestFactory } from '@nestjs/core';
+import { otelSDK } from './telemetry';
 import { AppModule } from './app.module';
 import { ValidationPipe, ConsoleLogger } from '@nestjs/common';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { RateLimitService } from './rate-limit.service';
+import type { NextFunction, Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
+
+otelSDK.start();
 
 // Custom logger to write to workspace backend.log
 class FileLogger extends ConsoleLogger {
@@ -54,6 +59,33 @@ async function bootstrap() {
   // Increase JSON body limit for file attachment content
   app.useBodyParser('json', { limit: '20mb' });
   app.useBodyParser('urlencoded', { limit: '20mb', extended: true });
+
+  const rateLimitService = app.get(RateLimitService);
+  app.use(['/api/chat', '/api/agent'], async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = (req as any).user;
+      const userId = String(user?.id ?? user?.sub ?? req.ip ?? 'anonymous');
+      const estimatedTokens = Math.max(1, Math.ceil(JSON.stringify(req.body ?? {}).length / 4));
+      const decision = await rateLimitService.checkAndIncrement(userId, estimatedTokens);
+      res.setHeader('RateLimit-Limit', String(decision.limit));
+      res.setHeader('RateLimit-Remaining', String(decision.remaining));
+      res.setHeader('RateLimit-Reset', String(Math.ceil(decision.resetAt.getTime() / 1000)));
+      if (!decision.allowed) {
+        console.warn(`[rate_limit_hit] user_id=${userId} reason=${decision.reason}`);
+        return res.status(429).json({
+          error: decision.reason ?? 'rate_limit_exceeded',
+          retry_after_seconds: decision.retryAfterSeconds,
+        });
+      }
+      return next();
+    } catch (error: any) {
+      console.error(`[rate_limiter_unavailable] ${error?.message ?? error}`);
+      return res.status(503).json({
+        error: 'rate_limiter_unavailable',
+        retry_after_seconds: 5,
+      });
+    }
+  });
   
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,

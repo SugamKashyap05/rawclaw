@@ -14,11 +14,13 @@ services:
     image: redis:7-alpine
     container_name: rawclaw-redis
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.50
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 409mb --maxmemory-policy noeviction
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -32,6 +34,8 @@ services:
     image: chromadb/chroma:latest
     container_name: rawclaw-chromadb
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.00
     ports:
       - "8010:8000"
     volumes:
@@ -53,9 +57,12 @@ services:
     container_name: rawclaw-swarm-worker
     profiles: ["worker"]
     restart: on-failure
+    mem_limit: 2g
+    cpus: 1.50
     working_dir: /workspace/apps/swarm-worker
     volumes:
       - .:/workspace
+      - audit_logs:/var/log/rawclaw/audit
     environment:
       RAWCLAW_REDIS_URL: redis://redis:6379
       REDIS_URL: redis://redis:6379
@@ -65,7 +72,13 @@ services:
       API_URL: ${RAWCLAW_WORKER_API_URL:-http://host.docker.internal:3000}
       RAWCLAW_AGENT_URL: ${RAWCLAW_WORKER_AGENT_URL:-http://host.docker.internal:8001}
       AGENT_URL: ${RAWCLAW_WORKER_AGENT_URL:-http://host.docker.internal:8001}
+      RAWCLAW_AUDIT_LOG_PATH: /var/log/rawclaw/audit/memory-retrieval.log
+      RAWCLAW_WORKER_METRICS_PORT: "9090"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      ENVIRONMENT: development
       PYTHONUNBUFFERED: "1"
+    expose:
+      - "9090"
     command:
       - sh
       - -c
@@ -88,10 +101,93 @@ services:
     networks:
       - rawclaw
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.55
+    container_name: rawclaw-jaeger
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - rawclaw
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: rawclaw-loki
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - rawclaw
+
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: rawclaw-grafana
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
+    ports:
+      - "3001:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+    networks:
+      - rawclaw
+
+  fluent-bit:
+    image: fluent/fluent-bit:3.0
+    container_name: rawclaw-fluent-bit
+    restart: unless-stopped
+    mem_limit: 64m
+    cpus: 0.25
+    volumes:
+      - audit_logs:/var/log/rawclaw/audit:ro
+      - fluent_bit_state:/fluent-bit/state
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+    environment:
+      ENVIRONMENT: development
+    depends_on:
+      - loki
+    networks:
+      - rawclaw
+
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    container_name: rawclaw-prometheus
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
+    ports:
+      - "9092:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    networks:
+      - rawclaw
+
 volumes:
   redis_data:
     driver: local
   chroma_data:
+    driver: local
+  audit_logs:
+    driver: local
+  fluent_bit_state:
+    driver: local
+  grafana_data:
     driver: local
 
 networks:

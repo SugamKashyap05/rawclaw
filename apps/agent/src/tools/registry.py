@@ -13,6 +13,8 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import jsonschema
+
 from src.tools.base_tool import BaseTool
 from src.contracts.tool import ToolSchema, ToolHealthStatus, ToolInfo
 from typing import TYPE_CHECKING
@@ -53,6 +55,42 @@ PROTECTED_BUILTIN_TOOLS: frozenset[str] = frozenset({
 class ToolNotFoundError(Exception):
     """Raised when a tool is not found in the registry."""
     pass
+
+
+class ToolArgumentValidationError(Exception):
+    """Raised when model-generated tool arguments fail schema validation."""
+    pass
+
+
+def _get_tool_input_schema(tool: BaseTool) -> Dict[str, Any]:
+    """Return the declared input schema for a tool, if any."""
+    schema = getattr(tool, "parameters", None) or getattr(tool, "input_schema", None)
+    return schema if isinstance(schema, dict) else {}
+
+
+def validate_tool_input_schema(
+    tool: BaseTool,
+    input_payload: Dict[str, Any],
+    *,
+    turn_id: Optional[str] = None,
+) -> None:
+    """Validate untrusted tool arguments against the tool's declared schema."""
+    schema = _get_tool_input_schema(tool)
+    if not schema:
+        return
+
+    try:
+        jsonschema.validate(instance=input_payload, schema=schema)
+    except jsonschema.ValidationError as exc:
+        logger.error(
+            "tool_arg_schema_violation",
+            extra={
+                "turn_id": turn_id,
+                "tool_name": tool.name,
+                "error": str(exc),
+            },
+        )
+        raise ToolArgumentValidationError(str(exc)) from exc
 
 
 class ToolRegistry:
@@ -238,6 +276,7 @@ class ToolRegistry:
                 tool.set_knowledge_brain(knowledge_brain)
             if turn_id:
                 logger.info("tool_execution_started turn_id=%s tool_name=%s", turn_id, name)
+            validate_tool_input_schema(tool, input, turn_id=turn_id)
             result = await tool.execute(input)
             
             # Truncate large outputs
@@ -261,6 +300,14 @@ class ToolRegistry:
                 tool_name=name,
                 input=input,
                 error=str(e),
+                duration_ms=round((time.time() - start) * 1000, 2),
+                sandboxed=False,
+            )
+        except ToolArgumentValidationError as e:
+            return ToolResult(
+                tool_name=name,
+                input=input,
+                error="tool_argument_invalid",
                 duration_ms=round((time.time() - start) * 1000, 2),
                 sandboxed=False,
             )

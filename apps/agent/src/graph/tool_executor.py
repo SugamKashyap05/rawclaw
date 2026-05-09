@@ -71,7 +71,7 @@ class ToolExecutorWithConfirmation:
             
             # Execute the tool
             try:
-                result = await tool.execute(tool_args)
+                result = await TOOL_REGISTRY.execute_tool(tool_name, tool_args)
                 results.append(ToolMessage(
                     content=result.model_dump_json(),
                     tool_call_id=tool_name,
@@ -89,6 +89,6 @@ class ToolExecutorWithConfirmation:
 def get_async_execute_func(tool: BaseTool):
     """Get async execute function for a BaseTool."""
     async def execute_func(input: Dict[str, Any]) -> str:
-        result = await tool.execute(input)
+        result = await TOOL_REGISTRY.execute_tool(tool.name, input)
         return result.model_dump_json()
     return execute_func
